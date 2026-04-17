@@ -40,18 +40,33 @@
             android:src="@{item.icon}"
             tools:src="@tools:sample/avatars" />
 
-        <TextView
+        <LinearLayout
             android:id="@+id/app_name"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginStart="16dp"
             android:layout_marginEnd="16dp"
             android:layout_weight="1"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:text="@{key}"
-            android:textAppearance="?attr/textAppearanceBodyLarge"
-            tools:text="@tools:sample/full_names" />
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="@{item.name}"
+                android:textAppearance="?attr/textAppearanceBodyLarge"
+                tools:text="@tools:sample/full_names" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="@{item.packageName}"
+                android:textAppearance="?attr/textAppearanceBodySmall"
+                tools:text="com.example.application" />
+        </LinearLayout>
 
         <CheckBox
             android:id="@+id/selected_checkbox"

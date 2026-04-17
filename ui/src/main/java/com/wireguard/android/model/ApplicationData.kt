@@ -11,7 +11,8 @@ import com.wireguard.android.BR
 import com.wireguard.android.databinding.Keyed
 
 class ApplicationData(val icon: Drawable, val name: String, val packageName: String, isSelected: Boolean) : BaseObservable(), Keyed<String> {
-    override val key = name
+    // Package name is stable and unique across installed apps; labels are not.
+    override val key = packageName
 
     @get:Bindable
     var isSelected = isSelected

@@ -8,8 +8,6 @@
 
     <data>
 
-        <import type="android.view.View" />
-
         <import type="com.wireguard.android.model.ApplicationData" />
 
         <variable
@@ -43,6 +41,45 @@
                 android:text="@string/include_in_tunnel" />
         </com.google.android.material.tabs.TabLayout>
 
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:layout_marginTop="8dp"
+            android:layout_marginEnd="16dp"
+            android:hint="@string/search_applications">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/search_text"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:imeOptions="actionDone"
+                android:inputType="textNoSuggestions|textVisiblePassword"
+                tools:text="wireguard" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <com.google.android.material.button.MaterialButton
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:onClick="@{fragment::onToggleAllSelection}"
+                android:text="@string/toggle_all" />
+
+            <com.google.android.material.button.MaterialButton
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:onClick="@{fragment::onClearSelection}"
+                android:text="@string/clear_selection" />
+        </LinearLayout>
+
         <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="match_parent"
@@ -54,8 +91,8 @@
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
                 android:indeterminate="true"
-                android:visibility="@{appData.isEmpty() ? View.VISIBLE : View.GONE}"
-                tools:visibility="gone" />
+                android:visibility="gone"
+                tools:visibility="visible" />
 
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/app_list"
@@ -65,6 +102,18 @@
                 app:layout="@{@layout/app_list_item}"
                 tools:itemCount="10"
                 tools:listitem="@layout/app_list_item" />
+
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/empty_state"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:gravity="center"
+                android:padding="16dp"
+                android:text="@string/no_matching_applications"
+                android:textAppearance="?attr/textAppearanceBodyMedium"
+                android:visibility="gone"
+                tools:visibility="visible" />
         </FrameLayout>
     </LinearLayout>
 </layout>
