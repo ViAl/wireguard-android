@@ -6,6 +6,13 @@ on:
       - main
     tags:
       - "v*"
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
   workflow_dispatch:
     inputs:
       push_to_artifacts_branch:
@@ -127,7 +134,7 @@ jobs:
           if-no-files-found: error
 
       - name: Optionally push APK to artifacts branch
-        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.push_to_artifacts_branch) || vars.PUSH_ARTIFACTS_BRANCH == 'true' }}
+        if: ${{ github.event_name != 'pull_request' && ((github.event_name == 'workflow_dispatch' && inputs.push_to_artifacts_branch) || vars.PUSH_ARTIFACTS_BRANCH == 'true') }}
         shell: bash
         env:
           FINAL_APK: ${{ steps.sign.outputs.final_apk || steps.final.outputs.final_apk }}
