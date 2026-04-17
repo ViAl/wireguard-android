@@ -12,7 +12,7 @@
 
     <androidx.fragment.app.FragmentContainerView
         android:id="@+id/list_detail_container"
-        android:name="com.wireguard.android.fragment.TunnelListFragment"
+        android:name="com.wireguard.android.fragment.MainTabsFragment"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:tag="LIST" />

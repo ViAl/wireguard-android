@@ -16,6 +16,7 @@ import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.FragmentTransaction
 import androidx.fragment.app.commit
 import com.wireguard.android.R
+import com.wireguard.android.fragment.MainTabsFragment
 import com.wireguard.android.fragment.TunnelDetailFragment
 import com.wireguard.android.fragment.TunnelEditorFragment
 import com.wireguard.android.model.ObservableTunnel
@@ -25,7 +26,7 @@ import com.wireguard.android.model.ObservableTunnel
  * WireGuard application, and contains several fragments for listing, viewing details of, and
  * editing the configuration and interface state of WireGuard tunnels.
  */
-class MainActivity : BaseActivity(), FragmentManager.OnBackStackChangedListener {
+class MainActivity : BaseActivity(), FragmentManager.OnBackStackChangedListener, MainTabsFragment.Listener {
     private var actionBar: ActionBar? = null
     private var isTwoPaneLayout = false
     private var backPressedCallback: OnBackPressedCallback? = null
@@ -94,6 +95,14 @@ class MainActivity : BaseActivity(), FragmentManager.OnBackStackChangedListener 
             }
 
             else -> super.onOptionsItemSelected(item)
+        }
+    }
+
+    override fun onMainTabChanged(tab: MainTabsFragment.MainTab) {
+        if (tab == MainTabsFragment.MainTab.APPS) {
+            selectedTunnel = null
+            if (isTwoPaneLayout)
+                supportFragmentManager.popBackStackImmediate(0, FragmentManager.POP_BACK_STACK_INCLUSIVE)
         }
     }
 
