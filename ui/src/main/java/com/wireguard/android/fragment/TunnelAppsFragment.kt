@@ -134,6 +134,8 @@ class TunnelAppsFragment : BaseFragment() {
         binding.tunnelSelector.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
                 val tunnel = tunnels?.getOrNull(position) ?: return
+                if (selectedTunnel != tunnel)
+                    selectedTunnel = tunnel
                 if (selectedTunnelName != tunnel.name) {
                     selectedTunnelName = tunnel.name
                     loadSelectedTunnelData(tunnel)
