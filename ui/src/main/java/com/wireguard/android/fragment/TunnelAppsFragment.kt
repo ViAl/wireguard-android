@@ -73,7 +73,16 @@ class TunnelAppsFragment : BaseFragment() {
 
     private val appRowConfigurationHandler = object : RowConfigurationHandler<AppListItemBinding, ApplicationData> {
         override fun onConfigureRow(binding: AppListItemBinding, item: ApplicationData, position: Int) {
-            binding.selectionEnabled = selectedMode != SplitTunnelingMode.ALL_APPLICATIONS
+            val selectionEnabled = selectedMode != SplitTunnelingMode.ALL_APPLICATIONS
+            binding.root.isEnabled = selectionEnabled
+            binding.root.isClickable = selectionEnabled
+            binding.root.isFocusable = selectionEnabled
+            binding.root.setOnClickListener(
+                if (selectionEnabled) View.OnClickListener { item.isSelected = !item.isSelected } else null
+            )
+            binding.selectedCheckbox.isEnabled = selectionEnabled
+            binding.selectedCheckbox.isClickable = selectionEnabled
+            binding.selectedCheckbox.isFocusable = selectionEnabled
         }
     }
 
