@@ -25,6 +25,7 @@ jobs:
       ANDROID_BUILD_TOOLS: "36.0.0"
       ANDROID_NDK_VERSION: "27.2.12479018"
       ANDROID_CMAKE_VERSION: "3.22.1"
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
 
     steps:
       - name: Checkout source
@@ -80,11 +81,11 @@ jobs:
 
       - name: Decode keystore (optional)
         id: keystore
-        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        if: ${{ env.ANDROID_KEYSTORE_BASE64 != '' }}
         shell: bash
         run: |
           set -euxo pipefail
-          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > release.keystore
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > release.keystore
           echo "keystore_path=release.keystore" >> "$GITHUB_OUTPUT"
 
       - name: Sign APK (optional)
