@@ -7,6 +7,7 @@ package com.wireguard.android.backend;
 
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.ParcelFileDescriptor;
 import android.system.OsConstants;
@@ -24,6 +25,7 @@ import com.wireguard.crypto.KeyFormatException;
 import com.wireguard.util.NonNullForAll;
 
 import java.net.InetAddress;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -80,6 +82,38 @@ public final class GoBackend implements Backend {
     private static native int wgTurnOn(String ifName, int tunFd, String settings);
 
     private static native String wgVersion();
+
+    @FunctionalInterface
+    interface ApplicationRuleAdder {
+        void add(String packageName) throws PackageManager.NameNotFoundException;
+    }
+
+    static int applyApplicationRules(final String tunnelName, final String mode, final Collection<String> packageNames,
+                                     final ApplicationRuleAdder adder) {
+        int applied = 0;
+        int failed = 0;
+        for (final String packageName : packageNames) {
+            try {
+                adder.add(packageName);
+                ++applied;
+            } catch (final PackageManager.NameNotFoundException e) {
+                // Stale/uninstalled package names can exist in imported/restored configs.
+                // Skip invalid entries so tunnel bring-up can proceed with remaining valid rules.
+                ++failed;
+                Log.w(TAG, "Skipping " + mode + " application for tunnel " + tunnelName
+                        + ": package=" + packageName + ", exception=" + e.getClass().getSimpleName()
+                        + ", message=" + e.getMessage(), e);
+            }
+        }
+        if (!packageNames.isEmpty() && applied == 0) {
+            Log.w(TAG, "No valid " + mode + " application rules were applied for tunnel " + tunnelName
+                    + " (" + failed + '/' + packageNames.size() + " failed)");
+        } else if (failed > 0) {
+            Log.i(TAG, "Applied " + applied + '/' + packageNames.size() + ' ' + mode
+                    + " application rules for tunnel " + tunnelName + " (" + failed + " skipped)");
+        }
+        return applied;
+    }
 
     /**
      * Method to get the names of running tunnels.
@@ -297,11 +331,10 @@ public final class GoBackend implements Backend {
             final VpnService.Builder builder = service.getBuilder();
             builder.setSession(tunnel.getName());
 
-            for (final String excludedApplication : config.getInterface().getExcludedApplications())
-                builder.addDisallowedApplication(excludedApplication);
-
-            for (final String includedApplication : config.getInterface().getIncludedApplications())
-                builder.addAllowedApplication(includedApplication);
+            applyApplicationRules(tunnel.getName(), "excluded",
+                    config.getInterface().getExcludedApplications(), builder::addDisallowedApplication);
+            applyApplicationRules(tunnel.getName(), "included",
+                    config.getInterface().getIncludedApplications(), builder::addAllowedApplication);
 
             for (final InetNetwork addr : config.getInterface().getAddresses())
                 builder.addAddress(addr.getAddress(), addr.getMask());
