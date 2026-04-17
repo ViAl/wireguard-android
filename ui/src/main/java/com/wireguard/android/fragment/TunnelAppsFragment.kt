@@ -306,8 +306,8 @@ class TunnelAppsFragment : BaseFragment() {
                 tunnel.setConfigAsync(configProxy.resolve())
                 if (selectedTunnelName == tunnelName) {
                     savedRoutingState = SavedRoutingState(mode, selectedApps.toSet())
-                    hasUnsavedChanges = false
-                    saveStatus = SaveStatus.SAVED
+                    hasUnsavedChanges = calculateHasUnsavedChanges()
+                    saveStatus = if (hasUnsavedChanges) SaveStatus.IDLE else SaveStatus.SAVED
                 }
             } catch (e: Throwable) {
                 val message = getString(R.string.config_save_error, tunnel.name, ErrorMessages[e])
