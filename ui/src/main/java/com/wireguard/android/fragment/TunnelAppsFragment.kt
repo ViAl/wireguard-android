@@ -17,6 +17,7 @@ import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.core.widget.doAfterTextChanged
 import androidx.databinding.ObservableList
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.snackbar.Snackbar
 import com.wireguard.android.R
@@ -64,6 +65,7 @@ class TunnelAppsFragment : BaseFragment() {
     private var hasUnsavedChanges = false
     private var saveStatus = SaveStatus.IDLE
     private var searchTextWatcher: TextWatcher? = null
+    private var isViewTearingDown = false
 
     private val appRowConfigurationHandler = object : RowConfigurationHandler<AppListItemBinding, ApplicationData> {
         override fun onConfigureRow(binding: AppListItemBinding, item: ApplicationData, position: Int) {
@@ -104,6 +106,7 @@ class TunnelAppsFragment : BaseFragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        isViewTearingDown = false
         val binding = requireNotNull(this.binding)
         binding.appData = appData
         binding.rowConfigurationHandler = appRowConfigurationHandler
@@ -178,6 +181,7 @@ class TunnelAppsFragment : BaseFragment() {
     }
 
     override fun onDestroyView() {
+        isViewTearingDown = true
         binding?.searchText?.let { searchText ->
             searchTextWatcher?.let(searchText::removeTextChangedListener)
             searchText.setOnEditorActionListener(null)
@@ -422,7 +426,10 @@ class TunnelAppsFragment : BaseFragment() {
     }
 
     private fun isViewUsableForUiUpdates(): Boolean {
-        return view != null && binding != null && isAdded
+        if (isViewTearingDown || binding == null)
+            return false
+        val owner = viewLifecycleOwnerLiveData.value ?: return false
+        return owner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
     }
 
     companion object {
