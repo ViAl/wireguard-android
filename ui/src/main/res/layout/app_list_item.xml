@@ -20,6 +20,7 @@
         <variable
             name="item"
             type="com.wireguard.android.model.ApplicationData" />
+
     </data>
 
     <LinearLayout
@@ -27,7 +28,6 @@
         android:layout_height="wrap_content"
         android:background="@drawable/list_item_background"
         android:gravity="center_vertical"
-        android:onClick="@{(view) -> item.setSelected(!item.selected)}"
         android:orientation="horizontal"
         android:paddingTop="8dp"
         android:paddingBottom="8dp">
