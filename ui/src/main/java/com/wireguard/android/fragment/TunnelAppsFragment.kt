@@ -5,15 +5,19 @@
 package com.wireguard.android.fragment
 
 import android.os.Bundle
+import android.text.TextWatcher
 import android.util.Log
+import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.inputmethod.EditorInfo
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.core.widget.doAfterTextChanged
 import androidx.databinding.ObservableList
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.snackbar.Snackbar
 import com.wireguard.android.R
@@ -60,6 +64,8 @@ class TunnelAppsFragment : BaseFragment() {
     private var savedRoutingState: SavedRoutingState? = null
     private var hasUnsavedChanges = false
     private var saveStatus = SaveStatus.IDLE
+    private var searchTextWatcher: TextWatcher? = null
+    private var isViewTearingDown = false
 
     private val appRowConfigurationHandler = object : RowConfigurationHandler<AppListItemBinding, ApplicationData> {
         override fun onConfigureRow(binding: AppListItemBinding, item: ApplicationData, position: Int) {
@@ -100,13 +106,27 @@ class TunnelAppsFragment : BaseFragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        isViewTearingDown = false
         val binding = requireNotNull(this.binding)
         binding.appData = appData
         binding.rowConfigurationHandler = appRowConfigurationHandler
         binding.searchText.setText(searchQuery)
-        binding.searchText.doAfterTextChanged {
+        searchTextWatcher = binding.searchText.doAfterTextChanged {
+            if (!isViewUsableForUiUpdates())
+                return@doAfterTextChanged
             searchQuery = it?.toString() ?: ""
             applyFilter()
+        }
+        binding.searchText.setOnEditorActionListener { textView, actionId, event ->
+            val isDoneAction = actionId == EditorInfo.IME_ACTION_DONE
+            val isEnterKeyUp = event?.keyCode == KeyEvent.KEYCODE_ENTER && event.action == KeyEvent.ACTION_UP
+            if (!isDoneAction && !isEnterKeyUp)
+                return@setOnEditorActionListener false
+            if (isViewUsableForUiUpdates()) {
+                textView.clearFocus()
+                applyFilter()
+            }
+            true
         }
         binding.toggleAll.setOnClickListener {
             if (selectedMode == SplitTunnelingMode.ALL_APPLICATIONS)
@@ -134,8 +154,6 @@ class TunnelAppsFragment : BaseFragment() {
         binding.tunnelSelector.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
                 val tunnel = tunnels?.getOrNull(position) ?: return
-                if (selectedTunnel != tunnel)
-                    selectedTunnel = tunnel
                 if (selectedTunnelName != tunnel.name) {
                     selectedTunnelName = tunnel.name
                     loadSelectedTunnelData(tunnel)
@@ -163,6 +181,12 @@ class TunnelAppsFragment : BaseFragment() {
     }
 
     override fun onDestroyView() {
+        isViewTearingDown = true
+        binding?.searchText?.let { searchText ->
+            searchTextWatcher?.let(searchText::removeTextChangedListener)
+            searchText.setOnEditorActionListener(null)
+        }
+        searchTextWatcher = null
         tunnels?.removeOnListChangedCallback(tunnelListObserver)
         tunnels = null
         loadJob?.cancel()
@@ -391,12 +415,21 @@ class TunnelAppsFragment : BaseFragment() {
     }
 
     private fun applyFilter() {
+        if (!isViewUsableForUiUpdates())
+            return
         val filtered = AppListDialogFragment.filterByQuery(searchQuery, allAppData, { it.name }, { it.packageName })
         appData.clear()
         appData.addAll(filtered)
         val binding = binding ?: return
         binding.emptyState.visibility = if (binding.progressBar.visibility == View.GONE && allAppData.isNotEmpty() && appData.isEmpty()) View.VISIBLE else View.GONE
         binding.summary.text = createSummaryText()
+    }
+
+    private fun isViewUsableForUiUpdates(): Boolean {
+        if (isViewTearingDown || binding == null)
+            return false
+        val owner = viewLifecycleOwnerLiveData.value ?: return false
+        return owner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
     }
 
     companion object {
