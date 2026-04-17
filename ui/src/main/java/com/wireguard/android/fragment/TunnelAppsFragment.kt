@@ -42,6 +42,12 @@ class TunnelAppsFragment : BaseFragment() {
         ERROR
     }
 
+    private enum class PersistResult {
+        SUCCESS,
+        FAILED,
+        TUNNEL_MISSING
+    }
+
     private data class PersistSnapshot(
         val tunnelName: String,
         val mode: SplitTunnelingMode,
@@ -276,11 +282,15 @@ class TunnelAppsFragment : BaseFragment() {
             while (true) {
                 val snapshot = pendingPersistSnapshot ?: break
                 pendingPersistSnapshot = null
-                val success = persistSnapshot(snapshot)
-                if (!success)
-                    break
-                if (pendingPersistSnapshot != null)
-                    delay(SAVE_DEBOUNCE_MS)
+                when (persistSnapshot(snapshot)) {
+                    PersistResult.SUCCESS -> {
+                        if (pendingPersistSnapshot != null)
+                            delay(SAVE_DEBOUNCE_MS)
+                    }
+
+                    PersistResult.TUNNEL_MISSING,
+                    PersistResult.FAILED -> break
+                }
             }
             if (saveStatus == SaveStatus.SAVING)
                 saveStatus = SaveStatus.SAVED
@@ -288,8 +298,12 @@ class TunnelAppsFragment : BaseFragment() {
         }
     }
 
-    private suspend fun persistSnapshot(snapshot: PersistSnapshot): Boolean {
-        val tunnel = tunnels?.firstOrNull { it.name == snapshot.tunnelName } ?: return false
+    private suspend fun persistSnapshot(snapshot: PersistSnapshot): PersistResult {
+        val tunnel = tunnels?.firstOrNull { it.name == snapshot.tunnelName }
+        if (tunnel == null) {
+            saveStatus = SaveStatus.IDLE
+            return PersistResult.TUNNEL_MISSING
+        }
         return try {
             val configProxy = ConfigProxy(tunnel.getConfigAsync())
             val configInterface = configProxy.`interface`
@@ -319,7 +333,7 @@ class TunnelAppsFragment : BaseFragment() {
             tunnel.setConfigAsync(configProxy.resolve())
             if (snapshot.uiVersion == latestUiVersion)
                 saveStatus = SaveStatus.SAVED
-            true
+            PersistResult.SUCCESS
         } catch (e: Throwable) {
             val message = getString(R.string.config_save_error, tunnel.name, ErrorMessages[e])
             saveStatus = SaveStatus.ERROR
@@ -327,7 +341,7 @@ class TunnelAppsFragment : BaseFragment() {
             view?.let { Snackbar.make(it, message, Snackbar.LENGTH_LONG).show() }
             if (selectedTunnelName == snapshot.tunnelName)
                 loadSelectedTunnelData(tunnel)
-            false
+            PersistResult.FAILED
         }
     }
 
