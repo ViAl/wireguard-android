@@ -55,7 +55,7 @@ class TunnelAppsFragment : BaseFragment() {
     private var searchQuery = ""
     private var tunnels: ObservableKeyedArrayList<String, ObservableTunnel>? = null
     private var loadJob: Job? = null
-    private var saveJob: Job? = null
+    private val inFlightSaveTunnels = mutableSetOf<String>()
     private var latestLoadRequestId = 0L
     private var savedRoutingState: SavedRoutingState? = null
     private var hasUnsavedChanges = false
@@ -164,7 +164,6 @@ class TunnelAppsFragment : BaseFragment() {
         tunnels?.removeOnListChangedCallback(tunnelListObserver)
         tunnels = null
         loadJob?.cancel()
-        saveJob?.cancel()
         binding = null
         super.onDestroyView()
     }
@@ -269,15 +268,15 @@ class TunnelAppsFragment : BaseFragment() {
 
     private fun persistCurrentState() {
         val tunnelName = selectedTunnelName ?: return
-        if (!hasUnsavedChanges || saveJob?.isActive == true)
+        if (!hasUnsavedChanges || tunnelName in inFlightSaveTunnels)
             return
         val tunnel = tunnels?.firstOrNull { it.name == tunnelName } ?: return
         val mode = selectedMode
         val selectedApps = allAppData.filter { it.isSelected }.map { it.packageName }
+        inFlightSaveTunnels.add(tunnelName)
         saveStatus = SaveStatus.SAVING
         updateModeUi()
-        saveJob?.cancel()
-        saveJob = lifecycleScope.launch {
+        lifecycleScope.launch {
             try {
                 val configProxy = ConfigProxy(tunnel.getConfigAsync())
                 val configInterface = configProxy.`interface`
@@ -318,6 +317,7 @@ class TunnelAppsFragment : BaseFragment() {
                     view?.let { Snackbar.make(it, message, Snackbar.LENGTH_LONG).show() }
                 }
             } finally {
+                inFlightSaveTunnels.remove(tunnelName)
                 if (selectedTunnelName == tunnelName)
                     updateModeUi()
             }
@@ -354,12 +354,13 @@ class TunnelAppsFragment : BaseFragment() {
             binding.splitTunnelingModeGroup.check(modeButtonId)
 
         val appSelectionEnabled = selectedMode != SplitTunnelingMode.ALL_APPLICATIONS
+        val isCurrentTunnelSaving = selectedTunnelName?.let { it in inFlightSaveTunnels } == true
         binding.searchLayout.isEnabled = appSelectionEnabled
         binding.searchText.isEnabled = appSelectionEnabled
         binding.toggleAll.isEnabled = appSelectionEnabled
         binding.clearSelection.isEnabled = appSelectionEnabled
-        binding.saveChanges.isEnabled = hasUnsavedChanges && saveJob?.isActive != true
-        binding.cancelChanges.isEnabled = hasUnsavedChanges && saveJob?.isActive != true
+        binding.saveChanges.isEnabled = hasUnsavedChanges && !isCurrentTunnelSaving
+        binding.cancelChanges.isEnabled = hasUnsavedChanges && !isCurrentTunnelSaving
         binding.appList.alpha = if (appSelectionEnabled) 1f else 0.7f
         binding.appList.adapter?.notifyDataSetChanged()
         binding.summary.text = createSummaryText()
