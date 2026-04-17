@@ -66,6 +66,7 @@ class TunnelAppsFragment : BaseFragment() {
     private var saveStatus = SaveStatus.IDLE
     private var searchTextWatcher: TextWatcher? = null
     private var isViewTearingDown = false
+    private var lastRenderedAppSelectionEnabled: Boolean? = null
 
     private val appRowConfigurationHandler = object : RowConfigurationHandler<AppListItemBinding, ApplicationData> {
         override fun onConfigureRow(binding: AppListItemBinding, item: ApplicationData, position: Int) {
@@ -107,6 +108,7 @@ class TunnelAppsFragment : BaseFragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         isViewTearingDown = false
+        lastRenderedAppSelectionEnabled = null
         val binding = requireNotNull(this.binding)
         binding.appData = appData
         binding.rowConfigurationHandler = appRowConfigurationHandler
@@ -388,13 +390,34 @@ class TunnelAppsFragment : BaseFragment() {
         binding.saveChanges.isEnabled = hasUnsavedChanges && !isCurrentTunnelSaving
         binding.cancelChanges.isEnabled = hasUnsavedChanges && !isCurrentTunnelSaving
         binding.appList.alpha = if (appSelectionEnabled) 1f else 0.7f
-        binding.appList.adapter?.notifyDataSetChanged()
+        if (lastRenderedAppSelectionEnabled != appSelectionEnabled) {
+            lastRenderedAppSelectionEnabled = appSelectionEnabled
+            requestSafeAppListRefresh()
+        }
         binding.summary.text = createSummaryText()
         binding.saveStatus.text = when (saveStatus) {
             SaveStatus.IDLE -> ""
             SaveStatus.SAVING -> getString(R.string.saving)
             SaveStatus.SAVED -> getString(R.string.saved)
             SaveStatus.ERROR -> getString(R.string.save_failed)
+        }
+    }
+
+    private fun requestSafeAppListRefresh() {
+        val currentBinding = binding ?: return
+        val appList = currentBinding.appList
+        appList.post {
+            val liveBinding = binding ?: return@post
+            if (liveBinding !== currentBinding)
+                return@post
+            if (appList.isComputingLayout) {
+                appList.post {
+                    if (binding === liveBinding)
+                        liveBinding.appList.adapter?.notifyDataSetChanged()
+                }
+            } else {
+                liveBinding.appList.adapter?.notifyDataSetChanged()
+            }
         }
     }
 
