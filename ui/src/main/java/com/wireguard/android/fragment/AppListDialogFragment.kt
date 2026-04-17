@@ -4,24 +4,17 @@
  */
 package com.wireguard.android.fragment
 
-import android.Manifest
 import android.app.Dialog
-import android.content.pm.PackageInfo
-import android.content.pm.PackageManager
-import android.content.pm.PackageManager.PackageInfoFlags
-import android.os.Build
 import android.os.Bundle
 import android.widget.Button
 import android.widget.Toast
 import androidx.core.widget.doAfterTextChanged
 import androidx.appcompat.app.AlertDialog
-import androidx.databinding.Observable
 import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.setFragmentResult
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.tabs.TabLayout
-import com.wireguard.android.BR
 import com.wireguard.android.R
 import com.wireguard.android.databinding.AppListDialogFragmentBinding
 import com.wireguard.android.databinding.ObservableKeyedArrayList
@@ -47,24 +40,7 @@ class AppListDialogFragment : DialogFragment() {
         setLoading(true)
         lifecycleScope.launch(Dispatchers.Default) {
             try {
-                val applicationData: MutableList<ApplicationData> = ArrayList()
-                withContext(Dispatchers.IO) {
-                    val packageInfos = getPackagesHoldingPermissions(pm, arrayOf(Manifest.permission.INTERNET))
-                    packageInfos.forEach {
-                        val packageName = it.packageName
-                        val appInfo = it.applicationInfo ?: return@forEach
-                        val appData =
-                            ApplicationData(appInfo.loadIcon(pm), appInfo.loadLabel(pm).toString(), packageName, currentlySelectedApps.contains(packageName))
-                        applicationData.add(appData)
-                        appData.addOnPropertyChangedCallback(object : Observable.OnPropertyChangedCallback() {
-                            override fun onPropertyChanged(sender: Observable?, propertyId: Int) {
-                                if (propertyId == BR.selected)
-                                    setButtonText()
-                            }
-                        })
-                    }
-                }
-                applicationData.sortWith(compareBy<ApplicationData>(String.CASE_INSENSITIVE_ORDER) { it.name }.thenBy(String.CASE_INSENSITIVE_ORDER) { it.packageName })
+                val applicationData = AppDataLoader.load(pm, currentlySelectedApps) { setButtonText() }
                 withContext(Dispatchers.Main.immediate) {
                     allAppData.clear()
                     allAppData.addAll(applicationData)
@@ -94,20 +70,9 @@ class AppListDialogFragment : DialogFragment() {
         searchQuery = savedInstanceState?.getString(KEY_SEARCH_QUERY) ?: ""
     }
 
-    private fun getPackagesHoldingPermissions(pm: PackageManager, permissions: Array<String>): List<PackageInfo> {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            pm.getPackagesHoldingPermissions(permissions, PackageInfoFlags.of(0L))
-        } else {
-            @Suppress("DEPRECATION")
-            pm.getPackagesHoldingPermissions(permissions, 0)
-        }
-    }
-
     private fun setButtonText() {
         val numSelected = allAppData.count { it.isSelected }
-        button?.text = if (numSelected == 0)
-            getString(R.string.use_all_applications)
-        else when (tabs?.selectedTabPosition) {
+        button?.text = when (tabs?.selectedTabPosition) {
             0 -> resources.getQuantityString(R.plurals.exclude_n_applications, numSelected, numSelected)
             1 -> resources.getQuantityString(R.plurals.include_n_applications, numSelected, numSelected)
             else -> null

@@ -48,7 +48,7 @@
     <string name="select_applications">Select applications</string>
     <string name="split_tunneling_select_mode_first">Choose a split tunneling mode first</string>
     <string name="search_applications">Search applications</string>
-    <string name="clear_selection">Clear selection</string>
+    <string name="clear_selection">Clear all</string>
     <string name="no_matching_applications">No matching applications</string>
     <string name="exclude_from_tunnel">Exclude</string>
     <string name="include_in_tunnel">Include only</string>
@@ -212,8 +212,15 @@
     <string name="shell_marker_count_error">Shell expected 4 markers, received %d</string>
     <string name="shell_start_error">Shell failed to start: %d</string>
     <string name="success_application_will_restart">Success. The application will now restart…</string>
-    <string name="toggle_all">Toggle All</string>
+    <string name="toggle_all">Select all</string>
     <string name="toggle_error">Error toggling WireGuard tunnel: %s</string>
+    <string name="vpn">VPN</string>
+    <string name="apps">Routing</string>
+    <string name="tunnel">Tunnel</string>
+    <string name="no_tunnels_configured">No tunnels configured</string>
+    <string name="saving">Saving…</string>
+    <string name="saved">Saved</string>
+    <string name="save_failed">Not saved</string>
     <string name="tools_installer_already">wg and wg-quick are already installed</string>
     <string name="tools_installer_failure">Unable to install command-line tools (no root?)</string>
     <string name="tools_installer_initial">Install optional tools for scripting</string>
