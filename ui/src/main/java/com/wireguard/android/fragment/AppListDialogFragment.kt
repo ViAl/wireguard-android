@@ -72,9 +72,7 @@ class AppListDialogFragment : DialogFragment() {
 
     private fun setButtonText() {
         val numSelected = allAppData.count { it.isSelected }
-        button?.text = if (numSelected == 0)
-            getString(R.string.use_all_applications)
-        else when (tabs?.selectedTabPosition) {
+        button?.text = when (tabs?.selectedTabPosition) {
             0 -> resources.getQuantityString(R.plurals.exclude_n_applications, numSelected, numSelected)
             1 -> resources.getQuantityString(R.plurals.include_n_applications, numSelected, numSelected)
             else -> null
