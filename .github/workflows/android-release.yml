@@ -126,10 +126,20 @@ jobs:
           set -euxo pipefail
           echo "final_apk=${{ steps.apk.outputs.unsigned_apk }}" >> "$GITHUB_OUTPUT"
 
+      - name: Build artifact name
+        id: artifact_name
+        shell: bash
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euxo pipefail
+          sanitized_ref="${REF_NAME//\//-}"
+          echo "name=wireguard-android-apk-${sanitized_ref}" >> "$GITHUB_OUTPUT"
+
       - name: Upload APK as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: wireguard-android-apk-${{ github.ref_name }}
+          name: ${{ steps.artifact_name.outputs.name }}
           path: ${{ steps.sign.outputs.final_apk || steps.final.outputs.final_apk }}
           if-no-files-found: error
 
