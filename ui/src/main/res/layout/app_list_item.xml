@@ -20,6 +20,7 @@
         <variable
             name="item"
             type="com.wireguard.android.model.ApplicationData" />
+
     </data>
 
     <LinearLayout
@@ -27,6 +28,9 @@
         android:layout_height="wrap_content"
         android:background="@drawable/list_item_background"
         android:gravity="center_vertical"
+        android:clickable="@{item.selectionEnabled}"
+        android:enabled="@{item.selectionEnabled}"
+        android:focusable="@{item.selectionEnabled}"
         android:onClick="@{(view) -> item.setSelected(!item.selected)}"
         android:orientation="horizontal"
         android:paddingTop="8dp"
@@ -73,6 +77,9 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:checked="@={item.selected}"
+            android:clickable="@{item.selectionEnabled}"
+            android:enabled="@{item.selectionEnabled}"
+            android:focusable="@{item.selectionEnabled}"
             tools:checked="true" />
 
     </LinearLayout>

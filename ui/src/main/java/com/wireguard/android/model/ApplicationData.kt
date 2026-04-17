@@ -10,7 +10,13 @@ import androidx.databinding.Bindable
 import com.wireguard.android.BR
 import com.wireguard.android.databinding.Keyed
 
-class ApplicationData(val icon: Drawable, val name: String, val packageName: String, isSelected: Boolean) : BaseObservable(), Keyed<String> {
+class ApplicationData(
+    val icon: Drawable,
+    val name: String,
+    val packageName: String,
+    isSelected: Boolean,
+    isSelectionEnabled: Boolean = true
+) : BaseObservable(), Keyed<String> {
     // Package name is stable and unique across installed apps; labels are not.
     override val key = packageName
 
@@ -19,5 +25,12 @@ class ApplicationData(val icon: Drawable, val name: String, val packageName: Str
         set(value) {
             field = value
             notifyPropertyChanged(BR.selected)
+        }
+
+    @get:Bindable
+    var isSelectionEnabled = isSelectionEnabled
+        set(value) {
+            field = value
+            notifyPropertyChanged(BR.selectionEnabled)
         }
 }
