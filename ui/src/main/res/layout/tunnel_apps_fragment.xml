@@ -13,6 +13,10 @@
         <variable
             name="appData"
             type="com.wireguard.android.databinding.ObservableKeyedArrayList&lt;String, ApplicationData&gt;" />
+
+        <variable
+            name="rowConfigurationHandler"
+            type="com.wireguard.android.databinding.ObservableKeyedRecyclerViewAdapter.RowConfigurationHandler" />
     </data>
 
     <LinearLayout
@@ -85,6 +89,15 @@
                 android:paddingBottom="8dp"
                 android:textAppearance="?attr/textAppearanceBodyMedium"
                 tools:text="3 excluded" />
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/save_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="16dp"
+                android:layout_marginEnd="16dp"
+                android:paddingBottom="8dp"
+                android:textAppearance="?attr/textAppearanceBodySmall"
+                tools:text="Saving…" />
 
             <com.google.android.material.textfield.TextInputLayout
                 android:id="@+id/search_layout"
@@ -146,6 +159,7 @@
                 android:id="@+id/app_list"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
+                app:configurationHandler="@{rowConfigurationHandler}"
                 app:items="@{appData}"
                 app:layout="@{@layout/app_list_item}"
                 tools:itemCount="10"
