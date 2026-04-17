@@ -30,7 +30,6 @@ import com.wireguard.android.viewmodel.SplitTunnelingMode
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -42,17 +41,9 @@ class TunnelAppsFragment : BaseFragment() {
         ERROR
     }
 
-    private enum class PersistResult {
-        SUCCESS,
-        FAILED,
-        TUNNEL_MISSING
-    }
-
-    private data class PersistSnapshot(
-        val tunnelName: String,
+    private data class SavedRoutingState(
         val mode: SplitTunnelingMode,
-        val selectedApps: List<String>,
-        val uiVersion: Long
+        val selectedApps: Set<String>
     )
 
     private var binding: TunnelAppsFragmentBinding? = null
@@ -60,15 +51,14 @@ class TunnelAppsFragment : BaseFragment() {
     private val appData = ObservableKeyedArrayList<String, ApplicationData>()
     private var selectedTunnelName: String? = null
     private var selectedMode = SplitTunnelingMode.ALL_APPLICATIONS
-    private var suppressSelectionPersistence = false
+    private var suppressSelectionUpdates = false
     private var searchQuery = ""
     private var tunnels: ObservableKeyedArrayList<String, ObservableTunnel>? = null
     private var loadJob: Job? = null
-    private var saveDebounceJob: Job? = null
     private var saveJob: Job? = null
     private var latestLoadRequestId = 0L
-    private var latestUiVersion = 0L
-    private var pendingPersistSnapshot: PersistSnapshot? = null
+    private var savedRoutingState: SavedRoutingState? = null
+    private var hasUnsavedChanges = false
     private var saveStatus = SaveStatus.IDLE
 
     private val appRowConfigurationHandler = object : RowConfigurationHandler<AppListItemBinding, ApplicationData> {
@@ -121,14 +111,15 @@ class TunnelAppsFragment : BaseFragment() {
         binding.toggleAll.setOnClickListener {
             if (selectedMode == SplitTunnelingMode.ALL_APPLICATIONS)
                 return@setOnClickListener
-            val selectAll = AppListDialogFragment.shouldSelectAllVisible(appData.map { it.isSelected })
-            AppListDialogFragment.updateSelectionState(appData, selectAll, { it.isSelected }) { item, selected -> item.isSelected = selected }
+            AppListDialogFragment.updateSelectionState(appData, true, { it.isSelected }) { item, selected -> item.isSelected = selected }
         }
         binding.clearSelection.setOnClickListener {
             if (selectedMode == SplitTunnelingMode.ALL_APPLICATIONS)
                 return@setOnClickListener
             AppListDialogFragment.updateSelectionState(allAppData, false, { it.isSelected }) { item, selected -> item.isSelected = selected }
         }
+        binding.cancelChanges.setOnClickListener { restoreSavedState() }
+        binding.saveChanges.setOnClickListener { persistCurrentState() }
         binding.splitTunnelingModeGroup.setOnCheckedChangeListener { _, checkedId ->
             val mode = when (checkedId) {
                 R.id.split_tunneling_mode_exclude -> SplitTunnelingMode.EXCLUDE_SELECTED_APPLICATIONS
@@ -143,6 +134,8 @@ class TunnelAppsFragment : BaseFragment() {
         binding.tunnelSelector.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
                 val tunnel = tunnels?.getOrNull(position) ?: return
+                if (selectedTunnel != tunnel)
+                    selectedTunnel = tunnel
                 if (selectedTunnelName != tunnel.name) {
                     selectedTunnelName = tunnel.name
                     loadSelectedTunnelData(tunnel)
@@ -153,8 +146,17 @@ class TunnelAppsFragment : BaseFragment() {
         }
         lifecycleScope.launch {
             tunnels = Application.getTunnelManager().getTunnels().also { it.addOnListChangedCallback(tunnelListObserver) }
+            selectedTunnelName = selectedTunnel?.name ?: selectedTunnelName
             refreshTunnelSelector(requireNotNull(tunnels))
         }
+    }
+
+    override fun onSelectedTunnelChanged(oldTunnel: ObservableTunnel?, newTunnel: ObservableTunnel?) {
+        val newTunnelName = newTunnel?.name
+        if (selectedTunnelName == newTunnelName)
+            return
+        selectedTunnelName = newTunnelName
+        refreshTunnelSelector(tunnels ?: return)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -168,7 +170,6 @@ class TunnelAppsFragment : BaseFragment() {
         tunnels?.removeOnListChangedCallback(tunnelListObserver)
         tunnels = null
         loadJob?.cancel()
-        saveDebounceJob?.cancel()
         saveJob?.cancel()
         binding = null
         super.onDestroyView()
@@ -196,7 +197,8 @@ class TunnelAppsFragment : BaseFragment() {
             selectedTunnelName = null
             allAppData.clear()
             appData.clear()
-            pendingPersistSnapshot = null
+            savedRoutingState = null
+            hasUnsavedChanges = false
             saveStatus = SaveStatus.IDLE
             updateModeUi()
             binding.summary.text = getString(R.string.no_tunnels_configured)
@@ -230,10 +232,12 @@ class TunnelAppsFragment : BaseFragment() {
                 }
                 if (!isAdded || requestId != latestLoadRequestId || selectedTunnelName != tunnel.name)
                     return@launch
-                suppressSelectionPersistence = true
+                suppressSelectionUpdates = true
                 selectedMode = mode
                 allAppData.clear()
                 allAppData.addAll(loadedApps)
+                savedRoutingState = SavedRoutingState(mode, selectedApps)
+                hasUnsavedChanges = false
                 applyFilter()
                 saveStatus = SaveStatus.IDLE
                 updateModeUi()
@@ -249,109 +253,95 @@ class TunnelAppsFragment : BaseFragment() {
             } finally {
                 if (requestId == latestLoadRequestId)
                     binding.progressBar.visibility = View.GONE
-                suppressSelectionPersistence = false
+                suppressSelectionUpdates = false
             }
         }
     }
 
     private fun onAppSelectionChanged() {
-        if (suppressSelectionPersistence || selectedMode == SplitTunnelingMode.ALL_APPLICATIONS)
+        if (suppressSelectionUpdates || selectedMode == SplitTunnelingMode.ALL_APPLICATIONS)
             return
         onUserStateChanged()
     }
 
     private fun onUserStateChanged() {
-        if (suppressSelectionPersistence)
+        if (suppressSelectionUpdates)
             return
-        latestUiVersion += 1
+        hasUnsavedChanges = calculateHasUnsavedChanges()
+        if (saveStatus == SaveStatus.SAVED || saveStatus == SaveStatus.ERROR)
+            saveStatus = SaveStatus.IDLE
+        updateModeUi()
+    }
+
+    private fun persistCurrentState() {
+        val tunnelName = selectedTunnelName ?: return
+        if (!hasUnsavedChanges || saveJob?.isActive == true)
+            return
+        val tunnel = tunnels?.firstOrNull { it.name == tunnelName } ?: return
+        val mode = selectedMode
+        val selectedApps = allAppData.filter { it.isSelected }.map { it.packageName }
         saveStatus = SaveStatus.SAVING
         updateModeUi()
-        schedulePersist()
-    }
-
-    private fun schedulePersist() {
-        val tunnelName = selectedTunnelName ?: return
-        pendingPersistSnapshot = PersistSnapshot(
-            tunnelName = tunnelName,
-            mode = selectedMode,
-            selectedApps = allAppData.filter { it.isSelected }.map { it.packageName },
-            uiVersion = latestUiVersion
-        )
-        saveDebounceJob?.cancel()
-        saveDebounceJob = lifecycleScope.launch {
-            delay(SAVE_DEBOUNCE_MS)
-            drainPersistQueue()
-        }
-    }
-
-    private fun drainPersistQueue() {
-        if (saveJob?.isActive == true)
-            return
+        saveJob?.cancel()
         saveJob = lifecycleScope.launch {
-            while (true) {
-                val snapshot = pendingPersistSnapshot ?: break
-                pendingPersistSnapshot = null
-                when (persistSnapshot(snapshot)) {
-                    PersistResult.SUCCESS -> {
-                        if (pendingPersistSnapshot != null)
-                            delay(SAVE_DEBOUNCE_MS)
+            try {
+                val configProxy = ConfigProxy(tunnel.getConfigAsync())
+                val configInterface = configProxy.`interface`
+                configInterface.splitTunnelingMode = mode
+                when (mode) {
+                    SplitTunnelingMode.ALL_APPLICATIONS -> {
+                        configInterface.excludedApplications.clear()
+                        configInterface.includedApplications.clear()
                     }
 
-                    PersistResult.TUNNEL_MISSING,
-                    PersistResult.FAILED -> break
+                    SplitTunnelingMode.EXCLUDE_SELECTED_APPLICATIONS -> {
+                        configInterface.includedApplications.clear()
+                        configInterface.excludedApplications.apply {
+                            clear()
+                            addAll(selectedApps)
+                        }
+                    }
+
+                    SplitTunnelingMode.INCLUDE_ONLY_SELECTED_APPLICATIONS -> {
+                        configInterface.excludedApplications.clear()
+                        configInterface.includedApplications.apply {
+                            clear()
+                            addAll(selectedApps)
+                        }
+                    }
                 }
-            }
-            if (saveStatus == SaveStatus.SAVING)
+                tunnel.setConfigAsync(configProxy.resolve())
+                savedRoutingState = SavedRoutingState(mode, selectedApps.toSet())
+                hasUnsavedChanges = false
                 saveStatus = SaveStatus.SAVED
-            updateModeUi()
+            } catch (e: Throwable) {
+                val message = getString(R.string.config_save_error, tunnel.name, ErrorMessages[e])
+                saveStatus = SaveStatus.ERROR
+                Log.e(TAG, message, e)
+                view?.let { Snackbar.make(it, message, Snackbar.LENGTH_LONG).show() }
+            } finally {
+                updateModeUi()
+            }
         }
     }
 
-    private suspend fun persistSnapshot(snapshot: PersistSnapshot): PersistResult {
-        val tunnel = tunnels?.firstOrNull { it.name == snapshot.tunnelName }
-        if (tunnel == null) {
-            saveStatus = SaveStatus.IDLE
-            return PersistResult.TUNNEL_MISSING
-        }
-        return try {
-            val configProxy = ConfigProxy(tunnel.getConfigAsync())
-            val configInterface = configProxy.`interface`
-            configInterface.splitTunnelingMode = snapshot.mode
-            when (snapshot.mode) {
-                SplitTunnelingMode.ALL_APPLICATIONS -> {
-                    configInterface.excludedApplications.clear()
-                    configInterface.includedApplications.clear()
-                }
+    private fun restoreSavedState() {
+        val state = savedRoutingState ?: return
+        suppressSelectionUpdates = true
+        selectedMode = state.mode
+        allAppData.forEach { it.isSelected = it.packageName in state.selectedApps }
+        applyFilter()
+        suppressSelectionUpdates = false
+        hasUnsavedChanges = false
+        saveStatus = SaveStatus.IDLE
+        updateModeUi()
+    }
 
-                SplitTunnelingMode.EXCLUDE_SELECTED_APPLICATIONS -> {
-                    configInterface.includedApplications.clear()
-                    configInterface.excludedApplications.apply {
-                        clear()
-                        addAll(snapshot.selectedApps)
-                    }
-                }
-
-                SplitTunnelingMode.INCLUDE_ONLY_SELECTED_APPLICATIONS -> {
-                    configInterface.excludedApplications.clear()
-                    configInterface.includedApplications.apply {
-                        clear()
-                        addAll(snapshot.selectedApps)
-                    }
-                }
-            }
-            tunnel.setConfigAsync(configProxy.resolve())
-            if (snapshot.uiVersion == latestUiVersion)
-                saveStatus = SaveStatus.SAVED
-            PersistResult.SUCCESS
-        } catch (e: Throwable) {
-            val message = getString(R.string.config_save_error, tunnel.name, ErrorMessages[e])
-            saveStatus = SaveStatus.ERROR
-            Log.e(TAG, message, e)
-            view?.let { Snackbar.make(it, message, Snackbar.LENGTH_LONG).show() }
-            if (selectedTunnelName == snapshot.tunnelName)
-                loadSelectedTunnelData(tunnel)
-            PersistResult.FAILED
-        }
+    private fun calculateHasUnsavedChanges(): Boolean {
+        val state = savedRoutingState ?: return false
+        if (selectedMode != state.mode)
+            return true
+        return allAppData.asSequence().filter { it.isSelected }.map { it.packageName }.toSet() != state.selectedApps
     }
 
     private fun updateModeUi() {
@@ -361,7 +351,7 @@ class TunnelAppsFragment : BaseFragment() {
             SplitTunnelingMode.EXCLUDE_SELECTED_APPLICATIONS -> R.id.split_tunneling_mode_exclude
             SplitTunnelingMode.INCLUDE_ONLY_SELECTED_APPLICATIONS -> R.id.split_tunneling_mode_include
         }
-        if (binding.splitTunnelingModeGroup.checkedButtonId != modeButtonId)
+        if (binding.splitTunnelingModeGroup.getCheckedRadioButtonId() != modeButtonId)
             binding.splitTunnelingModeGroup.check(modeButtonId)
 
         val appSelectionEnabled = selectedMode != SplitTunnelingMode.ALL_APPLICATIONS
@@ -369,6 +359,8 @@ class TunnelAppsFragment : BaseFragment() {
         binding.searchText.isEnabled = appSelectionEnabled
         binding.toggleAll.isEnabled = appSelectionEnabled
         binding.clearSelection.isEnabled = appSelectionEnabled
+        binding.saveChanges.isEnabled = hasUnsavedChanges && saveJob?.isActive != true
+        binding.cancelChanges.isEnabled = hasUnsavedChanges && saveJob?.isActive != true
         binding.appList.alpha = if (appSelectionEnabled) 1f else 0.7f
         binding.appList.adapter?.notifyDataSetChanged()
         binding.summary.text = createSummaryText()
@@ -407,7 +399,6 @@ class TunnelAppsFragment : BaseFragment() {
 
     companion object {
         private const val TAG = "WireGuard/TunnelAppsFragment"
-        private const val SAVE_DEBOUNCE_MS = 350L
         private const val KEY_SELECTED_TUNNEL_NAME = "selected_tunnel_name"
         private const val KEY_SEARCH_QUERY = "search_query"
         private const val KEY_SELECTED_MODE = "selected_mode"
