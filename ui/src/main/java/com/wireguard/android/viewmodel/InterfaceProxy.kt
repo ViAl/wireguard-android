@@ -93,12 +93,15 @@ class InterfaceProxy : BaseObservable, Parcelable {
         dnsServers = parcel.readString() ?: ""
         parcel.readStringList(excludedApplications)
         parcel.readStringList(includedApplications)
-        splitTunnelingMode = parcel.readString()?.let {
-            runCatching { SplitTunnelingMode.valueOf(it) }.getOrNull()
-        } ?: inferSplitTunnelingMode()
-        listenPort = parcel.readString() ?: ""
-        mtu = parcel.readString() ?: ""
-        privateKey = parcel.readString() ?: ""
+        val remaining = mutableListOf<String?>()
+        while (parcel.dataAvail() > 0) {
+            remaining.add(parcel.readString())
+        }
+        val parcelTail = decodeParcelTail(remaining)
+        listenPort = parcelTail.listenPort ?: ""
+        mtu = parcelTail.mtu ?: ""
+        privateKey = parcelTail.privateKey ?: ""
+        splitTunnelingMode = parcelTail.mode ?: inferSplitTunnelingMode()
     }
 
     constructor(other: Interface) {
@@ -188,10 +191,11 @@ class InterfaceProxy : BaseObservable, Parcelable {
         dest.writeString(dnsServers)
         dest.writeStringList(excludedApplications)
         dest.writeStringList(includedApplications)
-        dest.writeString(splitTunnelingMode.name)
         dest.writeString(listenPort)
         dest.writeString(mtu)
         dest.writeString(privateKey)
+        // Appended at end for parcel backward compatibility. Older readers ignore trailing data.
+        dest.writeString(splitTunnelingMode.name)
     }
 
     private class InterfaceProxyCreator : Parcelable.Creator<InterfaceProxy> {
@@ -205,6 +209,48 @@ class InterfaceProxy : BaseObservable, Parcelable {
     }
 
     companion object {
+        internal data class DecodedParcelTail(
+            val listenPort: String?,
+            val mtu: String?,
+            val privateKey: String?,
+            val mode: SplitTunnelingMode?
+        )
+
+        internal fun decodeParcelTail(remainingFields: List<String?>): DecodedParcelTail {
+            if (remainingFields.size <= 3) {
+                return DecodedParcelTail(
+                    listenPort = remainingFields.getOrNull(0),
+                    mtu = remainingFields.getOrNull(1),
+                    privateKey = remainingFields.getOrNull(2),
+                    mode = null
+                )
+            }
+            val firstFieldMode = remainingFields.firstOrNull()?.let { runCatching { SplitTunnelingMode.valueOf(it) }.getOrNull() }
+            val lastFieldMode = remainingFields.lastOrNull()?.let { runCatching { SplitTunnelingMode.valueOf(it) }.getOrNull() }
+            return when {
+                // Intermediate split-tunneling branch format: mode field inserted before listenPort.
+                firstFieldMode != null -> DecodedParcelTail(
+                    listenPort = remainingFields.getOrNull(1),
+                    mtu = remainingFields.getOrNull(2),
+                    privateKey = remainingFields.getOrNull(3),
+                    mode = firstFieldMode
+                )
+                // Final format: mode appended after old parcel fields for backward compatibility.
+                lastFieldMode != null -> DecodedParcelTail(
+                    listenPort = remainingFields.getOrNull(0),
+                    mtu = remainingFields.getOrNull(1),
+                    privateKey = remainingFields.getOrNull(2),
+                    mode = lastFieldMode
+                )
+                else -> DecodedParcelTail(
+                    listenPort = remainingFields.getOrNull(0),
+                    mtu = remainingFields.getOrNull(1),
+                    privateKey = remainingFields.getOrNull(2),
+                    mode = null
+                )
+            }
+        }
+
         @JvmField
         val CREATOR: Parcelable.Creator<InterfaceProxy> = InterfaceProxyCreator()
     }

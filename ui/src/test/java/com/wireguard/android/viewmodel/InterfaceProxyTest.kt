@@ -113,6 +113,71 @@ class InterfaceProxyTest {
         assertTrue(resolved.includedApplications.isEmpty())
     }
 
+    @Test
+    fun decodeParcelTailSupportsOldLayoutWithoutMode() {
+        val decoded = InterfaceProxy.decodeParcelTail(
+            listOf("51820", "1280", "private-key-base64")
+        )
+        assertEquals("51820", decoded.listenPort)
+        assertEquals("1280", decoded.mtu)
+        assertEquals("private-key-base64", decoded.privateKey)
+        assertEquals(null, decoded.mode)
+    }
+
+    @Test
+    fun decodeParcelTailSupportsIntermediateLayoutWithModeBeforeListenPort() {
+        val decoded = InterfaceProxy.decodeParcelTail(
+            listOf(
+                SplitTunnelingMode.EXCLUDE_SELECTED_APPLICATIONS.name,
+                "51820",
+                "1280",
+                "private-key-base64"
+            )
+        )
+        assertEquals("51820", decoded.listenPort)
+        assertEquals("1280", decoded.mtu)
+        assertEquals("private-key-base64", decoded.privateKey)
+        assertEquals(SplitTunnelingMode.EXCLUDE_SELECTED_APPLICATIONS, decoded.mode)
+    }
+
+    @Test
+    fun decodeParcelTailSupportsNewLayoutWithModeAppended() {
+        val decoded = InterfaceProxy.decodeParcelTail(
+            listOf(
+                "51820",
+                "1280",
+                "private-key-base64",
+                SplitTunnelingMode.INCLUDE_ONLY_SELECTED_APPLICATIONS.name
+            )
+        )
+        assertEquals("51820", decoded.listenPort)
+        assertEquals("1280", decoded.mtu)
+        assertEquals("private-key-base64", decoded.privateKey)
+        assertEquals(SplitTunnelingMode.INCLUDE_ONLY_SELECTED_APPLICATIONS, decoded.mode)
+    }
+
+    @Test
+    fun decodeParcelTailFallsBackToLegacyMappingWhenModeIsAbsent() {
+        val decoded = InterfaceProxy.decodeParcelTail(
+            listOf("51820", "1280", "private-key-base64", "unexpected-trailing")
+        )
+        assertEquals("51820", decoded.listenPort)
+        assertEquals("1280", decoded.mtu)
+        assertEquals("private-key-base64", decoded.privateKey)
+        assertEquals(null, decoded.mode)
+    }
+
+    @Test
+    fun absentParcelModeFallsBackToInferredModeFromAppLists() {
+        val proxy = InterfaceProxy()
+        proxy.excludedApplications.add("com.example.excluded")
+        val decoded = InterfaceProxy.decodeParcelTail(listOf("51820", "1280", "private-key-base64"))
+
+        val resolvedMode = decoded.mode ?: proxy.inferSplitTunnelingMode()
+
+        assertEquals(SplitTunnelingMode.EXCLUDE_SELECTED_APPLICATIONS, resolvedMode)
+    }
+
     private fun newResolvableProxy(): InterfaceProxy {
         return InterfaceProxy().apply {
             generateKeyPair()
