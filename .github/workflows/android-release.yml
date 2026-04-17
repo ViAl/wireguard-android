@@ -129,7 +129,7 @@ jobs:
       - name: Upload APK as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: wireguard-android-apk-${{ github.ref_name }}
+          name: wireguard-android-apk-${{ github.run_id }}
           path: ${{ steps.sign.outputs.final_apk || steps.final.outputs.final_apk }}
           if-no-files-found: error
 
