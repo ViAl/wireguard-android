@@ -143,6 +143,8 @@ class TunnelAppsFragment : BaseFragment() {
         binding.tunnelSelector.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
                 val tunnel = tunnels?.getOrNull(position) ?: return
+                if (selectedTunnel != tunnel)
+                    selectedTunnel = tunnel
                 if (selectedTunnelName != tunnel.name) {
                     selectedTunnelName = tunnel.name
                     loadSelectedTunnelData(tunnel)
@@ -153,8 +155,17 @@ class TunnelAppsFragment : BaseFragment() {
         }
         lifecycleScope.launch {
             tunnels = Application.getTunnelManager().getTunnels().also { it.addOnListChangedCallback(tunnelListObserver) }
+            selectedTunnelName = selectedTunnel?.name ?: selectedTunnelName
             refreshTunnelSelector(requireNotNull(tunnels))
         }
+    }
+
+    override fun onSelectedTunnelChanged(oldTunnel: ObservableTunnel?, newTunnel: ObservableTunnel?) {
+        val newTunnelName = newTunnel?.name
+        if (selectedTunnelName == newTunnelName)
+            return
+        selectedTunnelName = newTunnelName
+        refreshTunnelSelector(tunnels ?: return)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -361,7 +372,7 @@ class TunnelAppsFragment : BaseFragment() {
             SplitTunnelingMode.EXCLUDE_SELECTED_APPLICATIONS -> R.id.split_tunneling_mode_exclude
             SplitTunnelingMode.INCLUDE_ONLY_SELECTED_APPLICATIONS -> R.id.split_tunneling_mode_include
         }
-        if (binding.splitTunnelingModeGroup.checkedButtonId != modeButtonId)
+        if (binding.splitTunnelingModeGroup.getCheckedRadioButtonId() != modeButtonId)
             binding.splitTunnelingModeGroup.check(modeButtonId)
 
         val appSelectionEnabled = selectedMode != SplitTunnelingMode.ALL_APPLICATIONS
