@@ -1,0 +1,163 @@
+name: Android Release Build
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      push_to_artifacts_branch:
+        description: "Also push built APK to artifacts branch"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  build-release-apk:
+    runs-on: ubuntu-latest
+    env:
+      JAVA_VERSION: "17"
+      ANDROID_BUILD_TOOLS: "36.0.0"
+      ANDROID_NDK_VERSION: "27.2.12479018"
+      ANDROID_CMAKE_VERSION: "3.22.1"
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK/NDK components
+        shell: bash
+        run: |
+          set -euxo pipefail
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-36" \
+            "build-tools;${ANDROID_BUILD_TOOLS}" \
+            "ndk;${ANDROID_NDK_VERSION}" \
+            "cmake;${ANDROID_CMAKE_VERSION}"
+
+      - name: Make Gradle wrapper executable
+        shell: bash
+        run: chmod +x ./gradlew
+
+      - name: Build release APK (unsigned by default)
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ./gradlew --no-daemon :ui:assembleRelease
+
+      - name: Locate generated APK
+        id: apk
+        shell: bash
+        run: |
+          set -euxo pipefail
+          unsigned_apk="$(find ui/build/outputs/apk/release -type f -name '*-release-unsigned.apk' | head -n 1)"
+          if [ -z "${unsigned_apk}" ]; then
+            echo "No unsigned release APK found" >&2
+            exit 1
+          fi
+          echo "unsigned_apk=${unsigned_apk}" >> "$GITHUB_OUTPUT"
+
+      - name: Decode keystore (optional)
+        id: keystore
+        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        shell: bash
+        run: |
+          set -euxo pipefail
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > release.keystore
+          echo "keystore_path=release.keystore" >> "$GITHUB_OUTPUT"
+
+      - name: Sign APK (optional)
+        id: sign
+        if: ${{ steps.keystore.outputs.keystore_path != '' }}
+        shell: bash
+        env:
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euxo pipefail
+          signed_apk="ui/build/outputs/apk/release/wireguard-release.apk"
+          "$ANDROID_HOME/build-tools/${ANDROID_BUILD_TOOLS}/apksigner" sign \
+            --ks "${{ steps.keystore.outputs.keystore_path }}" \
+            --ks-key-alias "$KEY_ALIAS" \
+            --ks-pass "pass:$KEYSTORE_PASSWORD" \
+            --key-pass "pass:$KEY_PASSWORD" \
+            --out "$signed_apk" \
+            "${{ steps.apk.outputs.unsigned_apk }}"
+          "$ANDROID_HOME/build-tools/${ANDROID_BUILD_TOOLS}/apksigner" verify "$signed_apk"
+          echo "final_apk=$signed_apk" >> "$GITHUB_OUTPUT"
+
+      - name: Use unsigned APK when signing is not configured
+        id: final
+        if: ${{ steps.sign.outputs.final_apk == '' }}
+        shell: bash
+        run: |
+          set -euxo pipefail
+          echo "final_apk=${{ steps.apk.outputs.unsigned_apk }}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload APK as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wireguard-android-apk-${{ github.ref_name }}
+          path: ${{ steps.sign.outputs.final_apk || steps.final.outputs.final_apk }}
+          if-no-files-found: error
+
+      - name: Optionally push APK to artifacts branch
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.push_to_artifacts_branch) || vars.PUSH_ARTIFACTS_BRANCH == 'true' }}
+        shell: bash
+        env:
+          FINAL_APK: ${{ steps.sign.outputs.final_apk || steps.final.outputs.final_apk }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euxo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git fetch origin artifacts || true
+          if git show-ref --verify --quiet refs/remotes/origin/artifacts; then
+            git switch --create artifacts --track origin/artifacts
+          else
+            git switch --orphan artifacts
+            git rm -rf . || true
+          fi
+
+          out_dir="apks/${GITHUB_REF_NAME}"
+          mkdir -p "$out_dir"
+          cp "$FINAL_APK" "$out_dir/"
+
+          git add "$out_dir"
+          if ! git diff --cached --quiet; then
+            git commit -m "Add APK for ${GITHUB_REF_NAME}"
+            git push origin artifacts
+          else
+            echo "No changes to push to artifacts branch"
+          fi
+
+      - name: Create GitHub Release and upload APK (tags only)
+        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: ${{ steps.sign.outputs.final_apk || steps.final.outputs.final_apk }}
