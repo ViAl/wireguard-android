@@ -58,6 +58,9 @@ class MainActivity : BaseActivity(), FragmentManager.OnBackStackChangedListener,
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        selectedMainTab = savedInstanceState?.getString(KEY_SELECTED_MAIN_TAB)
+            ?.let { runCatching { MainTabsFragment.MainTab.valueOf(it) }.getOrNull() }
+            ?: MainTabsFragment.MainTab.VPN
         super.onCreate(savedInstanceState)
         setContentView(R.layout.main_activity)
         actionBar = supportActionBar
@@ -110,8 +113,7 @@ class MainActivity : BaseActivity(), FragmentManager.OnBackStackChangedListener,
         invalidateOptionsMenu()
         if (tab == MainTabsFragment.MainTab.APPS) {
             selectedTunnel = null
-            if (isTwoPaneLayout)
-                supportFragmentManager.popBackStackImmediate(0, FragmentManager.POP_BACK_STACK_INCLUSIVE)
+            supportFragmentManager.popBackStackImmediate(0, FragmentManager.POP_BACK_STACK_INCLUSIVE)
         }
     }
 
@@ -122,6 +124,10 @@ class MainActivity : BaseActivity(), FragmentManager.OnBackStackChangedListener,
         val fragmentManager = supportFragmentManager
         if (fragmentManager.isStateSaved) {
             return false
+        }
+        if (selectedMainTab == MainTabsFragment.MainTab.APPS) {
+            fragmentManager.popBackStackImmediate(0, FragmentManager.POP_BACK_STACK_INCLUSIVE)
+            return newTunnel == null
         }
 
         val backStackEntries = fragmentManager.backStackEntryCount
@@ -143,5 +149,14 @@ class MainActivity : BaseActivity(), FragmentManager.OnBackStackChangedListener,
             }
         }
         return true
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString(KEY_SELECTED_MAIN_TAB, selectedMainTab.name)
+        super.onSaveInstanceState(outState)
+    }
+
+    companion object {
+        private const val KEY_SELECTED_MAIN_TAB = "selected_main_tab"
     }
 }
