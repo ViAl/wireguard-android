@@ -30,6 +30,7 @@ class MainActivity : BaseActivity(), FragmentManager.OnBackStackChangedListener,
     private var actionBar: ActionBar? = null
     private var isTwoPaneLayout = false
     private var backPressedCallback: OnBackPressedCallback? = null
+    private var selectedMainTab = MainTabsFragment.MainTab.VPN
 
     private fun handleBackPressed() {
         val backStackEntries = supportFragmentManager.backStackEntryCount
@@ -68,7 +69,13 @@ class MainActivity : BaseActivity(), FragmentManager.OnBackStackChangedListener,
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.main_activity, menu)
+        menu.findItem(R.id.menu_action_edit)?.isVisible = selectedMainTab == MainTabsFragment.MainTab.VPN
         return true
+    }
+
+    override fun onPrepareOptionsMenu(menu: Menu): Boolean {
+        menu.findItem(R.id.menu_action_edit)?.isVisible = selectedMainTab == MainTabsFragment.MainTab.VPN
+        return super.onPrepareOptionsMenu(menu)
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
@@ -99,6 +106,8 @@ class MainActivity : BaseActivity(), FragmentManager.OnBackStackChangedListener,
     }
 
     override fun onMainTabChanged(tab: MainTabsFragment.MainTab) {
+        selectedMainTab = tab
+        invalidateOptionsMenu()
         if (tab == MainTabsFragment.MainTab.APPS) {
             selectedTunnel = null
             if (isTwoPaneLayout)

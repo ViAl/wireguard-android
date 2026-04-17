@@ -55,7 +55,7 @@
         <item quantity="other">%d включено</item>
     </plurals>
     <string name="all_applications">Все приложения</string>
-    <string name="exclude_from_tunnel">Исключить для</string>
+    <string name="exclude_from_tunnel">Отключить для</string>
     <string name="include_in_tunnel">Включить для</string>
     <plurals name="include_n_applications">
         <item quantity="one">Включить %d приложение</item>
@@ -224,7 +224,8 @@
     <string name="shell_marker_count_error">Shell ожидает 4 маркера, получено %d</string>
     <string name="shell_start_error">Не удалось запустить Shell: %d</string>
     <string name="success_application_will_restart">Успешно. Приложение будет перезапущено…</string>
-    <string name="toggle_all">Инвертировать все</string>
+    <string name="toggle_all">Выбрать все</string>
+    <string name="clear_selection">Очистить все</string>
     <string name="toggle_error">Ошибка переключения туннеля WireGuard: %s</string>
     <string name="tools_installer_already">wg и wg-quick уже установлены</string>
     <string name="tools_installer_failure">Не удалось установить инструменты командной строки (нет root?)</string>
