@@ -64,7 +64,7 @@ class AppListDialogFragment : DialogFragment() {
                         })
                     }
                 }
-                applicationData.sortWith(compareBy<ApplicationData>(String.CASE_INSENSITIVE_ORDER) { it.name }.thenBy(String.CASE_INSENSITIVE_ORDER) { it.packageName })
+                applicationData.sortWith(compareBy(String.CASE_INSENSITIVE_ORDER, ApplicationData::name).thenBy(String.CASE_INSENSITIVE_ORDER, ApplicationData::packageName))
                 withContext(Dispatchers.Main.immediate) {
                     allAppData.clear()
                     allAppData.addAll(applicationData)
