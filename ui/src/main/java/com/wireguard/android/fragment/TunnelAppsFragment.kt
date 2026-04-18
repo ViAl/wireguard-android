@@ -388,6 +388,8 @@ class TunnelAppsFragment : BaseFragment() {
 
     private fun restoreSavedState() {
         val state = savedRoutingState ?: return
+        val previousMode = selectedMode
+        saveModeUiState(previousMode)
         suppressSelectionUpdates = true
         selectedMode = state.mode
         excludedSelectedApps.clear()
@@ -395,11 +397,13 @@ class TunnelAppsFragment : BaseFragment() {
         includedSelectedApps.clear()
         includedSelectedApps.addAll(state.includedSelectedApps)
         applySelectionForMode(state.mode)
-        applyFilter()
         suppressSelectionUpdates = false
+        restoreModeUiState(state.mode)
         hasUnsavedChanges = false
         saveStatus = SaveStatus.IDLE
         updateModeUi()
+        if (previousMode != state.mode)
+            animateModeContentTransition()
     }
 
     private fun calculateHasUnsavedChanges(): Boolean {
