@@ -44,41 +44,27 @@
                     android:layout_height="wrap_content" />
             </com.google.android.material.textfield.TextInputLayout>
 
-            <com.google.android.material.textview.MaterialTextView
-                android:id="@+id/split_tunneling_label"
+            <com.google.android.material.tabs.TabLayout
+                android:id="@+id/split_tunneling_mode_tabs"
+                style="@style/Widget.Material3.TabLayout.OnSurface"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="16dp"
                 android:layout_marginTop="8dp"
-                android:layout_marginEnd="16dp"
-                android:text="@string/split_tunneling"
-                android:textAppearance="?attr/textAppearanceTitleSmall" />
-
-            <RadioGroup
-                android:id="@+id/split_tunneling_mode_group"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="16dp"
                 android:layout_marginEnd="16dp">
 
-                <com.google.android.material.radiobutton.MaterialRadioButton
+                <com.google.android.material.tabs.TabItem
                     android:id="@+id/split_tunneling_mode_all"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/all_applications" />
+                    android:text="@string/all" />
 
-                <com.google.android.material.radiobutton.MaterialRadioButton
+                <com.google.android.material.tabs.TabItem
                     android:id="@+id/split_tunneling_mode_exclude"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/exclude_selected_applications" />
+                    android:text="@string/exclude_from_tunnel" />
 
-                <com.google.android.material.radiobutton.MaterialRadioButton
+                <com.google.android.material.tabs.TabItem
                     android:id="@+id/split_tunneling_mode_include"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/only_selected_applications" />
-            </RadioGroup>
+                    android:text="@string/include_in_tunnel" />
+            </com.google.android.material.tabs.TabLayout>
 
             <com.google.android.material.textview.MaterialTextView
                 android:id="@+id/summary"
@@ -86,9 +72,10 @@
                 android:layout_height="wrap_content"
                 android:layout_marginStart="16dp"
                 android:layout_marginEnd="16dp"
-                android:paddingBottom="8dp"
+                android:paddingTop="2dp"
+                android:paddingBottom="6dp"
                 android:textAppearance="?attr/textAppearanceBodyMedium"
-                tools:text="3 excluded" />
+                tools:text="3 apps excluded from VPN" />
             <com.google.android.material.textview.MaterialTextView
                 android:id="@+id/save_status"
                 android:layout_width="match_parent"
@@ -104,9 +91,9 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="16dp"
-                android:layout_marginTop="8dp"
                 android:layout_marginEnd="16dp"
-                android:hint="@string/search_applications">
+                android:hint="@string/search_applications"
+                app:endIconMode="clear_text">
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/search_text"

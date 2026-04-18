@@ -39,7 +39,17 @@
         <item quantity="one">%d included</item>
         <item quantity="other">%d included</item>
     </plurals>
+    <plurals name="n_apps_excluded_from_vpn">
+        <item quantity="one">%d app excluded from VPN</item>
+        <item quantity="other">%d apps excluded from VPN</item>
+    </plurals>
+    <plurals name="n_apps_use_vpn">
+        <item quantity="one">%d app uses VPN</item>
+        <item quantity="other">%d apps use VPN</item>
+    </plurals>
+    <string name="all">All</string>
     <string name="all_applications">All applications</string>
+    <string name="vpn_applies_to_all_apps">VPN applies to all apps</string>
     <string name="split_tunneling">Split tunneling</string>
     <string name="exclude_selected_applications">Exclude selected applications</string>
     <string name="only_selected_applications">Only selected applications</string>
