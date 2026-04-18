@@ -4,6 +4,8 @@
  */
 package com.wireguard.android.fragment
 
+import android.graphics.drawable.Drawable
+import android.graphics.Typeface
 import android.os.Bundle
 import android.text.SpannableStringBuilder
 import android.text.Spanned
@@ -19,12 +21,14 @@ import android.view.inputmethod.InputMethodManager
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Toast
-import android.graphics.Typeface
+import androidx.appcompat.content.res.AppCompatResources
+import androidx.core.graphics.drawable.DrawableCompat
 import androidx.core.widget.doAfterTextChanged
 import androidx.databinding.ObservableList
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.google.android.material.color.MaterialColors
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.snackbar.Snackbar
 import com.wireguard.android.R
@@ -261,6 +265,7 @@ class TunnelAppsFragment : BaseFragment() {
             saveStatus = SaveStatus.IDLE
             updateModeUi()
             binding.summary.text = getString(R.string.no_tunnels_configured)
+            binding.summary.setCompoundDrawablesRelative(null, null, null, null)
             binding.noTunnelState.visibility = View.VISIBLE
             binding.content.visibility = View.GONE
             binding.emptyState.visibility = View.GONE
@@ -540,7 +545,7 @@ class TunnelAppsFragment : BaseFragment() {
             lastRenderedAppSelectionEnabled = appSelectionEnabled
             requestSafeAppListRefresh()
         }
-        binding.summary.text = createSummaryText()
+        updateSummaryUi()
         binding.searchFeedback.text = resources.getQuantityString(R.plurals.found_n_apps, appData.size, appData.size)
         binding.saveStatus.text = when (saveStatus) {
             SaveStatus.IDLE -> ""
@@ -592,6 +597,34 @@ class TunnelAppsFragment : BaseFragment() {
         }
     }
 
+    private fun updateSummaryUi() {
+        val liveBinding = binding ?: return
+        liveBinding.summary.text = createSummaryText()
+        liveBinding.summary.setCompoundDrawablesRelative(
+            createSummaryIconDrawable(getSummaryIconResIdForMode(selectedMode)),
+            null,
+            null,
+            null
+        )
+        liveBinding.summary.compoundDrawablePadding = (resources.displayMetrics.density * 6).toInt()
+    }
+
+    private fun createSummaryIconDrawable(iconResId: Int): Drawable? {
+        val drawable = AppCompatResources.getDrawable(requireContext(), iconResId)?.mutate() ?: return null
+        val iconSizePx = (resources.displayMetrics.density * 18).toInt()
+        drawable.setBounds(0, 0, iconSizePx, iconSizePx)
+        DrawableCompat.setTint(drawable, MaterialColors.getColor(requireView(), com.google.android.material.R.attr.colorOnSurfaceVariant))
+        return drawable
+    }
+
+    private fun getSummaryIconResIdForMode(mode: SplitTunnelingMode): Int {
+        return when (mode) {
+            SplitTunnelingMode.ALL_APPLICATIONS -> android.R.drawable.ic_lock_lock
+            SplitTunnelingMode.EXCLUDE_SELECTED_APPLICATIONS -> android.R.drawable.ic_menu_close_clear_cancel
+            SplitTunnelingMode.INCLUDE_ONLY_SELECTED_APPLICATIONS -> android.R.drawable.ic_lock_idle_lock
+        }
+    }
+
     private fun applyFilter() {
         if (!isViewUsableForUiUpdates())
             return
@@ -604,7 +637,7 @@ class TunnelAppsFragment : BaseFragment() {
             allAppData.isNotEmpty() &&
             appData.isEmpty()
         binding.emptyState.visibility = if (shouldShowEmptyState) View.VISIBLE else View.GONE
-        binding.summary.text = createSummaryText()
+        updateSummaryUi()
         binding.searchFeedback.text = resources.getQuantityString(R.plurals.found_n_apps, appData.size, appData.size)
         binding.searchFeedback.visibility =
             if (selectedMode != SplitTunnelingMode.ALL_APPLICATIONS && searchQuery.isNotBlank()) View.VISIBLE else View.GONE
