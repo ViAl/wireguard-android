@@ -86,6 +86,83 @@
                 android:textAppearance="?attr/textAppearanceBodySmall"
                 tools:text="Saving…" />
 
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/mode_helper"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="16dp"
+                android:layout_marginEnd="16dp"
+                android:paddingBottom="8dp"
+                android:textAppearance="?attr/textAppearanceBodySmall"
+                android:visibility="gone"
+                tools:text="Choose apps that should not use VPN"
+                tools:visibility="visible" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/all_mode_container"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:minHeight="200dp"
+            android:orientation="vertical"
+            android:paddingStart="24dp"
+            android:paddingEnd="24dp"
+            android:visibility="gone">
+
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/all_mode_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:text="@string/routing_all_mode_title"
+                android:textAppearance="?attr/textAppearanceTitleMedium"
+                tools:text="All traffic goes through VPN" />
+
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/all_mode_description"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center"
+                android:text="@string/routing_all_mode_description"
+                android:textAppearance="?attr/textAppearanceBodyMedium"
+                tools:text="Choose another tab if you want to exclude apps from VPN or allow VPN only for selected apps." />
+
+            <LinearLayout
+                android:id="@+id/all_mode_actions"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:gravity="center"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/switch_to_exclude_mode"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/routing_mode_tab_exclude" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/switch_to_include_mode"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:text="@string/routing_mode_tab_only" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/selection_mode_container"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:minHeight="200dp"
+            android:orientation="vertical">
+
             <com.google.android.material.textfield.TextInputLayout
                 android:id="@+id/search_layout"
                 android:layout_width="match_parent"
@@ -105,6 +182,7 @@
             </com.google.android.material.textfield.TextInputLayout>
 
             <LinearLayout
+                android:id="@+id/selection_actions"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal">
@@ -125,57 +203,56 @@
                     android:layout_weight="1"
                     android:text="@string/clear_selection" />
             </LinearLayout>
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1">
+
+                <ProgressBar
+                    android:id="@+id/progress_bar"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:indeterminate="true"
+                    android:visibility="gone"
+                    tools:visibility="visible" />
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/app_list"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    app:configurationHandler="@{rowConfigurationHandler}"
+                    app:items="@{appData}"
+                    app:layout="@{@layout/app_list_item}"
+                    tools:itemCount="10"
+                    tools:listitem="@layout/app_list_item" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/empty_state"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:gravity="center"
+                    android:padding="16dp"
+                    android:text="@string/no_matching_applications"
+                    android:textAppearance="?attr/textAppearanceBodyMedium"
+                    android:visibility="gone"
+                    tools:visibility="visible" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/no_tunnel_state"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:gravity="center"
+                    android:padding="16dp"
+                    android:text="@string/no_tunnels_configured"
+                    android:textAppearance="?attr/textAppearanceBodyMedium"
+                    android:visibility="gone"
+                    tools:visibility="visible" />
+            </FrameLayout>
         </LinearLayout>
-
-        <FrameLayout
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:minHeight="200dp">
-
-            <ProgressBar
-                android:id="@+id/progress_bar"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center"
-                android:indeterminate="true"
-                android:visibility="gone"
-                tools:visibility="visible" />
-
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/app_list"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                app:configurationHandler="@{rowConfigurationHandler}"
-                app:items="@{appData}"
-                app:layout="@{@layout/app_list_item}"
-                tools:itemCount="10"
-                tools:listitem="@layout/app_list_item" />
-
-            <com.google.android.material.textview.MaterialTextView
-                android:id="@+id/empty_state"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center"
-                android:gravity="center"
-                android:padding="16dp"
-                android:text="@string/no_matching_applications"
-                android:textAppearance="?attr/textAppearanceBodyMedium"
-                android:visibility="gone"
-                tools:visibility="visible" />
-
-            <com.google.android.material.textview.MaterialTextView
-                android:id="@+id/no_tunnel_state"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center"
-                android:gravity="center"
-                android:padding="16dp"
-                android:text="@string/no_tunnels_configured"
-                android:textAppearance="?attr/textAppearanceBodyMedium"
-                android:visibility="gone"
-                tools:visibility="visible" />
-        </FrameLayout>
 
         <LinearLayout
             android:layout_width="match_parent"
