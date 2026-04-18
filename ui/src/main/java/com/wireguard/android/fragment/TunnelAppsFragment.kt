@@ -148,6 +148,8 @@ class TunnelAppsFragment : BaseFragment() {
                 return@setOnClickListener
             AppListDialogFragment.updateSelectionState(allAppData, false, { it.isSelected }) { item, selected -> item.isSelected = selected }
         }
+        binding.switchToExcludeMode.setOnClickListener { switchMode(SplitTunnelingMode.EXCLUDE_SELECTED_APPLICATIONS) }
+        binding.switchToIncludeMode.setOnClickListener { switchMode(SplitTunnelingMode.INCLUDE_ONLY_SELECTED_APPLICATIONS) }
         binding.cancelChanges.setOnClickListener { restoreSavedState() }
         binding.saveChanges.setOnClickListener { persistCurrentState() }
         binding.splitTunnelingModeTabs.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
@@ -162,14 +164,7 @@ class TunnelAppsFragment : BaseFragment() {
                     2 -> SplitTunnelingMode.INCLUDE_ONLY_SELECTED_APPLICATIONS
                     else -> SplitTunnelingMode.ALL_APPLICATIONS
                 }
-                if (selectedMode != mode) {
-                    syncActiveModeSelectionFromUi()
-                    selectedMode = mode
-                    suppressSelectionUpdates = true
-                    applySelectionForMode(mode)
-                    suppressSelectionUpdates = false
-                    onUserStateChanged()
-                }
+                switchMode(mode)
             }
         })
         binding.tunnelSelector.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
@@ -420,6 +415,17 @@ class TunnelAppsFragment : BaseFragment() {
         allAppData.forEach { it.isSelected = it.packageName in selectedPackages }
     }
 
+    private fun switchMode(mode: SplitTunnelingMode) {
+        if (selectedMode == mode)
+            return
+        syncActiveModeSelectionFromUi()
+        selectedMode = mode
+        suppressSelectionUpdates = true
+        applySelectionForMode(mode)
+        suppressSelectionUpdates = false
+        onUserStateChanged()
+    }
+
     private fun updateModeUi() {
         val binding = binding ?: return
         val modeTabIndex = when (selectedMode) {
@@ -434,6 +440,14 @@ class TunnelAppsFragment : BaseFragment() {
         }
 
         val appSelectionEnabled = selectedMode != SplitTunnelingMode.ALL_APPLICATIONS
+        binding.allModeContainer.visibility = if (appSelectionEnabled) View.GONE else View.VISIBLE
+        binding.selectionModeContainer.visibility = if (appSelectionEnabled) View.VISIBLE else View.GONE
+        binding.modeHelper.visibility = if (appSelectionEnabled) View.VISIBLE else View.GONE
+        binding.modeHelper.text = when (selectedMode) {
+            SplitTunnelingMode.EXCLUDE_SELECTED_APPLICATIONS -> getString(R.string.routing_mode_helper_exclude)
+            SplitTunnelingMode.INCLUDE_ONLY_SELECTED_APPLICATIONS -> getString(R.string.routing_mode_helper_include)
+            SplitTunnelingMode.ALL_APPLICATIONS -> ""
+        }
         val isCurrentTunnelSaving = selectedTunnelName?.let { it in inFlightSaveTunnels } == true
         binding.searchLayout.isEnabled = appSelectionEnabled
         binding.searchText.isEnabled = appSelectionEnabled
@@ -497,7 +511,11 @@ class TunnelAppsFragment : BaseFragment() {
         appData.clear()
         appData.addAll(filtered)
         val binding = binding ?: return
-        binding.emptyState.visibility = if (binding.progressBar.visibility == View.GONE && allAppData.isNotEmpty() && appData.isEmpty()) View.VISIBLE else View.GONE
+        val shouldShowEmptyState = selectedMode != SplitTunnelingMode.ALL_APPLICATIONS &&
+            binding.progressBar.visibility == View.GONE &&
+            allAppData.isNotEmpty() &&
+            appData.isEmpty()
+        binding.emptyState.visibility = if (shouldShowEmptyState) View.VISIBLE else View.GONE
         binding.summary.text = createSummaryText()
     }
 

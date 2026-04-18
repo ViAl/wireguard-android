@@ -40,19 +40,23 @@
         <item quantity="other">%d included</item>
     </plurals>
     <plurals name="n_apps_excluded_from_vpn">
-        <item quantity="one">%d app excluded from VPN</item>
-        <item quantity="other">%d apps excluded from VPN</item>
+        <item quantity="one">%d app bypasses VPN</item>
+        <item quantity="other">%d apps bypass VPN</item>
     </plurals>
     <plurals name="n_apps_use_vpn">
         <item quantity="one">%d app uses VPN</item>
         <item quantity="other">%d apps use VPN</item>
     </plurals>
     <string name="routing_mode_tab_all">All</string>
-    <string name="routing_mode_tab_exclude">Exclude</string>
-    <string name="routing_mode_tab_only">Only</string>
+    <string name="routing_mode_tab_exclude">No VPN</string>
+    <string name="routing_mode_tab_only">Via VPN</string>
+    <string name="routing_mode_helper_exclude">Choose apps that should not use VPN</string>
+    <string name="routing_mode_helper_include">Choose apps that should use VPN</string>
+    <string name="routing_all_mode_title">All traffic goes through VPN</string>
+    <string name="routing_all_mode_description">Choose another tab if you want to exclude apps from VPN or allow VPN only for selected apps.</string>
     <string name="all_applications">All applications</string>
-    <string name="vpn_applies_to_all_apps">VPN applies to all apps</string>
-    <string name="no_apps_excluded_from_vpn">No apps excluded from VPN</string>
+    <string name="vpn_applies_to_all_apps">All traffic goes through VPN</string>
+    <string name="no_apps_excluded_from_vpn">No apps bypass VPN</string>
     <string name="no_apps_use_vpn">No apps use VPN</string>
     <string name="split_tunneling">Split tunneling</string>
     <string name="exclude_selected_applications">Exclude selected applications</string>
