@@ -47,9 +47,13 @@
         <item quantity="one">%d app uses VPN</item>
         <item quantity="other">%d apps use VPN</item>
     </plurals>
-    <string name="all">All</string>
+    <string name="routing_mode_tab_all">All</string>
+    <string name="routing_mode_tab_exclude">Exclude</string>
+    <string name="routing_mode_tab_only">Only</string>
     <string name="all_applications">All applications</string>
     <string name="vpn_applies_to_all_apps">VPN applies to all apps</string>
+    <string name="no_apps_excluded_from_vpn">No apps excluded from VPN</string>
+    <string name="no_apps_use_vpn">No apps use VPN</string>
     <string name="split_tunneling">Split tunneling</string>
     <string name="exclude_selected_applications">Exclude selected applications</string>
     <string name="only_selected_applications">Only selected applications</string>

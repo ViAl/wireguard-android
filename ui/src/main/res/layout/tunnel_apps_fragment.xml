@@ -55,15 +55,15 @@
 
                 <com.google.android.material.tabs.TabItem
                     android:id="@+id/split_tunneling_mode_all"
-                    android:text="@string/all" />
+                    android:text="@string/routing_mode_tab_all" />
 
                 <com.google.android.material.tabs.TabItem
                     android:id="@+id/split_tunneling_mode_exclude"
-                    android:text="@string/exclude_from_tunnel" />
+                    android:text="@string/routing_mode_tab_exclude" />
 
                 <com.google.android.material.tabs.TabItem
                     android:id="@+id/split_tunneling_mode_include"
-                    android:text="@string/include_in_tunnel" />
+                    android:text="@string/routing_mode_tab_only" />
             </com.google.android.material.tabs.TabLayout>
 
             <com.google.android.material.textview.MaterialTextView

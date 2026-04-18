@@ -54,7 +54,25 @@
         <item quantity="many">%d включено</item>
         <item quantity="other">%d включено</item>
     </plurals>
+    <plurals name="n_apps_excluded_from_vpn">
+        <item quantity="one">%d приложение исключено из VPN</item>
+        <item quantity="few">%d приложения исключены из VPN</item>
+        <item quantity="many">%d приложений исключены из VPN</item>
+        <item quantity="other">%d приложений исключены из VPN</item>
+    </plurals>
+    <plurals name="n_apps_use_vpn">
+        <item quantity="one">%d приложение использует VPN</item>
+        <item quantity="few">%d приложения используют VPN</item>
+        <item quantity="many">%d приложений используют VPN</item>
+        <item quantity="other">%d приложений используют VPN</item>
+    </plurals>
+    <string name="routing_mode_tab_all">Все</string>
+    <string name="routing_mode_tab_exclude">Искл.</string>
+    <string name="routing_mode_tab_only">Только</string>
     <string name="all_applications">Все приложения</string>
+    <string name="vpn_applies_to_all_apps">VPN применяется ко всем приложениям</string>
+    <string name="no_apps_excluded_from_vpn">Нет исключений из VPN</string>
+    <string name="no_apps_use_vpn">Нет приложений через VPN</string>
     <string name="exclude_from_tunnel">Отключить для</string>
     <string name="include_in_tunnel">Включить для</string>
     <plurals name="include_n_applications">

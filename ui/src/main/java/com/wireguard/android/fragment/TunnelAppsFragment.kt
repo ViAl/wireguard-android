@@ -441,11 +441,13 @@ class TunnelAppsFragment : BaseFragment() {
         return when (selectedMode) {
             SplitTunnelingMode.ALL_APPLICATIONS -> getString(R.string.vpn_applies_to_all_apps)
             SplitTunnelingMode.EXCLUDE_SELECTED_APPLICATIONS -> {
-                resources.getQuantityString(R.plurals.n_apps_excluded_from_vpn, selectedCount, selectedCount)
+                if (selectedCount == 0) getString(R.string.no_apps_excluded_from_vpn)
+                else resources.getQuantityString(R.plurals.n_apps_excluded_from_vpn, selectedCount, selectedCount)
             }
 
             SplitTunnelingMode.INCLUDE_ONLY_SELECTED_APPLICATIONS -> {
-                resources.getQuantityString(R.plurals.n_apps_use_vpn, selectedCount, selectedCount)
+                if (selectedCount == 0) getString(R.string.no_apps_use_vpn)
+                else resources.getQuantityString(R.plurals.n_apps_use_vpn, selectedCount, selectedCount)
             }
         }
     }
