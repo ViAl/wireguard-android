@@ -20,6 +20,7 @@ import androidx.core.widget.doAfterTextChanged
 import androidx.databinding.ObservableList
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.snackbar.Snackbar
 import com.wireguard.android.R
@@ -60,6 +61,8 @@ class TunnelAppsFragment : BaseFragment() {
     private var selectedMode = SplitTunnelingMode.ALL_APPLICATIONS
     private var suppressSelectionUpdates = false
     private var searchQuery = ""
+    private val searchQueriesByMode = mutableMapOf<SplitTunnelingMode, String>()
+    private val scrollPositionsByMode = mutableMapOf<SplitTunnelingMode, Int>()
     private var tunnels: ObservableKeyedArrayList<String, ObservableTunnel>? = null
     private var loadJob: Job? = null
     private val inFlightSaveTunnels = mutableSetOf<String>()
@@ -73,6 +76,7 @@ class TunnelAppsFragment : BaseFragment() {
     private var isViewTearingDown = false
     private var lastRenderedAppSelectionEnabled: Boolean? = null
     private var suppressModeTabSelection = false
+    private var isAnimatingModeTransition = false
 
     private val appRowConfigurationHandler = object : RowConfigurationHandler<AppListItemBinding, ApplicationData> {
         override fun onConfigureRow(binding: AppListItemBinding, item: ApplicationData, position: Int) {
@@ -104,6 +108,11 @@ class TunnelAppsFragment : BaseFragment() {
         selectedMode = savedInstanceState?.getString(KEY_SELECTED_MODE)
             ?.let { runCatching { SplitTunnelingMode.valueOf(it) }.getOrNull() }
             ?: SplitTunnelingMode.ALL_APPLICATIONS
+        SplitTunnelingMode.entries.forEach { mode ->
+            searchQueriesByMode[mode] = ""
+            scrollPositionsByMode[mode] = 0
+        }
+        searchQueriesByMode[selectedMode] = searchQuery
     }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
@@ -118,11 +127,14 @@ class TunnelAppsFragment : BaseFragment() {
         val binding = requireNotNull(this.binding)
         binding.appData = appData
         binding.rowConfigurationHandler = appRowConfigurationHandler
+        if (binding.appList.layoutManager == null)
+            binding.appList.layoutManager = LinearLayoutManager(requireContext())
         binding.searchText.setText(searchQuery)
         searchTextWatcher = binding.searchText.doAfterTextChanged {
             if (!isViewUsableForUiUpdates())
                 return@doAfterTextChanged
             searchQuery = it?.toString() ?: ""
+            searchQueriesByMode[selectedMode] = searchQuery
             applyFilter()
         }
         binding.searchText.setOnEditorActionListener { textView, actionId, event ->
@@ -235,6 +247,12 @@ class TunnelAppsFragment : BaseFragment() {
             savedRoutingState = null
             excludedSelectedApps.clear()
             includedSelectedApps.clear()
+            SplitTunnelingMode.entries.forEach { mode ->
+                searchQueriesByMode[mode] = ""
+                scrollPositionsByMode[mode] = 0
+            }
+            searchQuery = ""
+            binding.searchText.setText("")
             hasUnsavedChanges = false
             saveStatus = SaveStatus.IDLE
             updateModeUi()
@@ -279,6 +297,10 @@ class TunnelAppsFragment : BaseFragment() {
                 excludedSelectedApps.addAll(loadedExcludedApps)
                 includedSelectedApps.clear()
                 includedSelectedApps.addAll(loadedIncludedApps)
+                SplitTunnelingMode.entries.forEach { tabMode ->
+                    searchQueriesByMode[tabMode] = if (tabMode == mode) searchQuery else ""
+                    scrollPositionsByMode[tabMode] = 0
+                }
                 applySelectionForMode(mode)
                 savedRoutingState = SavedRoutingState(mode, loadedExcludedApps, loadedIncludedApps)
                 hasUnsavedChanges = false
@@ -366,6 +388,8 @@ class TunnelAppsFragment : BaseFragment() {
 
     private fun restoreSavedState() {
         val state = savedRoutingState ?: return
+        val previousMode = selectedMode
+        saveModeUiState(previousMode)
         suppressSelectionUpdates = true
         selectedMode = state.mode
         excludedSelectedApps.clear()
@@ -373,11 +397,13 @@ class TunnelAppsFragment : BaseFragment() {
         includedSelectedApps.clear()
         includedSelectedApps.addAll(state.includedSelectedApps)
         applySelectionForMode(state.mode)
-        applyFilter()
         suppressSelectionUpdates = false
+        restoreModeUiState(state.mode)
         hasUnsavedChanges = false
         saveStatus = SaveStatus.IDLE
         updateModeUi()
+        if (previousMode != state.mode)
+            animateModeContentTransition()
     }
 
     private fun calculateHasUnsavedChanges(): Boolean {
@@ -418,12 +444,59 @@ class TunnelAppsFragment : BaseFragment() {
     private fun switchMode(mode: SplitTunnelingMode) {
         if (selectedMode == mode)
             return
+        saveModeUiState(selectedMode)
         syncActiveModeSelectionFromUi()
         selectedMode = mode
+        restoreModeUiState(mode)
         suppressSelectionUpdates = true
         applySelectionForMode(mode)
         suppressSelectionUpdates = false
         onUserStateChanged()
+        animateModeContentTransition()
+    }
+
+    private fun saveModeUiState(mode: SplitTunnelingMode) {
+        searchQueriesByMode[mode] = searchQuery
+        val layoutManager = binding?.appList?.layoutManager as? LinearLayoutManager ?: return
+        scrollPositionsByMode[mode] = layoutManager.findFirstVisibleItemPosition().coerceAtLeast(0)
+    }
+
+    private fun restoreModeUiState(mode: SplitTunnelingMode) {
+        searchQuery = searchQueriesByMode[mode].orEmpty()
+        val liveBinding = binding ?: return
+        if (liveBinding.searchText.text?.toString().orEmpty() != searchQuery)
+            liveBinding.searchText.setText(searchQuery)
+        applyFilter()
+        val scrollPosition = scrollPositionsByMode[mode] ?: 0
+        liveBinding.appList.post {
+            val layoutManager = binding?.appList?.layoutManager as? LinearLayoutManager ?: return@post
+            layoutManager.scrollToPositionWithOffset(scrollPosition, 0)
+        }
+    }
+
+    private fun animateModeContentTransition() {
+        val liveBinding = binding ?: return
+        if (isAnimatingModeTransition)
+            return
+        val modeContainer = liveBinding.modeContentContainer
+        if (!modeContainer.isAttachedToWindow)
+            return
+        val distancePx = resources.displayMetrics.density * 10f
+        isAnimatingModeTransition = true
+        modeContainer.animate()
+            .alpha(0f)
+            .translationY(distancePx)
+            .setDuration(90L)
+            .withEndAction {
+                modeContainer.translationY = -distancePx
+                modeContainer.animate()
+                    .alpha(1f)
+                    .translationY(0f)
+                    .setDuration(140L)
+                    .withEndAction { isAnimatingModeTransition = false }
+                    .start()
+            }
+            .start()
     }
 
     private fun updateModeUi() {
@@ -443,6 +516,7 @@ class TunnelAppsFragment : BaseFragment() {
         binding.allModeContainer.visibility = if (appSelectionEnabled) View.GONE else View.VISIBLE
         binding.selectionModeContainer.visibility = if (appSelectionEnabled) View.VISIBLE else View.GONE
         binding.modeHelper.visibility = if (appSelectionEnabled) View.VISIBLE else View.GONE
+        binding.searchFeedback.visibility = if (appSelectionEnabled && searchQuery.isNotBlank()) View.VISIBLE else View.GONE
         binding.modeHelper.text = when (selectedMode) {
             SplitTunnelingMode.EXCLUDE_SELECTED_APPLICATIONS -> getString(R.string.routing_mode_helper_exclude)
             SplitTunnelingMode.INCLUDE_ONLY_SELECTED_APPLICATIONS -> getString(R.string.routing_mode_helper_include)
@@ -455,12 +529,15 @@ class TunnelAppsFragment : BaseFragment() {
         binding.clearSelection.isEnabled = appSelectionEnabled
         binding.saveChanges.isEnabled = hasUnsavedChanges && !isCurrentTunnelSaving
         binding.cancelChanges.isEnabled = hasUnsavedChanges && !isCurrentTunnelSaving
+        binding.saveChanges.alpha = if (binding.saveChanges.isEnabled) 1f else 0.5f
+        binding.cancelChanges.alpha = if (binding.cancelChanges.isEnabled) 1f else 0.5f
         binding.appList.alpha = if (appSelectionEnabled) 1f else 0.7f
         if (lastRenderedAppSelectionEnabled != appSelectionEnabled) {
             lastRenderedAppSelectionEnabled = appSelectionEnabled
             requestSafeAppListRefresh()
         }
         binding.summary.text = createSummaryText()
+        binding.searchFeedback.text = resources.getQuantityString(R.plurals.found_n_apps, appData.size, appData.size)
         binding.saveStatus.text = when (saveStatus) {
             SaveStatus.IDLE -> ""
             SaveStatus.SAVING -> getString(R.string.saving)
@@ -517,6 +594,9 @@ class TunnelAppsFragment : BaseFragment() {
             appData.isEmpty()
         binding.emptyState.visibility = if (shouldShowEmptyState) View.VISIBLE else View.GONE
         binding.summary.text = createSummaryText()
+        binding.searchFeedback.text = resources.getQuantityString(R.plurals.found_n_apps, appData.size, appData.size)
+        binding.searchFeedback.visibility =
+            if (selectedMode != SplitTunnelingMode.ALL_APPLICATIONS && searchQuery.isNotBlank()) View.VISIBLE else View.GONE
     }
 
     private fun isViewUsableForUiUpdates(): Boolean {
