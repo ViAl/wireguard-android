@@ -97,117 +97,150 @@
                 android:visibility="gone"
                 tools:text="Choose apps that should not use VPN"
                 tools:visibility="visible" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:id="@+id/all_mode_container"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:gravity="center"
-            android:minHeight="200dp"
-            android:orientation="vertical"
-            android:paddingStart="24dp"
-            android:paddingEnd="24dp"
-            android:visibility="gone">
 
             <com.google.android.material.textview.MaterialTextView
-                android:id="@+id/all_mode_title"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="center"
-                android:text="@string/routing_all_mode_title"
-                android:textAppearance="?attr/textAppearanceTitleMedium"
-                tools:text="All traffic goes through VPN" />
-
-            <com.google.android.material.textview.MaterialTextView
-                android:id="@+id/all_mode_description"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:gravity="center"
-                android:text="@string/routing_all_mode_description"
-                android:textAppearance="?attr/textAppearanceBodyMedium"
-                tools:text="Choose another tab if you want to exclude apps from VPN or allow VPN only for selected apps." />
-
-            <LinearLayout
-                android:id="@+id/all_mode_actions"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:gravity="center"
-                android:orientation="horizontal">
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/switch_to_exclude_mode"
-                    style="@style/Widget.Material3.Button.OutlinedButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/routing_mode_tab_exclude" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/switch_to_include_mode"
-                    style="@style/Widget.Material3.Button.OutlinedButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="8dp"
-                    android:text="@string/routing_mode_tab_only" />
-            </LinearLayout>
-        </LinearLayout>
-
-        <LinearLayout
-            android:id="@+id/selection_mode_container"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:minHeight="200dp"
-            android:orientation="vertical">
-
-            <com.google.android.material.textfield.TextInputLayout
-                android:id="@+id/search_layout"
+                android:id="@+id/search_feedback"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="16dp"
                 android:layout_marginEnd="16dp"
-                android:hint="@string/search_applications"
-                app:endIconMode="clear_text">
+                android:paddingBottom="8dp"
+                android:textAppearance="?attr/textAppearanceBodySmall"
+                android:visibility="gone"
+                tools:text="Found: 12 apps"
+                tools:visibility="visible" />
+        </LinearLayout>
 
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/search_text"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:imeOptions="actionDone"
-                    android:inputType="textNoSuggestions|textVisiblePassword"
-                    tools:text="wireguard" />
-            </com.google.android.material.textfield.TextInputLayout>
+        <FrameLayout
+            android:id="@+id/mode_content_container"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1">
 
             <LinearLayout
-                android:id="@+id/selection_actions"
+                android:id="@+id/all_mode_container"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal">
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:minHeight="200dp"
+                android:orientation="vertical"
+                android:paddingStart="24dp"
+                android:paddingEnd="24dp"
+                android:visibility="gone">
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/toggle_all"
-                    style="@style/Widget.Material3.Button.TextButton"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/toggle_all" />
+                <ImageView
+                    android:id="@+id/all_mode_shield_icon"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:contentDescription="@string/routing_all_mode_title"
+                    android:src="@android:drawable/ic_lock_lock"
+                    app:tint="?attr/colorPrimary" />
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/clear_selection"
-                    style="@style/Widget.Material3.Button.TextButton"
-                    android:layout_width="0dp"
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/all_mode_title"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/clear_selection" />
+                    android:layout_marginTop="12dp"
+                    android:gravity="center"
+                    android:text="@string/routing_all_mode_title"
+                    android:textAppearance="?attr/textAppearanceTitleMedium"
+                    tools:text="All traffic goes through VPN" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/all_mode_description"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center"
+                    android:text="@string/routing_all_mode_description"
+                    android:textAppearance="?attr/textAppearanceBodyMedium"
+                    tools:text="All traffic goes through VPN. Switch modes to customize app behavior." />
+
+                <LinearLayout
+                    android:id="@+id/all_mode_actions"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:gravity="center"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/switch_to_exclude_mode"
+                        style="@style/Widget.Material3.Button.OutlinedButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/routing_mode_tab_exclude" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/switch_to_include_mode"
+                        style="@style/Widget.Material3.Button.OutlinedButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:text="@string/routing_mode_tab_only" />
+                </LinearLayout>
             </LinearLayout>
 
-            <FrameLayout
+            <LinearLayout
+                android:id="@+id/selection_mode_container"
                 android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1">
+                android:layout_height="match_parent"
+                android:minHeight="200dp"
+                android:orientation="vertical">
+
+                <LinearLayout
+                    android:id="@+id/sticky_selection_header"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="?android:colorBackground"
+                    android:orientation="vertical">
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/search_layout"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="16dp"
+                        android:layout_marginEnd="16dp"
+                        android:hint="@string/search_applications"
+                        app:endIconMode="clear_text">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/search_text"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:imeOptions="actionDone"
+                            android:inputType="textNoSuggestions|textVisiblePassword"
+                            tools:text="wireguard" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <LinearLayout
+                        android:id="@+id/selection_actions"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/toggle_all"
+                            style="@style/Widget.Material3.Button.TextButton"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/toggle_all" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/clear_selection"
+                            style="@style/Widget.Material3.Button.TextButton"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/clear_selection" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <FrameLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1">
 
                 <ProgressBar
                     android:id="@+id/progress_bar"
@@ -251,8 +284,9 @@
                     android:textAppearance="?attr/textAppearanceBodyMedium"
                     android:visibility="gone"
                     tools:visibility="visible" />
-            </FrameLayout>
-        </LinearLayout>
+                </FrameLayout>
+            </LinearLayout>
+        </FrameLayout>
 
         <LinearLayout
             android:layout_width="match_parent"
