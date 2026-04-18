@@ -474,15 +474,16 @@ class TunnelAppsFragment : BaseFragment() {
     }
 
     private fun createSummaryText(): String {
-        val selectedCount = allAppData.count { it.isSelected }
         return when (selectedMode) {
             SplitTunnelingMode.ALL_APPLICATIONS -> getString(R.string.vpn_applies_to_all_apps)
             SplitTunnelingMode.EXCLUDE_SELECTED_APPLICATIONS -> {
+                val selectedCount = excludedSelectedApps.size
                 if (selectedCount == 0) getString(R.string.no_apps_excluded_from_vpn)
                 else resources.getQuantityString(R.plurals.n_apps_excluded_from_vpn, selectedCount, selectedCount)
             }
 
             SplitTunnelingMode.INCLUDE_ONLY_SELECTED_APPLICATIONS -> {
+                val selectedCount = includedSelectedApps.size
                 if (selectedCount == 0) getString(R.string.no_apps_use_vpn)
                 else resources.getQuantityString(R.plurals.n_apps_use_vpn, selectedCount, selectedCount)
             }
