@@ -76,7 +76,7 @@
     <string name="routing_current_mode_prefix">Текущий режим:</string>
     <string name="all_applications">Все приложения</string>
     <string name="vpn_applies_to_all_apps">весь трафик идет через VPN</string>
-    <string name="no_apps_excluded_from_vpn">ни одно приложение не использует VPN</string>
+    <string name="no_apps_excluded_from_vpn">Нет приложений без VPN</string>
     <string name="no_apps_use_vpn">ни одно приложение не использует VPN</string>
     <string name="exclude_from_tunnel">Отключить для</string>
     <string name="include_in_tunnel">Включить для</string>
