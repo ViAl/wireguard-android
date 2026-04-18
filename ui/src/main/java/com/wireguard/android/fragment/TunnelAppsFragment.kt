@@ -5,6 +5,9 @@
 package com.wireguard.android.fragment
 
 import android.os.Bundle
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.StyleSpan
 import android.text.TextWatcher
 import android.util.Log
 import android.view.KeyEvent
@@ -16,6 +19,7 @@ import android.view.inputmethod.InputMethodManager
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Toast
+import android.graphics.Typeface
 import androidx.core.widget.doAfterTextChanged
 import androidx.databinding.ObservableList
 import androidx.lifecycle.Lifecycle
@@ -564,8 +568,8 @@ class TunnelAppsFragment : BaseFragment() {
         }
     }
 
-    private fun createSummaryText(): String {
-        return when (selectedMode) {
+    private fun createSummaryText(): CharSequence {
+        val summaryDetails = when (selectedMode) {
             SplitTunnelingMode.ALL_APPLICATIONS -> getString(R.string.vpn_applies_to_all_apps)
             SplitTunnelingMode.EXCLUDE_SELECTED_APPLICATIONS -> {
                 val selectedCount = excludedSelectedApps.size
@@ -578,6 +582,13 @@ class TunnelAppsFragment : BaseFragment() {
                 if (selectedCount == 0) getString(R.string.no_apps_use_vpn)
                 else resources.getQuantityString(R.plurals.n_apps_use_vpn, selectedCount, selectedCount)
             }
+        }
+        val prefix = getString(R.string.routing_current_mode_prefix)
+        return SpannableStringBuilder().apply {
+            append(prefix)
+            setSpan(StyleSpan(Typeface.BOLD), 0, prefix.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            append(' ')
+            append(summaryDetails)
         }
     }
 
