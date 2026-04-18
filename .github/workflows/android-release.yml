@@ -70,11 +70,25 @@ jobs:
         shell: bash
         run: chmod +x ./gradlew
 
+      - name: Compute CI version metadata
+        shell: bash
+        run: |
+          set -euxo pipefail
+          BASE_VERSION="1.0"
+          BUILD_DATE="$(date +%Y%m%d)"
+          CI_VERSION_NAME="${BASE_VERSION}.${BUILD_DATE}.${GITHUB_RUN_NUMBER}"
+          CI_VERSION_CODE=$((200000 + GITHUB_RUN_NUMBER))
+          echo "CI_VERSION_NAME=${CI_VERSION_NAME}" >> "$GITHUB_ENV"
+          echo "CI_VERSION_CODE=${CI_VERSION_CODE}" >> "$GITHUB_ENV"
+          echo "Building version: ${CI_VERSION_NAME} (${CI_VERSION_CODE})"
+
       - name: Build release APK (unsigned by default)
         shell: bash
         run: |
           set -euxo pipefail
-          ./gradlew --no-daemon :ui:assembleRelease
+          ./gradlew --no-daemon :ui:assembleRelease \
+            -PwireguardVersionCode="${CI_VERSION_CODE}" \
+            -PwireguardVersionName="${CI_VERSION_NAME}"
 
       - name: Locate generated APK
         id: apk
