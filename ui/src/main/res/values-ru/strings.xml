@@ -72,7 +72,7 @@
     <string name="routing_mode_helper_exclude">Выберите приложения, которые должны работать без VPN</string>
     <string name="routing_mode_helper_include">Выберите приложения, которые должны работать через VPN</string>
     <string name="routing_all_mode_title">Весь трафик идет через VPN</string>
-    <string name="routing_all_mode_description">Выберите другую вкладку, если нужно исключить приложения из VPN или оставить VPN только для выбранных приложений.</string>
+    <string name="routing_all_mode_description">Весь трафик идет через VPN. Переключите режим, чтобы настроить поведение приложений.</string>
     <string name="all_applications">Все приложения</string>
     <string name="vpn_applies_to_all_apps">Весь трафик идет через VPN</string>
     <string name="no_apps_excluded_from_vpn">Нет приложений в обход VPN</string>
@@ -247,7 +247,14 @@
     <string name="shell_start_error">Не удалось запустить Shell: %d</string>
     <string name="success_application_will_restart">Успешно. Приложение будет перезапущено…</string>
     <string name="toggle_all">Выбрать все</string>
-    <string name="clear_selection">Очистить все</string>
+    <string name="clear_selection">Очистить</string>
+    <string name="no_matching_applications">Нет результатов</string>
+    <plurals name="found_n_apps">
+        <item quantity="one">Найдено: %d приложение</item>
+        <item quantity="few">Найдено: %d приложения</item>
+        <item quantity="many">Найдено: %d приложений</item>
+        <item quantity="other">Найдено: %d приложений</item>
+    </plurals>
     <string name="toggle_error">Ошибка переключения туннеля WireGuard: %s</string>
     <string name="tools_installer_already">wg и wg-quick уже установлены</string>
     <string name="tools_installer_failure">Не удалось установить инструменты командной строки (нет root?)</string>
