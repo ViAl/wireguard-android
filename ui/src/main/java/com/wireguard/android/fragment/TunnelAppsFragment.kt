@@ -20,6 +20,7 @@ import androidx.core.widget.doAfterTextChanged
 import androidx.databinding.ObservableList
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import com.google.android.material.tabs.TabLayout
 import com.google.android.material.snackbar.Snackbar
 import com.wireguard.android.R
 import com.wireguard.android.Application
@@ -48,7 +49,8 @@ class TunnelAppsFragment : BaseFragment() {
 
     private data class SavedRoutingState(
         val mode: SplitTunnelingMode,
-        val selectedApps: Set<String>
+        val excludedSelectedApps: Set<String>,
+        val includedSelectedApps: Set<String>
     )
 
     private var binding: TunnelAppsFragmentBinding? = null
@@ -63,11 +65,14 @@ class TunnelAppsFragment : BaseFragment() {
     private val inFlightSaveTunnels = mutableSetOf<String>()
     private var latestLoadRequestId = 0L
     private var savedRoutingState: SavedRoutingState? = null
+    private val excludedSelectedApps = mutableSetOf<String>()
+    private val includedSelectedApps = mutableSetOf<String>()
     private var hasUnsavedChanges = false
     private var saveStatus = SaveStatus.IDLE
     private var searchTextWatcher: TextWatcher? = null
     private var isViewTearingDown = false
     private var lastRenderedAppSelectionEnabled: Boolean? = null
+    private var suppressModeTabSelection = false
 
     private val appRowConfigurationHandler = object : RowConfigurationHandler<AppListItemBinding, ApplicationData> {
         override fun onConfigureRow(binding: AppListItemBinding, item: ApplicationData, position: Int) {
@@ -145,17 +150,28 @@ class TunnelAppsFragment : BaseFragment() {
         }
         binding.cancelChanges.setOnClickListener { restoreSavedState() }
         binding.saveChanges.setOnClickListener { persistCurrentState() }
-        binding.splitTunnelingModeGroup.setOnCheckedChangeListener { _, checkedId ->
-            val mode = when (checkedId) {
-                R.id.split_tunneling_mode_exclude -> SplitTunnelingMode.EXCLUDE_SELECTED_APPLICATIONS
-                R.id.split_tunneling_mode_include -> SplitTunnelingMode.INCLUDE_ONLY_SELECTED_APPLICATIONS
-                else -> SplitTunnelingMode.ALL_APPLICATIONS
+        binding.splitTunnelingModeTabs.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
+            override fun onTabReselected(tab: TabLayout.Tab?) = Unit
+            override fun onTabUnselected(tab: TabLayout.Tab?) = Unit
+
+            override fun onTabSelected(tab: TabLayout.Tab?) {
+                if (suppressModeTabSelection)
+                    return
+                val mode = when (tab?.position) {
+                    1 -> SplitTunnelingMode.EXCLUDE_SELECTED_APPLICATIONS
+                    2 -> SplitTunnelingMode.INCLUDE_ONLY_SELECTED_APPLICATIONS
+                    else -> SplitTunnelingMode.ALL_APPLICATIONS
+                }
+                if (selectedMode != mode) {
+                    syncActiveModeSelectionFromUi()
+                    selectedMode = mode
+                    suppressSelectionUpdates = true
+                    applySelectionForMode(mode)
+                    suppressSelectionUpdates = false
+                    onUserStateChanged()
+                }
             }
-            if (selectedMode != mode) {
-                selectedMode = mode
-                onUserStateChanged()
-            }
-        }
+        })
         binding.tunnelSelector.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
                 val tunnel = tunnels?.getOrNull(position) ?: return
@@ -222,6 +238,8 @@ class TunnelAppsFragment : BaseFragment() {
             allAppData.clear()
             appData.clear()
             savedRoutingState = null
+            excludedSelectedApps.clear()
+            includedSelectedApps.clear()
             hasUnsavedChanges = false
             saveStatus = SaveStatus.IDLE
             updateModeUi()
@@ -244,13 +262,15 @@ class TunnelAppsFragment : BaseFragment() {
                 val config = tunnel.getConfigAsync()
                 val proxy = ConfigProxy(config)
                 val mode = proxy.`interface`.splitTunnelingMode
-                val selectedApps = when (mode) {
-                    SplitTunnelingMode.EXCLUDE_SELECTED_APPLICATIONS -> proxy.`interface`.excludedApplications.toSet()
-                    SplitTunnelingMode.INCLUDE_ONLY_SELECTED_APPLICATIONS -> proxy.`interface`.includedApplications.toSet()
+                val loadedExcludedApps = proxy.`interface`.excludedApplications.toSet()
+                val loadedIncludedApps = proxy.`interface`.includedApplications.toSet()
+                val initialSelectedApps = when (mode) {
+                    SplitTunnelingMode.EXCLUDE_SELECTED_APPLICATIONS -> loadedExcludedApps
+                    SplitTunnelingMode.INCLUDE_ONLY_SELECTED_APPLICATIONS -> loadedIncludedApps
                     SplitTunnelingMode.ALL_APPLICATIONS -> emptySet()
                 }
                 val loadedApps = withContext(Dispatchers.Default) {
-                    AppDataLoader.load(requireContext().packageManager, selectedApps) {
+                    AppDataLoader.load(requireContext().packageManager, initialSelectedApps) {
                         onAppSelectionChanged()
                     }
                 }
@@ -260,7 +280,12 @@ class TunnelAppsFragment : BaseFragment() {
                 selectedMode = mode
                 allAppData.clear()
                 allAppData.addAll(loadedApps)
-                savedRoutingState = SavedRoutingState(mode, selectedApps)
+                excludedSelectedApps.clear()
+                excludedSelectedApps.addAll(loadedExcludedApps)
+                includedSelectedApps.clear()
+                includedSelectedApps.addAll(loadedIncludedApps)
+                applySelectionForMode(mode)
+                savedRoutingState = SavedRoutingState(mode, loadedExcludedApps, loadedIncludedApps)
                 hasUnsavedChanges = false
                 applyFilter()
                 saveStatus = SaveStatus.IDLE
@@ -291,6 +316,7 @@ class TunnelAppsFragment : BaseFragment() {
     private fun onUserStateChanged() {
         if (suppressSelectionUpdates)
             return
+        syncActiveModeSelectionFromUi()
         hasUnsavedChanges = calculateHasUnsavedChanges()
         if (saveStatus == SaveStatus.SAVED || saveStatus == SaveStatus.ERROR)
             saveStatus = SaveStatus.IDLE
@@ -302,8 +328,10 @@ class TunnelAppsFragment : BaseFragment() {
         if (!hasUnsavedChanges || tunnelName in inFlightSaveTunnels)
             return
         val tunnel = tunnels?.firstOrNull { it.name == tunnelName } ?: return
+        syncActiveModeSelectionFromUi()
         val mode = selectedMode
-        val selectedApps = allAppData.filter { it.isSelected }.map { it.packageName }
+        val excludedAppsToPersist = excludedSelectedApps.toSet()
+        val includedAppsToPersist = includedSelectedApps.toSet()
         inFlightSaveTunnels.add(tunnelName)
         saveStatus = SaveStatus.SAVING
         updateModeUi()
@@ -312,31 +340,17 @@ class TunnelAppsFragment : BaseFragment() {
                 val configProxy = ConfigProxy(tunnel.getConfigAsync())
                 val configInterface = configProxy.`interface`
                 configInterface.splitTunnelingMode = mode
-                when (mode) {
-                    SplitTunnelingMode.ALL_APPLICATIONS -> {
-                        configInterface.excludedApplications.clear()
-                        configInterface.includedApplications.clear()
-                    }
-
-                    SplitTunnelingMode.EXCLUDE_SELECTED_APPLICATIONS -> {
-                        configInterface.includedApplications.clear()
-                        configInterface.excludedApplications.apply {
-                            clear()
-                            addAll(selectedApps)
-                        }
-                    }
-
-                    SplitTunnelingMode.INCLUDE_ONLY_SELECTED_APPLICATIONS -> {
-                        configInterface.excludedApplications.clear()
-                        configInterface.includedApplications.apply {
-                            clear()
-                            addAll(selectedApps)
-                        }
-                    }
+                configInterface.excludedApplications.apply {
+                    clear()
+                    addAll(excludedAppsToPersist)
+                }
+                configInterface.includedApplications.apply {
+                    clear()
+                    addAll(includedAppsToPersist)
                 }
                 tunnel.setConfigAsync(configProxy.resolve())
                 if (selectedTunnelName == tunnelName) {
-                    savedRoutingState = SavedRoutingState(mode, selectedApps.toSet())
+                    savedRoutingState = SavedRoutingState(mode, excludedAppsToPersist, includedAppsToPersist)
                     hasUnsavedChanges = calculateHasUnsavedChanges()
                     saveStatus = if (hasUnsavedChanges) SaveStatus.IDLE else SaveStatus.SAVED
                 }
@@ -359,7 +373,11 @@ class TunnelAppsFragment : BaseFragment() {
         val state = savedRoutingState ?: return
         suppressSelectionUpdates = true
         selectedMode = state.mode
-        allAppData.forEach { it.isSelected = it.packageName in state.selectedApps }
+        excludedSelectedApps.clear()
+        excludedSelectedApps.addAll(state.excludedSelectedApps)
+        includedSelectedApps.clear()
+        includedSelectedApps.addAll(state.includedSelectedApps)
+        applySelectionForMode(state.mode)
         applyFilter()
         suppressSelectionUpdates = false
         hasUnsavedChanges = false
@@ -371,18 +389,49 @@ class TunnelAppsFragment : BaseFragment() {
         val state = savedRoutingState ?: return false
         if (selectedMode != state.mode)
             return true
-        return allAppData.asSequence().filter { it.isSelected }.map { it.packageName }.toSet() != state.selectedApps
+        if (excludedSelectedApps != state.excludedSelectedApps)
+            return true
+        return includedSelectedApps != state.includedSelectedApps
+    }
+
+    private fun syncActiveModeSelectionFromUi() {
+        val selection = allAppData.asSequence().filter { it.isSelected }.map { it.packageName }.toSet()
+        when (selectedMode) {
+            SplitTunnelingMode.EXCLUDE_SELECTED_APPLICATIONS -> {
+                excludedSelectedApps.clear()
+                excludedSelectedApps.addAll(selection)
+            }
+
+            SplitTunnelingMode.INCLUDE_ONLY_SELECTED_APPLICATIONS -> {
+                includedSelectedApps.clear()
+                includedSelectedApps.addAll(selection)
+            }
+
+            SplitTunnelingMode.ALL_APPLICATIONS -> Unit
+        }
+    }
+
+    private fun applySelectionForMode(mode: SplitTunnelingMode) {
+        val selectedPackages = when (mode) {
+            SplitTunnelingMode.EXCLUDE_SELECTED_APPLICATIONS -> excludedSelectedApps
+            SplitTunnelingMode.INCLUDE_ONLY_SELECTED_APPLICATIONS -> includedSelectedApps
+            SplitTunnelingMode.ALL_APPLICATIONS -> emptySet()
+        }
+        allAppData.forEach { it.isSelected = it.packageName in selectedPackages }
     }
 
     private fun updateModeUi() {
         val binding = binding ?: return
-        val modeButtonId = when (selectedMode) {
-            SplitTunnelingMode.ALL_APPLICATIONS -> R.id.split_tunneling_mode_all
-            SplitTunnelingMode.EXCLUDE_SELECTED_APPLICATIONS -> R.id.split_tunneling_mode_exclude
-            SplitTunnelingMode.INCLUDE_ONLY_SELECTED_APPLICATIONS -> R.id.split_tunneling_mode_include
+        val modeTabIndex = when (selectedMode) {
+            SplitTunnelingMode.ALL_APPLICATIONS -> 0
+            SplitTunnelingMode.EXCLUDE_SELECTED_APPLICATIONS -> 1
+            SplitTunnelingMode.INCLUDE_ONLY_SELECTED_APPLICATIONS -> 2
         }
-        if (binding.splitTunnelingModeGroup.getCheckedRadioButtonId() != modeButtonId)
-            binding.splitTunnelingModeGroup.check(modeButtonId)
+        if (binding.splitTunnelingModeTabs.selectedTabPosition != modeTabIndex) {
+            suppressModeTabSelection = true
+            binding.splitTunnelingModeTabs.getTabAt(modeTabIndex)?.select()
+            suppressModeTabSelection = false
+        }
 
         val appSelectionEnabled = selectedMode != SplitTunnelingMode.ALL_APPLICATIONS
         val isCurrentTunnelSaving = selectedTunnelName?.let { it in inFlightSaveTunnels } == true
@@ -425,17 +474,18 @@ class TunnelAppsFragment : BaseFragment() {
     }
 
     private fun createSummaryText(): String {
-        val selectedCount = allAppData.count { it.isSelected }
         return when (selectedMode) {
-            SplitTunnelingMode.ALL_APPLICATIONS -> getString(R.string.all_applications)
+            SplitTunnelingMode.ALL_APPLICATIONS -> getString(R.string.vpn_applies_to_all_apps)
             SplitTunnelingMode.EXCLUDE_SELECTED_APPLICATIONS -> {
-                if (selectedCount == 0) getString(R.string.no_excluded_applications_selected)
-                else resources.getQuantityString(R.plurals.n_excluded_applications, selectedCount, selectedCount)
+                val selectedCount = excludedSelectedApps.size
+                if (selectedCount == 0) getString(R.string.no_apps_excluded_from_vpn)
+                else resources.getQuantityString(R.plurals.n_apps_excluded_from_vpn, selectedCount, selectedCount)
             }
 
             SplitTunnelingMode.INCLUDE_ONLY_SELECTED_APPLICATIONS -> {
-                if (selectedCount == 0) getString(R.string.no_included_applications_selected)
-                else resources.getQuantityString(R.plurals.n_included_applications, selectedCount, selectedCount)
+                val selectedCount = includedSelectedApps.size
+                if (selectedCount == 0) getString(R.string.no_apps_use_vpn)
+                else resources.getQuantityString(R.plurals.n_apps_use_vpn, selectedCount, selectedCount)
             }
         }
     }
