@@ -12,6 +12,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputMethodManager
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Toast
@@ -127,6 +128,8 @@ class TunnelAppsFragment : BaseFragment() {
             if (isViewUsableForUiUpdates()) {
                 textView.clearFocus()
                 applyFilter()
+                val imm = textView.context.getSystemService(InputMethodManager::class.java)
+                imm?.hideSoftInputFromWindow(textView.windowToken, 0)
             }
             true
         }
