@@ -4,7 +4,12 @@
  */
 package com.wireguard.android.fragment
 
+import android.graphics.drawable.Drawable
+import android.graphics.Typeface
 import android.os.Bundle
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.StyleSpan
 import android.text.TextWatcher
 import android.util.Log
 import android.view.KeyEvent
@@ -16,11 +21,14 @@ import android.view.inputmethod.InputMethodManager
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Toast
+import androidx.appcompat.content.res.AppCompatResources
+import androidx.core.graphics.drawable.DrawableCompat
 import androidx.core.widget.doAfterTextChanged
 import androidx.databinding.ObservableList
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.google.android.material.color.MaterialColors
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.snackbar.Snackbar
 import com.wireguard.android.R
@@ -257,6 +265,7 @@ class TunnelAppsFragment : BaseFragment() {
             saveStatus = SaveStatus.IDLE
             updateModeUi()
             binding.summary.text = getString(R.string.no_tunnels_configured)
+            binding.summary.setCompoundDrawablesRelative(null, null, null, null)
             binding.noTunnelState.visibility = View.VISIBLE
             binding.content.visibility = View.GONE
             binding.emptyState.visibility = View.GONE
@@ -334,6 +343,8 @@ class TunnelAppsFragment : BaseFragment() {
         if (suppressSelectionUpdates)
             return
         syncActiveModeSelectionFromUi()
+        if (isViewUsableForUiUpdates())
+            applyFilter()
         hasUnsavedChanges = calculateHasUnsavedChanges()
         if (saveStatus == SaveStatus.SAVED || saveStatus == SaveStatus.ERROR)
             saveStatus = SaveStatus.IDLE
@@ -536,7 +547,7 @@ class TunnelAppsFragment : BaseFragment() {
             lastRenderedAppSelectionEnabled = appSelectionEnabled
             requestSafeAppListRefresh()
         }
-        binding.summary.text = createSummaryText()
+        updateSummaryUi()
         binding.searchFeedback.text = resources.getQuantityString(R.plurals.found_n_apps, appData.size, appData.size)
         binding.saveStatus.text = when (saveStatus) {
             SaveStatus.IDLE -> ""
@@ -564,8 +575,8 @@ class TunnelAppsFragment : BaseFragment() {
         }
     }
 
-    private fun createSummaryText(): String {
-        return when (selectedMode) {
+    private fun createSummaryText(): CharSequence {
+        val summaryDetails = when (selectedMode) {
             SplitTunnelingMode.ALL_APPLICATIONS -> getString(R.string.vpn_applies_to_all_apps)
             SplitTunnelingMode.EXCLUDE_SELECTED_APPLICATIONS -> {
                 val selectedCount = excludedSelectedApps.size
@@ -579,24 +590,79 @@ class TunnelAppsFragment : BaseFragment() {
                 else resources.getQuantityString(R.plurals.n_apps_use_vpn, selectedCount, selectedCount)
             }
         }
+        val prefix = getString(R.string.routing_current_mode_prefix)
+        return SpannableStringBuilder().apply {
+            append(prefix)
+            setSpan(StyleSpan(Typeface.BOLD), 0, prefix.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            append(' ')
+            append(summaryDetails)
+        }
+    }
+
+    private fun updateSummaryUi() {
+        val liveBinding = binding ?: return
+        liveBinding.summary.text = createSummaryText()
+        liveBinding.summary.setCompoundDrawablesRelative(
+            createSummaryIconDrawable(getSummaryIconResIdForMode(selectedMode)),
+            null,
+            null,
+            null
+        )
+        liveBinding.summary.compoundDrawablePadding = (resources.displayMetrics.density * 6).toInt()
+    }
+
+    private fun createSummaryIconDrawable(iconResId: Int): Drawable? {
+        val drawable = AppCompatResources.getDrawable(requireContext(), iconResId)?.mutate() ?: return null
+        val iconSizePx = (resources.displayMetrics.density * 18).toInt()
+        drawable.setBounds(0, 0, iconSizePx, iconSizePx)
+        DrawableCompat.setTint(drawable, MaterialColors.getColor(requireView(), com.google.android.material.R.attr.colorOnSurfaceVariant))
+        return drawable
+    }
+
+    private fun getSummaryIconResIdForMode(mode: SplitTunnelingMode): Int {
+        return when (mode) {
+            SplitTunnelingMode.ALL_APPLICATIONS -> R.drawable.ic_routing_all
+            SplitTunnelingMode.EXCLUDE_SELECTED_APPLICATIONS -> R.drawable.ic_routing_bypass
+            SplitTunnelingMode.INCLUDE_ONLY_SELECTED_APPLICATIONS -> R.drawable.ic_routing_vpn_only
+        }
     }
 
     private fun applyFilter() {
         if (!isViewUsableForUiUpdates())
             return
         val filtered = AppListDialogFragment.filterByQuery(searchQuery, allAppData, { it.name }, { it.packageName })
-        appData.clear()
-        appData.addAll(filtered)
-        val binding = binding ?: return
-        val shouldShowEmptyState = selectedMode != SplitTunnelingMode.ALL_APPLICATIONS &&
-            binding.progressBar.visibility == View.GONE &&
-            allAppData.isNotEmpty() &&
-            appData.isEmpty()
-        binding.emptyState.visibility = if (shouldShowEmptyState) View.VISIBLE else View.GONE
-        binding.summary.text = createSummaryText()
-        binding.searchFeedback.text = resources.getQuantityString(R.plurals.found_n_apps, appData.size, appData.size)
-        binding.searchFeedback.visibility =
-            if (selectedMode != SplitTunnelingMode.ALL_APPLICATIONS && searchQuery.isNotBlank()) View.VISIBLE else View.GONE
+            .sortedWith(
+                compareBy<ApplicationData> { !it.isSelected }
+                    .thenBy { it.isSystemApp }
+                    .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name }
+                    .thenBy(String.CASE_INSENSITIVE_ORDER) { it.packageName }
+            )
+        updateAppListSafely(filtered)
+    }
+
+    private fun updateAppListSafely(newList: List<ApplicationData>) {
+        val currentBinding = binding ?: return
+        val recyclerView = currentBinding.appList
+        recyclerView.post {
+            val liveBinding = binding ?: return@post
+            if (liveBinding !== currentBinding || !isViewUsableForUiUpdates())
+                return@post
+            if (recyclerView.isComputingLayout) {
+                recyclerView.post { updateAppListSafely(newList) }
+                return@post
+            }
+            appData.clear()
+            appData.addAll(newList)
+            val shouldShowEmptyState = selectedMode != SplitTunnelingMode.ALL_APPLICATIONS &&
+                liveBinding.progressBar.visibility == View.GONE &&
+                allAppData.isNotEmpty() &&
+                newList.isEmpty()
+            liveBinding.emptyState.visibility = if (shouldShowEmptyState) View.VISIBLE else View.GONE
+            liveBinding.searchFeedback.text = resources.getQuantityString(R.plurals.found_n_apps, newList.size, newList.size)
+            liveBinding.searchFeedback.visibility =
+                if (selectedMode != SplitTunnelingMode.ALL_APPLICATIONS && searchQuery.isNotBlank()) View.VISIBLE else View.GONE
+            updateSummaryUi()
+        }
     }
 
     private fun isViewUsableForUiUpdates(): Boolean {
