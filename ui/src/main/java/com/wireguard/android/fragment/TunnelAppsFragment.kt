@@ -619,9 +619,9 @@ class TunnelAppsFragment : BaseFragment() {
 
     private fun getSummaryIconResIdForMode(mode: SplitTunnelingMode): Int {
         return when (mode) {
-            SplitTunnelingMode.ALL_APPLICATIONS -> android.R.drawable.ic_lock_lock
-            SplitTunnelingMode.EXCLUDE_SELECTED_APPLICATIONS -> android.R.drawable.ic_menu_close_clear_cancel
-            SplitTunnelingMode.INCLUDE_ONLY_SELECTED_APPLICATIONS -> android.R.drawable.ic_lock_idle_lock
+            SplitTunnelingMode.ALL_APPLICATIONS -> R.drawable.ic_routing_all
+            SplitTunnelingMode.EXCLUDE_SELECTED_APPLICATIONS -> R.drawable.ic_routing_bypass
+            SplitTunnelingMode.INCLUDE_ONLY_SELECTED_APPLICATIONS -> R.drawable.ic_routing_vpn_only
         }
     }
 
