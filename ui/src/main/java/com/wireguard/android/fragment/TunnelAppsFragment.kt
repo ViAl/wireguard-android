@@ -637,18 +637,32 @@ class TunnelAppsFragment : BaseFragment() {
                     .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name }
                     .thenBy(String.CASE_INSENSITIVE_ORDER) { it.packageName }
             )
-        appData.clear()
-        appData.addAll(filtered)
-        val binding = binding ?: return
-        val shouldShowEmptyState = selectedMode != SplitTunnelingMode.ALL_APPLICATIONS &&
-            binding.progressBar.visibility == View.GONE &&
-            allAppData.isNotEmpty() &&
-            appData.isEmpty()
-        binding.emptyState.visibility = if (shouldShowEmptyState) View.VISIBLE else View.GONE
-        updateSummaryUi()
-        binding.searchFeedback.text = resources.getQuantityString(R.plurals.found_n_apps, appData.size, appData.size)
-        binding.searchFeedback.visibility =
-            if (selectedMode != SplitTunnelingMode.ALL_APPLICATIONS && searchQuery.isNotBlank()) View.VISIBLE else View.GONE
+        updateAppListSafely(filtered)
+    }
+
+    private fun updateAppListSafely(newList: List<ApplicationData>) {
+        val currentBinding = binding ?: return
+        val recyclerView = currentBinding.appList
+        recyclerView.post {
+            val liveBinding = binding ?: return@post
+            if (liveBinding !== currentBinding || !isViewUsableForUiUpdates())
+                return@post
+            if (recyclerView.isComputingLayout) {
+                recyclerView.post { updateAppListSafely(newList) }
+                return@post
+            }
+            appData.clear()
+            appData.addAll(newList)
+            val shouldShowEmptyState = selectedMode != SplitTunnelingMode.ALL_APPLICATIONS &&
+                liveBinding.progressBar.visibility == View.GONE &&
+                allAppData.isNotEmpty() &&
+                newList.isEmpty()
+            liveBinding.emptyState.visibility = if (shouldShowEmptyState) View.VISIBLE else View.GONE
+            liveBinding.searchFeedback.text = resources.getQuantityString(R.plurals.found_n_apps, newList.size, newList.size)
+            liveBinding.searchFeedback.visibility =
+                if (selectedMode != SplitTunnelingMode.ALL_APPLICATIONS && searchQuery.isNotBlank()) View.VISIBLE else View.GONE
+            updateSummaryUi()
+        }
     }
 
     private fun isViewUsableForUiUpdates(): Boolean {
