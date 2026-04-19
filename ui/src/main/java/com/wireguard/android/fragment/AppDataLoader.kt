@@ -5,6 +5,7 @@
 package com.wireguard.android.fragment
 
 import android.Manifest
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.content.pm.PackageManager.PackageInfoFlags
@@ -19,10 +20,13 @@ object AppDataLoader {
         getPackagesHoldingPermissions(pm, arrayOf(Manifest.permission.INTERNET)).forEach {
             val packageName = it.packageName
             val appInfo = it.applicationInfo ?: return@forEach
+            val isSystemApp = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0 ||
+                (appInfo.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0
             val appData = ApplicationData(
                 appInfo.loadIcon(pm),
                 appInfo.loadLabel(pm).toString(),
                 packageName,
+                isSystemApp,
                 selectedPackages.contains(packageName)
             )
             appData.addOnPropertyChangedCallback(object : Observable.OnPropertyChangedCallback() {

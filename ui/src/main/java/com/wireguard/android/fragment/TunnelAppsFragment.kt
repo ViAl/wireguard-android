@@ -343,6 +343,8 @@ class TunnelAppsFragment : BaseFragment() {
         if (suppressSelectionUpdates)
             return
         syncActiveModeSelectionFromUi()
+        if (isViewUsableForUiUpdates())
+            applyFilter()
         hasUnsavedChanges = calculateHasUnsavedChanges()
         if (saveStatus == SaveStatus.SAVED || saveStatus == SaveStatus.ERROR)
             saveStatus = SaveStatus.IDLE
@@ -629,6 +631,12 @@ class TunnelAppsFragment : BaseFragment() {
         if (!isViewUsableForUiUpdates())
             return
         val filtered = AppListDialogFragment.filterByQuery(searchQuery, allAppData, { it.name }, { it.packageName })
+            .sortedWith(
+                compareBy<ApplicationData> { !it.isSelected }
+                    .thenBy { it.isSystemApp }
+                    .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name }
+                    .thenBy(String.CASE_INSENSITIVE_ORDER) { it.packageName }
+            )
         appData.clear()
         appData.addAll(filtered)
         val binding = binding ?: return
