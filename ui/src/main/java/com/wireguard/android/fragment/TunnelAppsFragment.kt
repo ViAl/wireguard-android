@@ -7,6 +7,7 @@ package com.wireguard.android.fragment
 import android.graphics.drawable.Drawable
 import android.graphics.Typeface
 import android.os.Bundle
+import android.text.InputType
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.StyleSpan
@@ -85,6 +86,11 @@ class TunnelAppsFragment : BaseFragment() {
     private var suppressModeDropdownSelection = false
     private var isAnimatingModeTransition = false
     private lateinit var modeSelectorAdapter: ArrayAdapter<String>
+    private val modeSelectorModes = listOf(
+        SplitTunnelingMode.ALL_APPLICATIONS,
+        SplitTunnelingMode.EXCLUDE_SELECTED_APPLICATIONS,
+        SplitTunnelingMode.INCLUDE_ONLY_SELECTED_APPLICATIONS
+    )
 
     private val appRowConfigurationHandler = object : RowConfigurationHandler<AppListItemBinding, ApplicationData> {
         override fun onConfigureRow(binding: AppListItemBinding, item: ApplicationData, position: Int) {
@@ -175,14 +181,18 @@ class TunnelAppsFragment : BaseFragment() {
         modeSelectorAdapter = ArrayAdapter(
             requireContext(),
             android.R.layout.simple_dropdown_item_1line,
-            SplitTunnelingMode.entries.map(::getModeDisplayLabel)
+            modeSelectorModes.map(::getModeDisplayLabel)
         )
+        binding.routingModeDropdown.inputType = InputType.TYPE_NULL
+        binding.routingModeDropdown.keyListener = null
+        binding.routingModeDropdown.isCursorVisible = false
+        binding.routingModeDropdown.showSoftInputOnFocus = false
+        binding.routingModeDropdown.setTextIsSelectable(false)
         binding.routingModeDropdown.setAdapter(modeSelectorAdapter)
-        binding.routingModeDropdown.setOnClickListener { binding.routingModeDropdown.showDropDown() }
         binding.routingModeDropdown.setOnItemClickListener { _, _, position, _ ->
             if (suppressModeDropdownSelection)
                 return@setOnItemClickListener
-            val mode = SplitTunnelingMode.entries.getOrElse(position) { SplitTunnelingMode.ALL_APPLICATIONS }
+            val mode = modeSelectorModes.getOrNull(position) ?: return@setOnItemClickListener
             switchMode(mode)
         }
         binding.tunnelSelector.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
