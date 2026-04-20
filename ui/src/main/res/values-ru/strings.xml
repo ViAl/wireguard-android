@@ -69,6 +69,10 @@
     <string name="routing_mode_tab_all">Все</string>
     <string name="routing_mode_tab_exclude">Без VPN</string>
     <string name="routing_mode_tab_only">Через VPN</string>
+    <string name="routing_mode_label">Режим маршрутизации</string>
+    <string name="routing_mode_option_all_traffic">Весь трафик идет через VPN</string>
+    <string name="routing_mode_option_exclude">Без VPN для выбранных приложений</string>
+    <string name="routing_mode_option_include_only">Только выбранные приложения используют VPN</string>
     <string name="routing_mode_helper_exclude">Выберите приложения, которые должны работать без VPN</string>
     <string name="routing_mode_helper_include">Выберите приложения, которые должны работать через VPN</string>
     <string name="routing_all_mode_title">Весь трафик идет через VPN</string>

@@ -7,6 +7,7 @@ package com.wireguard.android.fragment
 import android.graphics.drawable.Drawable
 import android.graphics.Typeface
 import android.os.Bundle
+import android.text.InputType
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.StyleSpan
@@ -29,7 +30,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.color.MaterialColors
-import com.google.android.material.tabs.TabLayout
 import com.google.android.material.snackbar.Snackbar
 import com.wireguard.android.R
 import com.wireguard.android.Application
@@ -83,8 +83,14 @@ class TunnelAppsFragment : BaseFragment() {
     private var searchTextWatcher: TextWatcher? = null
     private var isViewTearingDown = false
     private var lastRenderedAppSelectionEnabled: Boolean? = null
-    private var suppressModeTabSelection = false
+    private var suppressModeDropdownSelection = false
     private var isAnimatingModeTransition = false
+    private lateinit var modeSelectorAdapter: ArrayAdapter<String>
+    private val modeSelectorModes = listOf(
+        SplitTunnelingMode.ALL_APPLICATIONS,
+        SplitTunnelingMode.EXCLUDE_SELECTED_APPLICATIONS,
+        SplitTunnelingMode.INCLUDE_ONLY_SELECTED_APPLICATIONS
+    )
 
     private val appRowConfigurationHandler = object : RowConfigurationHandler<AppListItemBinding, ApplicationData> {
         override fun onConfigureRow(binding: AppListItemBinding, item: ApplicationData, position: Int) {
@@ -172,21 +178,23 @@ class TunnelAppsFragment : BaseFragment() {
         binding.switchToIncludeMode.setOnClickListener { switchMode(SplitTunnelingMode.INCLUDE_ONLY_SELECTED_APPLICATIONS) }
         binding.cancelChanges.setOnClickListener { restoreSavedState() }
         binding.saveChanges.setOnClickListener { persistCurrentState() }
-        binding.splitTunnelingModeTabs.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
-            override fun onTabReselected(tab: TabLayout.Tab?) = Unit
-            override fun onTabUnselected(tab: TabLayout.Tab?) = Unit
-
-            override fun onTabSelected(tab: TabLayout.Tab?) {
-                if (suppressModeTabSelection)
-                    return
-                val mode = when (tab?.position) {
-                    1 -> SplitTunnelingMode.EXCLUDE_SELECTED_APPLICATIONS
-                    2 -> SplitTunnelingMode.INCLUDE_ONLY_SELECTED_APPLICATIONS
-                    else -> SplitTunnelingMode.ALL_APPLICATIONS
-                }
-                switchMode(mode)
-            }
-        })
+        modeSelectorAdapter = ArrayAdapter(
+            requireContext(),
+            android.R.layout.simple_dropdown_item_1line,
+            modeSelectorModes.map(::getModeDisplayLabel)
+        )
+        binding.routingModeDropdown.inputType = InputType.TYPE_NULL
+        binding.routingModeDropdown.keyListener = null
+        binding.routingModeDropdown.isCursorVisible = false
+        binding.routingModeDropdown.showSoftInputOnFocus = false
+        binding.routingModeDropdown.setTextIsSelectable(false)
+        binding.routingModeDropdown.setAdapter(modeSelectorAdapter)
+        binding.routingModeDropdown.setOnItemClickListener { _, _, position, _ ->
+            if (suppressModeDropdownSelection)
+                return@setOnItemClickListener
+            val mode = modeSelectorModes.getOrNull(position) ?: return@setOnItemClickListener
+            switchMode(mode)
+        }
         binding.tunnelSelector.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
                 val tunnel = tunnels?.getOrNull(position) ?: return
@@ -512,15 +520,11 @@ class TunnelAppsFragment : BaseFragment() {
 
     private fun updateModeUi() {
         val binding = binding ?: return
-        val modeTabIndex = when (selectedMode) {
-            SplitTunnelingMode.ALL_APPLICATIONS -> 0
-            SplitTunnelingMode.EXCLUDE_SELECTED_APPLICATIONS -> 1
-            SplitTunnelingMode.INCLUDE_ONLY_SELECTED_APPLICATIONS -> 2
-        }
-        if (binding.splitTunnelingModeTabs.selectedTabPosition != modeTabIndex) {
-            suppressModeTabSelection = true
-            binding.splitTunnelingModeTabs.getTabAt(modeTabIndex)?.select()
-            suppressModeTabSelection = false
+        val selectedModeLabel = getModeDisplayLabel(selectedMode)
+        if (binding.routingModeDropdown.text?.toString() != selectedModeLabel) {
+            suppressModeDropdownSelection = true
+            binding.routingModeDropdown.setText(selectedModeLabel, false)
+            suppressModeDropdownSelection = false
         }
 
         val appSelectionEnabled = selectedMode != SplitTunnelingMode.ALL_APPLICATIONS
@@ -624,6 +628,14 @@ class TunnelAppsFragment : BaseFragment() {
             SplitTunnelingMode.ALL_APPLICATIONS -> R.drawable.ic_routing_all
             SplitTunnelingMode.EXCLUDE_SELECTED_APPLICATIONS -> R.drawable.ic_routing_bypass
             SplitTunnelingMode.INCLUDE_ONLY_SELECTED_APPLICATIONS -> R.drawable.ic_routing_vpn_only
+        }
+    }
+
+    private fun getModeDisplayLabel(mode: SplitTunnelingMode): String {
+        return when (mode) {
+            SplitTunnelingMode.ALL_APPLICATIONS -> getString(R.string.routing_mode_option_all_traffic)
+            SplitTunnelingMode.EXCLUDE_SELECTED_APPLICATIONS -> getString(R.string.routing_mode_option_exclude)
+            SplitTunnelingMode.INCLUDE_ONLY_SELECTED_APPLICATIONS -> getString(R.string.routing_mode_option_include_only)
         }
     }
 

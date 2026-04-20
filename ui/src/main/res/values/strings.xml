@@ -50,6 +50,10 @@
     <string name="routing_mode_tab_all">All</string>
     <string name="routing_mode_tab_exclude">No VPN</string>
     <string name="routing_mode_tab_only">Via VPN</string>
+    <string name="routing_mode_label">Routing mode</string>
+    <string name="routing_mode_option_all_traffic">All traffic goes through VPN</string>
+    <string name="routing_mode_option_exclude">No VPN for selected apps</string>
+    <string name="routing_mode_option_include_only">Only selected apps use VPN</string>
     <string name="routing_mode_helper_exclude">Choose apps that should not use VPN</string>
     <string name="routing_mode_helper_include">Choose apps that should use VPN</string>
     <string name="routing_all_mode_title">All traffic goes through VPN</string>
