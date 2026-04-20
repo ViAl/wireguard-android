@@ -12,6 +12,7 @@ import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.StyleSpan
 import android.text.TextWatcher
+import android.os.SystemClock
 import android.util.Log
 import android.view.KeyEvent
 import android.view.LayoutInflater
@@ -44,6 +45,7 @@ import com.wireguard.android.viewmodel.ConfigProxy
 import com.wireguard.android.viewmodel.SplitTunnelingMode
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -75,6 +77,7 @@ class TunnelAppsFragment : BaseFragment() {
     private var loadJob: Job? = null
     private val inFlightSaveTunnels = mutableSetOf<String>()
     private var latestLoadRequestId = 0L
+    private var latestFilterRequestId = 0L
     private var savedRoutingState: SavedRoutingState? = null
     private val excludedSelectedApps = mutableSetOf<String>()
     private val includedSelectedApps = mutableSetOf<String>()
@@ -85,6 +88,7 @@ class TunnelAppsFragment : BaseFragment() {
     private var lastRenderedAppSelectionEnabled: Boolean? = null
     private var suppressModeDropdownSelection = false
     private var isAnimatingModeTransition = false
+    private var filterJob: Job? = null
     private lateinit var modeSelectorAdapter: ArrayAdapter<String>
     private val modeSelectorModes = listOf(
         SplitTunnelingMode.ALL_APPLICATIONS,
@@ -136,6 +140,7 @@ class TunnelAppsFragment : BaseFragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        val viewCreatedAt = SystemClock.elapsedRealtime()
         isViewTearingDown = false
         lastRenderedAppSelectionEnabled = null
         val binding = requireNotNull(this.binding)
@@ -210,6 +215,7 @@ class TunnelAppsFragment : BaseFragment() {
             tunnels = Application.getTunnelManager().getTunnels().also { it.addOnListChangedCallback(tunnelListObserver) }
             selectedTunnelName = selectedTunnel?.name ?: selectedTunnelName
             refreshTunnelSelector(requireNotNull(tunnels))
+            Log.d(TAG, "Routing tab created and tunnel selector initialized in ${SystemClock.elapsedRealtime() - viewCreatedAt} ms")
         }
     }
 
@@ -234,6 +240,7 @@ class TunnelAppsFragment : BaseFragment() {
         tunnels?.removeOnListChangedCallback(tunnelListObserver)
         tunnels = null
         loadJob?.cancel()
+        filterJob?.cancel()
         binding = null
         super.onDestroyView()
     }
@@ -283,27 +290,24 @@ class TunnelAppsFragment : BaseFragment() {
     private fun loadSelectedTunnelData(tunnel: ObservableTunnel) {
         val binding = binding ?: return
         val requestId = ++latestLoadRequestId
+        val loadStartedAt = SystemClock.elapsedRealtime()
         loadJob?.cancel()
+        filterJob?.cancel()
         binding.noTunnelState.visibility = View.GONE
         binding.content.visibility = View.VISIBLE
         binding.progressBar.visibility = View.VISIBLE
         loadJob = lifecycleScope.launch {
             try {
-                val config = tunnel.getConfigAsync()
+                val configDeferred = async(Dispatchers.IO) { tunnel.getConfigAsync() }
+                val appLoadDeferred = async(Dispatchers.Default) {
+                    AppDataLoader.load(requireContext().packageManager, emptySet()) { onAppSelectionChanged() }
+                }
+                val config = configDeferred.await()
                 val proxy = ConfigProxy(config)
                 val mode = proxy.`interface`.splitTunnelingMode
                 val loadedExcludedApps = proxy.`interface`.excludedApplications.toSet()
                 val loadedIncludedApps = proxy.`interface`.includedApplications.toSet()
-                val initialSelectedApps = when (mode) {
-                    SplitTunnelingMode.EXCLUDE_SELECTED_APPLICATIONS -> loadedExcludedApps
-                    SplitTunnelingMode.INCLUDE_ONLY_SELECTED_APPLICATIONS -> loadedIncludedApps
-                    SplitTunnelingMode.ALL_APPLICATIONS -> emptySet()
-                }
-                val loadedApps = withContext(Dispatchers.Default) {
-                    AppDataLoader.load(requireContext().packageManager, initialSelectedApps) {
-                        onAppSelectionChanged()
-                    }
-                }
+                val loadedApps = appLoadDeferred.await()
                 if (!isAdded || requestId != latestLoadRequestId || selectedTunnelName != tunnel.name)
                     return@launch
                 suppressSelectionUpdates = true
@@ -324,6 +328,7 @@ class TunnelAppsFragment : BaseFragment() {
                 applyFilter()
                 saveStatus = SaveStatus.IDLE
                 updateModeUi()
+                Log.d(TAG, "Routing tab load for ${tunnel.name} completed in ${SystemClock.elapsedRealtime() - loadStartedAt} ms")
             } catch (_: CancellationException) {
                 return@launch
             } catch (e: Throwable) {
@@ -642,14 +647,30 @@ class TunnelAppsFragment : BaseFragment() {
     private fun applyFilter() {
         if (!isViewUsableForUiUpdates())
             return
-        val filtered = AppListDialogFragment.filterByQuery(searchQuery, allAppData, { it.name }, { it.packageName })
-            .sortedWith(
-                compareBy<ApplicationData> { !it.isSelected }
-                    .thenBy { it.isSystemApp }
-                    .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name }
-                    .thenBy(String.CASE_INSENSITIVE_ORDER) { it.packageName }
-            )
-        updateAppListSafely(filtered)
+        if (selectedMode == SplitTunnelingMode.ALL_APPLICATIONS) {
+            updateAppListSafely(emptyList())
+            return
+        }
+        val filterRequestId = ++latestFilterRequestId
+        val filterStartedAt = SystemClock.elapsedRealtime()
+        val query = searchQuery
+        val source = allAppData.toList()
+        filterJob?.cancel()
+        filterJob = lifecycleScope.launch(Dispatchers.Default) {
+            val filtered = AppListDialogFragment.filterByQuery(query, source, { it.name }, { it.packageName })
+                .sortedWith(
+                    compareBy<ApplicationData> { !it.isSelected }
+                        .thenBy { it.isSystemApp }
+                        .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name }
+                        .thenBy(String.CASE_INSENSITIVE_ORDER) { it.packageName }
+                )
+            withContext(Dispatchers.Main.immediate) {
+                if (filterRequestId != latestFilterRequestId)
+                    return@withContext
+                updateAppListSafely(filtered)
+                Log.d(TAG, "Routing list filter+sort completed in ${SystemClock.elapsedRealtime() - filterStartedAt} ms (size=${filtered.size}, query='${query}')")
+            }
+        }
     }
 
     private fun updateAppListSafely(newList: List<ApplicationData>) {
@@ -674,6 +695,7 @@ class TunnelAppsFragment : BaseFragment() {
             liveBinding.searchFeedback.visibility =
                 if (selectedMode != SplitTunnelingMode.ALL_APPLICATIONS && searchQuery.isNotBlank()) View.VISIBLE else View.GONE
             updateSummaryUi()
+            Log.d(TAG, "Routing first list render/refresh applied (visible=${newList.size})")
         }
     }
 
