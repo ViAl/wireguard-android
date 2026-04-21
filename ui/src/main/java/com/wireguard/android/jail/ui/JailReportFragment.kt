@@ -4,21 +4,22 @@
  */
 package com.wireguard.android.jail.ui
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import androidx.recyclerview.widget.DiffUtil
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.ListAdapter
-import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.snackbar.Snackbar
 import com.wireguard.android.Application
 import com.wireguard.android.R
-import com.wireguard.android.databinding.JailReportAppItemBinding
 import com.wireguard.android.databinding.JailReportFragmentBinding
 import com.wireguard.android.jail.domain.JailAppRepository
 import com.wireguard.android.jail.domain.JailAuditRepository
@@ -30,15 +31,14 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 /**
- * Plain-language risk summary for each selected Jail app. Built from [RiskReportBuilder] and
- * rendered through [HumanReadableRiskFormatter].
+ * Plain-language risk summary for selected Jail apps: pick an app from the spinner, read the
+ * five section groups, copy the full report to the clipboard.
  */
 class JailReportFragment : Fragment() {
 
     private var binding: JailReportFragmentBinding? = null
     private val reportBuilder = RiskReportBuilder()
     private lateinit var formatter: HumanReadableRiskFormatter
-    private lateinit var adapter: ReportAdapter
 
     private val repository: JailAppRepository
         get() = Application.getJailComponent().appRepository
@@ -46,37 +46,75 @@ class JailReportFragment : Fragment() {
     private val auditRepository: JailAuditRepository
         get() = Application.getJailComponent().auditRepository
 
+    private var rows: List<ReportRow> = emptyList()
+    private var suppressSpinnerCallback = false
+
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         formatter = HumanReadableRiskFormatter(resources)
-        adapter = ReportAdapter(formatter) { pkg ->
-            (parentFragment as? JailFragment.Host)?.openAppDetail(pkg)
-        }
         val b = JailReportFragmentBinding.inflate(inflater, container, false)
         binding = b
-        b.jailReportList.layoutManager = LinearLayoutManager(requireContext())
-        b.jailReportList.adapter = adapter
         return b.root
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        val binding = requireNotNull(binding)
+
+        binding.jailReportCopy.setOnClickListener {
+            val idx = binding.jailReportAppSpinner.selectedItemPosition
+            if (idx < 0 || idx >= rows.size) return@setOnClickListener
+            val report = rows[idx].report
+            val cm = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            cm.setPrimaryClip(ClipData.newPlainText(getString(R.string.jail_report_title), formatter.clipboardText(report)))
+            Snackbar.make(binding.root, R.string.jail_report_copied, Snackbar.LENGTH_SHORT).show()
+        }
+
+        binding.jailReportAppSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                if (suppressSpinnerCallback) return
+                renderSelected(position)
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+        }
+
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 combine(repository.apps, auditRepository.snapshots) { apps, snapshots ->
                     apps.filter { it.isSelectedForJail }.map { app ->
                         val snap = snapshots[app.packageName]
-                        val report = reportBuilder.build(app, snap)
-                        ReportRow(app, snap, report)
+                        ReportRow(app, snap, reportBuilder.build(app, snap))
                     }
-                }.collect { rows ->
-                    val binding = binding ?: return@collect
-                    val empty = rows.isEmpty()
-                    binding.jailReportContent.visibility = if (empty) View.GONE else View.VISIBLE
-                    binding.jailReportEmpty.visibility = if (empty) View.VISIBLE else View.GONE
-                    adapter.submitList(rows)
+                }.collect { newRows ->
+                    val b = binding ?: return@collect
+                    rows = newRows
+                    val empty = newRows.isEmpty()
+                    b.jailReportContent.visibility = if (empty) View.GONE else View.VISIBLE
+                    b.jailReportEmpty.visibility = if (empty) View.VISIBLE else View.GONE
+                    if (empty) return@collect
+
+                    val labels = newRows.map { it.app.label }
+                    val adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_dropdown_item, labels)
+                    suppressSpinnerCallback = true
+                    try {
+                        b.jailReportAppSpinner.adapter = adapter
+                        val sel = newRows.lastIndex.coerceAtLeast(0)
+                        b.jailReportAppSpinner.setSelection(sel)
+                        renderSelected(sel)
+                    } finally {
+                        suppressSpinnerCallback = false
+                    }
                 }
             }
         }
+    }
+
+    private fun renderSelected(position: Int) {
+        val binding = binding ?: return
+        if (position !in rows.indices) return
+        val row = rows[position]
+        binding.jailReportHeadline.text = formatter.headline(row.report)
+        binding.jailReportBody.text = formatter.fullReportBody(row.report)
     }
 
     override fun onDestroyView() {
@@ -89,46 +127,4 @@ class JailReportFragment : Fragment() {
         val snapshot: AuditSnapshot?,
         val report: RiskReport,
     )
-
-    private class ReportAdapter(
-        private val formatter: HumanReadableRiskFormatter,
-        private val onOpenDetail: (String) -> Unit,
-    ) : ListAdapter<ReportRow, ReportViewHolder>(DIFF) {
-
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ReportViewHolder {
-            val inflater = LayoutInflater.from(parent.context)
-            return ReportViewHolder(JailReportAppItemBinding.inflate(inflater, parent, false))
-        }
-
-        override fun onBindViewHolder(holder: ReportViewHolder, position: Int) {
-            holder.bind(getItem(position), formatter, onOpenDetail)
-        }
-
-        companion object {
-            private val DIFF = object : DiffUtil.ItemCallback<ReportRow>() {
-                override fun areItemsTheSame(oldItem: ReportRow, newItem: ReportRow) =
-                    oldItem.app.packageName == newItem.app.packageName
-
-                override fun areContentsTheSame(oldItem: ReportRow, newItem: ReportRow) =
-                    oldItem.app == newItem.app &&
-                        oldItem.snapshot?.generatedAtMillis == newItem.snapshot?.generatedAtMillis &&
-                        oldItem.report.overallLevel == newItem.report.overallLevel &&
-                        oldItem.report.estimates == newItem.report.estimates
-            }
-        }
-    }
-
-    private class ReportViewHolder(private val binding: JailReportAppItemBinding) :
-        RecyclerView.ViewHolder(binding.root) {
-
-        fun bind(row: ReportRow, formatter: HumanReadableRiskFormatter, onOpenDetail: (String) -> Unit) {
-            val app = row.app
-            binding.jailReportIcon.setImageDrawable(app.icon)
-            binding.jailReportLabel.text = app.label
-            binding.jailReportPackage.text = app.packageName
-            binding.jailReportHeadline.text = formatter.headline(row.report)
-            binding.jailReportBody.text = formatter.fullReportBody(row.report)
-            binding.jailReportOpenDetail.setOnClickListener { onOpenDetail(app.packageName) }
-        }
-    }
 }

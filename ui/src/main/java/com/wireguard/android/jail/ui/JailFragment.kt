@@ -21,38 +21,33 @@ import com.wireguard.android.jail.viewmodel.JailViewModel
  * Root of the Jail tab. Hosts a top [TabLayout] that acts as a coarse navigation bar for the
  * Jail sub-sections plus a [androidx.fragment.app.FragmentContainerView] where the selected
  * destination's fragment is shown.
- *
- * Sub-fragments access the shared [JailViewModel] via [Host] so they do not need to pull in
- * the lifecycle-viewmodel library (the rest of the project keeps this dependency surface
- * intentionally small).
  */
-class JailFragment : Fragment(), JailFragment.Host {
+class JailFragment : Fragment(), JailFragmentHost {
     private var binding: JailFragmentBinding? = null
     private lateinit var viewModel: JailViewModel
     private lateinit var navigationController: JailNavigationController
     private var suppressTabSelection = false
     private var backPressedCallback: OnBackPressedCallback? = null
 
-    /** Bridge that sub-fragments use to reach the host without a ViewModelProvider. */
-    interface Host {
-        val jailViewModel: JailViewModel
-        fun navigateTo(destination: JailDestination)
-
-        /**
-         * Show the app-detail screen layered on top of the current tab. Implemented as a
-         * `childFragmentManager` back-stack entry so system back dismisses it and the
-         * underlying Apps list is restored intact.
-         */
-        fun openAppDetail(packageName: String)
-    }
-
     override val jailViewModel: JailViewModel
         get() = viewModel
 
     override fun navigateTo(destination: JailDestination) {
-        // Tabs are a top-level destination; any transient detail overlay must yield first.
         dismissAppDetailIfPresent()
+        dismissHelpIfPresent()
         navigationController.navigate(destination)
+    }
+
+    override fun openHelp() {
+        dismissAppDetailIfPresent()
+        val binding = binding ?: return
+        if (childFragmentManager.findFragmentByTag(HELP_FRAGMENT_TAG) != null) return
+        childFragmentManager.commit {
+            setReorderingAllowed(true)
+            add(binding.jailNavHost.id, JailHelpFragment(), HELP_FRAGMENT_TAG)
+            addToBackStack(HELP_BACK_STACK_NAME)
+        }
+        backPressedCallback?.isEnabled = true
     }
 
     override fun openAppDetail(packageName: String) {
@@ -68,10 +63,16 @@ class JailFragment : Fragment(), JailFragment.Host {
 
     private fun dismissAppDetailIfPresent(): Boolean {
         if (childFragmentManager.findFragmentByTag(DETAIL_FRAGMENT_TAG) == null) return false
-        // Use the Immediate variant so callers switching tabs right after dismiss don't end up
-        // momentarily showing detail + the new tab stacked on top of each other.
         return childFragmentManager.popBackStackImmediate(
             DETAIL_BACK_STACK_NAME,
+            FragmentManager.POP_BACK_STACK_INCLUSIVE,
+        )
+    }
+
+    private fun dismissHelpIfPresent(): Boolean {
+        if (childFragmentManager.findFragmentByTag(HELP_FRAGMENT_TAG) == null) return false
+        return childFragmentManager.popBackStackImmediate(
+            HELP_BACK_STACK_NAME,
             FragmentManager.POP_BACK_STACK_INCLUSIVE,
         )
     }
@@ -98,7 +99,7 @@ class JailFragment : Fragment(), JailFragment.Host {
             fragmentManager = childFragmentManager,
             containerId = binding.jailNavHost.id,
             factory = ::createFragmentFor,
-            onDestinationChanged = ::syncTabToDestination
+            onDestinationChanged = ::syncTabToDestination,
         )
 
         binding.jailTabs.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
@@ -107,21 +108,25 @@ class JailFragment : Fragment(), JailFragment.Host {
             override fun onTabSelected(tab: TabLayout.Tab?) {
                 if (suppressTabSelection) return
                 val destination = JailDestination.fromPosition(tab?.position ?: 0)
-                // Route through navigateTo so any transient detail overlay is dismissed first.
                 navigateTo(destination)
             }
         })
 
-        // If the child FragmentManager already has a fragment for the destination (configuration
-        // change) reuse it; otherwise create it fresh. The controller handles both paths.
         navigationController.navigate(initialDestination)
         syncTabToDestination(initialDestination)
 
         val detailRestored = childFragmentManager.findFragmentByTag(DETAIL_FRAGMENT_TAG) != null
-        backPressedCallback = object : OnBackPressedCallback(detailRestored || initialDestination != JailDestination.OVERVIEW) {
+        val helpRestored = childFragmentManager.findFragmentByTag(HELP_FRAGMENT_TAG) != null
+        backPressedCallback = object : OnBackPressedCallback(
+            detailRestored || helpRestored || initialDestination != JailDestination.OVERVIEW,
+        ) {
             override fun handleOnBackPressed() {
                 if (dismissAppDetailIfPresent()) {
-                    // Detail closed; tab state is unchanged so the callback may remain enabled.
+                    isEnabled = navigationController.currentDestination != JailDestination.OVERVIEW ||
+                        childFragmentManager.findFragmentByTag(HELP_FRAGMENT_TAG) != null
+                    return
+                }
+                if (dismissHelpIfPresent()) {
                     isEnabled = navigationController.currentDestination != JailDestination.OVERVIEW
                     return
                 }
@@ -149,7 +154,9 @@ class JailFragment : Fragment(), JailFragment.Host {
     }
 
     private fun syncTabToDestination(destination: JailDestination) {
-        backPressedCallback?.isEnabled = destination != JailDestination.OVERVIEW
+        backPressedCallback?.isEnabled = destination != JailDestination.OVERVIEW ||
+            childFragmentManager.findFragmentByTag(DETAIL_FRAGMENT_TAG) != null ||
+            childFragmentManager.findFragmentByTag(HELP_FRAGMENT_TAG) != null
         val binding = binding ?: return
         val tab = binding.jailTabs.getTabAt(destination.ordinal) ?: return
         if (binding.jailTabs.selectedTabPosition == destination.ordinal)
@@ -166,13 +173,15 @@ class JailFragment : Fragment(), JailFragment.Host {
         JailDestination.OVERVIEW -> JailOverviewFragment()
         JailDestination.APPS -> JailAppsFragment()
         JailDestination.REPORT -> JailReportFragment()
-        JailDestination.SETUP,
-        JailDestination.LAUNCH -> JailPlaceholderFragment.newInstance(destination)
+        JailDestination.LAUNCH -> JailLaunchFragment()
+        JailDestination.SETUP -> JailSetupWizardFragment()
     }
 
     companion object {
         private const val KEY_DESTINATION = "jail_destination"
         private const val DETAIL_FRAGMENT_TAG = "jail_app_detail"
         private const val DETAIL_BACK_STACK_NAME = "jail_app_detail_stack"
+        private const val HELP_FRAGMENT_TAG = "jail_help_overlay"
+        private const val HELP_BACK_STACK_NAME = "jail_help_stack"
     }
 }

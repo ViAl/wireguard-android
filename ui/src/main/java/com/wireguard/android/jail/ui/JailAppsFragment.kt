@@ -64,7 +64,7 @@ class JailAppsFragment : Fragment() {
             badgesSeparator = getString(R.string.jail_apps_badges_separator),
             onToggle = { pkg -> selectionStore.toggle(pkg) },
             onOpenDetail = { pkg ->
-                (parentFragment as? JailFragment.Host)?.openAppDetail(pkg)
+                (parentFragment as? JailFragmentHost)?.openAppDetail(pkg)
             }
         )
         binding.jailAppsList.layoutManager = LinearLayoutManager(requireContext())

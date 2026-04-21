@@ -116,6 +116,14 @@ object JailStore {
         }
     }
 
+    suspend fun addSetupCompletedStep(stepId: String) {
+        Application.getPreferencesDataStore().edit { prefs ->
+            val cur = (prefs[KEY_SETUP_STEPS] ?: emptySet()).toMutableSet()
+            cur.add(stepId)
+            prefs[KEY_SETUP_STEPS] = cur
+        }
+    }
+
     suspend fun setOnboardingCompleted(done: Boolean) {
         Application.getPreferencesDataStore().edit { prefs ->
             prefs[KEY_ONBOARDING_COMPLETED] = done

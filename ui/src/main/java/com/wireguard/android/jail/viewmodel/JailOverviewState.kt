@@ -54,7 +54,15 @@ data class JailOverviewState(
                 subtitleRes = R.string.jail_card_network_isolation_subtitle,
                 iconRes = R.drawable.ic_jail_card_network,
                 destination = JailDestination.APPS
-            )
+            ),
+            JailOverviewCard(
+                id = "help",
+                titleRes = R.string.jail_card_help_title,
+                subtitleRes = R.string.jail_card_help_subtitle,
+                iconRes = R.drawable.ic_jail_card_audit,
+                destination = JailDestination.OVERVIEW,
+                opensHelp = true,
+            ),
         )
     }
 }
@@ -64,5 +72,7 @@ data class JailOverviewCard(
     @StringRes val titleRes: Int,
     @StringRes val subtitleRes: Int,
     @DrawableRes val iconRes: Int,
-    val destination: JailDestination
+    val destination: JailDestination,
+    /** When true, tapping opens [com.wireguard.android.jail.ui.JailFragmentHost.openHelp] instead of navigating. */
+    val opensHelp: Boolean = false,
 )

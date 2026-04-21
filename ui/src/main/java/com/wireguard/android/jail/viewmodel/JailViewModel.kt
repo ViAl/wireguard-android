@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.asStateFlow
  * dependency (the project's existing fragments follow the same "plain state class" pattern).
  *
  * Instances are created per [com.wireguard.android.jail.ui.JailFragment] and shared with the
- * child fragments via [com.wireguard.android.jail.ui.JailFragment.Host].
+ * child fragments via [com.wireguard.android.jail.ui.JailFragmentHost].
  */
 class JailViewModel {
     private val _overviewState = MutableStateFlow(JailOverviewState())

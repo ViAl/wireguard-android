@@ -24,6 +24,14 @@ class HumanReadableRiskFormatter(private val resources: Resources) {
      * Multi-line body for the report screen: optional pending notice, then each non-empty
      * section in [SECTION_ORDER] with titled bullets.
      */
+    /** Full plain-text export for clipboard (includes title line + headline + sections). */
+    fun clipboardText(report: RiskReport): String = buildString {
+        appendLine(report.appLabel)
+        appendLine(headline(report))
+        appendLine()
+        append(fullReportBody(report))
+    }.trimEnd()
+
     fun fullReportBody(report: RiskReport): String = buildString {
         if (!report.auditGenerated) {
             appendLine(resources.getString(R.string.jail_report_pending))

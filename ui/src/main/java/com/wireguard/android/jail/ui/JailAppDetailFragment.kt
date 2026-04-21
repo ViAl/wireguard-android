@@ -9,6 +9,8 @@ import android.text.format.DateUtils
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ArrayAdapter
+import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -19,14 +21,18 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.wireguard.android.Application
 import com.wireguard.android.R
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.wireguard.android.databinding.JailAppDetailFragmentBinding
 import com.wireguard.android.databinding.JailReasonListItemBinding
 import com.wireguard.android.jail.domain.AppAuditManager
 import com.wireguard.android.jail.domain.JailAppRepository
 import com.wireguard.android.jail.domain.JailAuditRepository
+import com.wireguard.android.jail.domain.PerAppVpnManager
 import com.wireguard.android.jail.model.AuditSnapshot
 import com.wireguard.android.jail.model.JailAppInfo
+import com.wireguard.android.jail.model.JailTunnelMode
 import com.wireguard.android.jail.model.RiskReason
+import com.wireguard.android.jail.storage.JailStore
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
@@ -50,9 +56,24 @@ class JailAppDetailFragment : Fragment() {
         get() = Application.getJailComponent().appRepository
     private val auditRepository: JailAuditRepository
         get() = Application.getJailComponent().auditRepository
+    private val perAppVpnManager: PerAppVpnManager
+        get() = Application.getJailComponent().perAppVpnManager
+
+    /** Latest routing snapshot for Apply (tunnel name + merge baseline). */
+    private var routingPoliciesSnapshot: Map<String, JailTunnelMode> = emptyMap()
+    private var jailTunnelNameSnapshot: String? = null
+    private var jailManagedPackagesSnapshot: Set<String> = emptySet()
 
     private val packageName: String
         get() = requireArguments().getString(ARG_PACKAGE).orEmpty()
+
+    private val routingModes: List<JailTunnelMode> = listOf(
+        JailTunnelMode.DEFAULT,
+        JailTunnelMode.JAIL_ROUTE_THROUGH_TUNNEL,
+        JailTunnelMode.JAIL_EXCLUDE_FROM_TUNNEL,
+        JailTunnelMode.JAIL_STRICT_PROFILE,
+        JailTunnelMode.DISABLED,
+    )
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         binding = JailAppDetailFragmentBinding.inflate(inflater, container, false)
@@ -71,6 +92,18 @@ class JailAppDetailFragment : Fragment() {
 
         binding.jailDetailRefresh.setOnClickListener { triggerRefresh() }
 
+        val routingLabels = routingModes.map { getString(it.labelRes()) }
+        binding.jailDetailRoutingSpinner.adapter =
+            ArrayAdapter(requireContext(), android.R.layout.simple_spinner_dropdown_item, routingLabels)
+        binding.jailDetailRoutingHelp.setOnClickListener {
+            MaterialAlertDialogBuilder(requireContext())
+                .setTitle(R.string.jail_detail_routing_title)
+                .setMessage(R.string.jail_detail_routing_help_body)
+                .setPositiveButton(android.R.string.ok, null)
+                .show()
+        }
+        binding.jailDetailRoutingApply.setOnClickListener { applyRoutingSelection() }
+
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 // Combine app metadata (icon, label) with the latest audit snapshot so the UI
@@ -83,6 +116,23 @@ class JailAppDetailFragment : Fragment() {
                     .collect { (apps, snapshot, refreshing) ->
                         render(apps.firstOrNull { it.packageName == packageName }, snapshot, refreshing)
                     }
+            }
+        }
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                combine(
+                    JailStore.routingPolicies,
+                    JailStore.jailTunnelName,
+                    JailStore.jailManagedPackages,
+                ) { policies, tunnelName, managed ->
+                    Triple(policies, tunnelName, managed)
+                }.collect { (policies, tunnelName, managed) ->
+                    routingPoliciesSnapshot = policies
+                    jailTunnelNameSnapshot = tunnelName
+                    jailManagedPackagesSnapshot = managed
+                    bindRoutingSpinner(policies, tunnelName)
+                }
             }
         }
     }
@@ -146,6 +196,57 @@ class JailAppDetailFragment : Fragment() {
             packageName = packageName,
             scope = Application.getCoroutineScope(),
         )
+    }
+
+    private fun JailTunnelMode.labelRes(): Int = when (this) {
+        JailTunnelMode.DEFAULT -> R.string.jail_mode_default
+        JailTunnelMode.JAIL_ROUTE_THROUGH_TUNNEL -> R.string.jail_mode_route
+        JailTunnelMode.JAIL_EXCLUDE_FROM_TUNNEL -> R.string.jail_mode_exclude
+        JailTunnelMode.JAIL_STRICT_PROFILE -> R.string.jail_mode_strict
+        JailTunnelMode.DISABLED -> R.string.jail_mode_disabled
+    }
+
+    private fun bindRoutingSpinner(policies: Map<String, JailTunnelMode>, tunnelName: String?) {
+        val binding = binding ?: return
+        val mode = policies[packageName] ?: JailTunnelMode.DEFAULT
+        val idx = routingModes.indexOf(mode).takeIf { it >= 0 } ?: 0
+        binding.jailDetailRoutingSpinner.setSelection(idx)
+        binding.jailDetailRoutingApply.isEnabled = !tunnelName.isNullOrBlank()
+    }
+
+    private fun applyRoutingSelection() {
+        val tunnelName = jailTunnelNameSnapshot
+        if (tunnelName.isNullOrBlank()) {
+            Toast.makeText(requireContext(), R.string.jail_detail_routing_no_tunnel, Toast.LENGTH_SHORT).show()
+            return
+        }
+        val binding = binding ?: return
+        val selectedMode = routingModes[binding.jailDetailRoutingSpinner.selectedItemPosition.coerceIn(0, routingModes.lastIndex)]
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            val policies = routingPoliciesSnapshot
+            val previouslyManaged = jailManagedPackagesSnapshot
+            val next = policies.toMutableMap()
+            when (selectedMode) {
+                JailTunnelMode.DEFAULT -> next.remove(packageName)
+                else -> next[packageName] = selectedMode
+            }
+
+            when (val result = perAppVpnManager.applyJailRouting(tunnelName, next, previouslyManaged)) {
+                PerAppVpnManager.ApplyResult.Success -> {
+                    JailStore.setRoutingPolicies(next)
+                    Toast.makeText(requireContext(), R.string.jail_detail_routing_applied, Toast.LENGTH_SHORT).show()
+                }
+                is PerAppVpnManager.ApplyResult.Conflict ->
+                    MaterialAlertDialogBuilder(requireContext())
+                        .setTitle(R.string.jail_detail_routing_title)
+                        .setMessage(getString(R.string.jail_detail_routing_conflict, result.message))
+                        .setPositiveButton(android.R.string.ok, null)
+                        .show()
+                PerAppVpnManager.ApplyResult.TunnelNotFound ->
+                    Toast.makeText(requireContext(), R.string.jail_detail_routing_no_tunnel, Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     private class ReasonsAdapter : ListAdapter<RiskReason, ReasonViewHolder>(DIFF) {

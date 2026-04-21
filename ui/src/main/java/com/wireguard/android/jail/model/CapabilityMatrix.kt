@@ -41,8 +41,8 @@ data class CapabilityMatrix(
 ) {
     companion object {
         fun from(snapshot: AuditSnapshot): CapabilityMatrix {
-            val p = snapshot.permissions
-            val b = snapshot.background
+            val p = snapshot.permissionAudit
+            val b = snapshot.backgroundAudit
             return CapabilityMatrix(
                 packageName = snapshot.packageName,
                 location = when {
@@ -85,8 +85,7 @@ data class CapabilityMatrix(
                 },
                 unrestrictedBackground = when (b.isIgnoringBatteryOptimizations) {
                     true -> CapabilityState.GRANTED
-                    false -> CapabilityState.ABSENT
-                    null -> CapabilityState.ABSENT
+                    false, null -> CapabilityState.ABSENT
                 },
                 persistentForegroundService = when {
                     b.hasForegroundServices -> CapabilityState.LIKELY

@@ -41,7 +41,7 @@ class SterileLaunchManager(
         selectedForJail: Boolean,
     ): SterileLaunchChecklist {
         val items = mutableListOf<SterileLaunchCheckItem>()
-        val tunnelName = JailStore.jailTunnelName.first().takeIf { it.isNotBlank() }
+        val tunnelName = JailStore.jailTunnelName.first().takeIf { !it.isNullOrBlank() }
 
         items += if (tunnelName != null) {
             SterileLaunchCheckItem(

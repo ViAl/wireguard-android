@@ -23,7 +23,7 @@ open class CrossProfileAppsWrapper(private val context: Context) {
     /** @return `true` when a secondary user/profile handle exists besides the current user. */
     open fun hasManagedProfile(): Boolean {
         val um = userManager ?: return false
-        if (!um.supportsMultipleUsers()) return false
+        if (!UserManager.supportsMultipleUsers()) return false
         val profiles = um.userProfiles ?: return false
         val mine = Process.myUserHandle()
         return profiles.any { it != mine }

@@ -33,7 +33,11 @@ class JailOverviewFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         val binding = requireNotNull(binding)
         val host = host()
-        val adapter = CardAdapter { card -> host?.navigateTo(card.destination) }
+        val adapter = CardAdapter { card ->
+            val h = host()
+            if (card.opensHelp) h?.openHelp()
+            else h?.navigateTo(card.destination)
+        }
         binding.jailOverviewCards.layoutManager = LinearLayoutManager(requireContext())
         binding.jailOverviewCards.adapter = adapter
 
@@ -53,7 +57,7 @@ class JailOverviewFragment : Fragment() {
         super.onDestroyView()
     }
 
-    private fun host(): JailFragment.Host? = parentFragment as? JailFragment.Host
+    private fun host(): JailFragmentHost? = parentFragment as? JailFragmentHost
 
     private class CardAdapter(
         private val onCardClick: (JailOverviewCard) -> Unit

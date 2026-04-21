@@ -19,7 +19,7 @@ class WorkProfileManager(private val context: Context) {
         val um = context.getSystemService(Context.USER_SERVICE) as? UserManager ?: return WorkProfileState.UNKNOWN
         return try {
             when {
-                !um.supportsMultipleUsers() -> WorkProfileState.UNSUPPORTED
+                !UserManager.supportsMultipleUsers() -> WorkProfileState.UNSUPPORTED
                 um.userProfiles?.size ?: 0 <= 1 -> WorkProfileState.NONE_DETECTED
                 um.userProfiles!!.any { it != Process.myUserHandle() } -> WorkProfileState.PROFILE_DETECTED
                 else -> WorkProfileState.NONE_DETECTED
