@@ -337,8 +337,8 @@
     <string name="jail_signal_fg_service_microphone_detail">The app declares a foreground service of type \u201Cmicrophone\u201D, meaning it may keep recording audio while a notification is visible.</string>
     <string name="jail_signal_fg_service_camera_short">Camera foreground service</string>
     <string name="jail_signal_fg_service_camera_detail">The app declares a foreground service of type \u201Ccamera\u201D, meaning it may keep using the camera while a notification is visible.</string>
-    <string name="jail_signal_missing_work_profile_short">Not installed in work profile</string>
-    <string name="jail_signal_missing_work_profile_detail">A managed profile exists on this device, but this app is only installed in the main profile. Data from the main profile is therefore visible to it.</string>
+    <string name="jail_signal_missing_work_profile_short">Not installed in another profile</string>
+    <string name="jail_signal_missing_work_profile_detail">Another profile appears to exist on this device, but this app is only installed in the main profile. Main-profile data therefore remains visible to this copy.</string>
     <!-- Phase 4: human-readable report -->
     <string name="jail_report_title">Risk report</string>
     <string name="jail_report_intro">Plain-language summary of what each selected app can probably observe. Jail lowers some of this; it cannot eliminate it.</string>
@@ -376,9 +376,9 @@
     <string name="jail_report_cannot_see_notifications">Notifications from other apps.</string>
     <string name="jail_report_cannot_see_accessibility">Screen content of other apps — no enabled accessibility service was detected.</string>
     <string name="jail_report_cannot_see_overlay">It cannot cover other apps with its own UI.</string>
-    <string name="jail_report_work_profile_none">No managed profile appears to exist on this device, so main-profile data would still be visible to this app.</string>
-    <string name="jail_report_work_profile_present">A work-profile copy of this app is installed. That copy cannot directly read your main profile\u2019s app data, contacts, or package list.</string>
-    <string name="jail_report_work_profile_missing">A managed profile exists on this device, but this app is only in the main profile. Installing it in the work profile would isolate it from main-profile data.</string>
+    <string name="jail_report_work_profile_none">No secondary profile is detected on this device, so main-profile data would still be visible to this app.</string>
+    <string name="jail_report_work_profile_present">This app is also installed in another profile. If that profile is managed/work, that copy is isolated from main-profile app data.</string>
+    <string name="jail_report_work_profile_missing">Another profile appears to exist on this device, but this app is only in the main profile. Installing it in that profile may reduce data exposure from the main profile.</string>
     <string name="jail_report_work_profile_shared_channels">Even across profiles, some channels remain shared: notifications, clipboard, shared media, and screen content while the app is visible.</string>
     <string name="jail_report_network_internet">This app has network access. The Jail tunnel can change the network path, but the app still sees its own requests, DNS lookups, and response timing.</string>
     <string name="jail_report_network_vpn_detection">Apps can usually detect that a VPN is active through standard Android connectivity APIs.</string>
@@ -407,7 +407,7 @@
     <string name="jail_wizard_step_what_title">What is a work profile?</string>
     <string name="jail_wizard_step_what_body">A work profile is a separate space on your device with its own app installs and data. It is created by Android or your organisation — Jail cannot create it for you.</string>
     <string name="jail_wizard_step_detect_title">Check whether you already have one</string>
-    <string name="jail_wizard_step_detect_body">Look for a briefcase badge on app icons, or open Android Settings and search for \u201CWork profile\u201D. If nothing exists, use Settings \u2192 Accounts (or your IT instructions) to add one — not from this screen.</string>
+    <string name="jail_wizard_step_detect_body">Look for a briefcase badge on app icons, or open Android Settings and search for \u201CWork profile\u201D. Jail can detect that another profile exists, but cannot always confirm its exact type. If nothing exists, use Settings \u2192 Accounts (or your IT instructions) to add one — not from this screen.</string>
     <string name="jail_wizard_step_install_title">Apps are installed separately</string>
     <string name="jail_wizard_step_install_body">Putting an app \u201Cin work\u201D means installing it again inside the work profile. Jail does not move or clone app data automatically.</string>
     <string name="jail_wizard_step_icons_title">Choose the right icon</string>

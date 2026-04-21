@@ -31,8 +31,8 @@ class AppAuditManagerScoreTest {
 
     private fun manager(): AppAuditManager {
         val cross = object : CrossProfileAppsWrapper(app) {
-            override fun hasManagedProfile(): Boolean = false
-            override fun isInstalledInWorkProfile(packageName: String): Boolean? = null
+            override fun hasSecondaryProfile(): Boolean = false
+            override fun isInstalledInOtherProfile(packageName: String): Boolean? = null
         }
         return AppAuditManager(
             AccessibilityInspector(app.contentResolver),

@@ -26,10 +26,10 @@ class JailAppClassifier(private val crossProfile: CrossProfileAppsWrapper) {
         if (app.isSelectedForJail) badges += JailAppBadge.SELECTED
         when (app.installedInWorkProfile) {
             true -> badges += JailAppBadge.WORK_PROFILE_PRESENT
-            false -> if (crossProfile.hasManagedProfile()) badges += JailAppBadge.WORK_PROFILE_MISSING
+            false -> if (crossProfile.hasSecondaryProfile()) badges += JailAppBadge.WORK_PROFILE_MISSING
             null -> Unit // Unknown — show nothing rather than guessing presence.
         }
-        if (app.installedInWorkProfile == null && !crossProfile.hasManagedProfile())
+        if (app.installedInWorkProfile == null && !crossProfile.hasSecondaryProfile())
             badges += JailAppBadge.MAIN_PROFILE_ONLY
         if (app.isSystemApp) badges += JailAppBadge.SYSTEM_APP
         return badges
