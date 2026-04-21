@@ -14,8 +14,6 @@
 
         <import type="com.wireguard.android.widget.NameInputFilter" />
 
-        <import type="com.wireguard.android.viewmodel.SplitTunnelingMode" />
-
         <variable
             name="fragment"
             type="com.wireguard.android.fragment.TunnelEditorFragment" />
@@ -215,7 +213,7 @@
                                 android:imeOptions="actionNext"
                                 android:inputType="textNoSuggestions|textVisiblePassword"
                                 android:nextFocusUp="@id/addresses_label_text"
-                                android:nextFocusDown="@id/set_excluded_applications"
+                                android:nextFocusDown="@id/peers_layout"
                                 android:nextFocusForward="@id/mtu_text"
                                 android:text="@={config.interface.dnsServers}" />
                         </com.google.android.material.textfield.TextInputLayout>
@@ -240,98 +238,11 @@
                                 android:imeOptions="actionDone"
                                 android:inputType="number"
                                 android:nextFocusUp="@id/listen_port_text"
-                                android:nextFocusDown="@id/set_excluded_applications"
-                                android:nextFocusForward="@id/set_excluded_applications"
+                                android:nextFocusDown="@id/peers_layout"
+                                android:nextFocusForward="@id/peers_layout"
                                 android:text="@={config.interface.mtu}"
                                 android:textAlignment="center" />
                         </com.google.android.material.textfield.TextInputLayout>
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/split_tunneling_title"
-                            style="@style/Widget.Material3.Button.TextButton"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_margin="4dp"
-                            android:nextFocusUp="@id/dns_servers_text"
-                            android:text="@string/split_tunneling"
-                            android:textColor="?attr/colorSecondary"
-                            app:layout_constraintEnd_toEndOf="parent"
-                            app:layout_constraintStart_toStartOf="parent"
-                            app:layout_constraintTop_toBottomOf="@id/mtu_label_layout"
-                            app:rippleColor="?attr/colorSecondary"
-                            tools:text="Split tunneling" />
-
-                        <com.google.android.material.button.MaterialButtonToggleGroup
-                            android:id="@+id/split_tunneling_mode_group"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_margin="4dp"
-                            app:selectionRequired="true"
-                            app:singleSelection="true"
-                            app:layout_constraintEnd_toEndOf="parent"
-                            app:layout_constraintStart_toStartOf="parent"
-                            app:layout_constraintTop_toBottomOf="@id/split_tunneling_title">
-
-                            <com.google.android.material.button.MaterialButton
-                                android:id="@+id/split_tunneling_mode_all"
-                                style="@style/Widget.Material3.Button.OutlinedButton"
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:onClick="@{fragment::onSelectAllApplicationsMode}"
-                                android:text="@string/all_applications" />
-
-                            <com.google.android.material.button.MaterialButton
-                                android:id="@+id/split_tunneling_mode_exclude"
-                                style="@style/Widget.Material3.Button.OutlinedButton"
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:onClick="@{fragment::onSelectExcludeApplicationsMode}"
-                                android:text="@string/exclude_selected_applications" />
-
-                            <com.google.android.material.button.MaterialButton
-                                android:id="@+id/split_tunneling_mode_include"
-                                style="@style/Widget.Material3.Button.OutlinedButton"
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:onClick="@{fragment::onSelectIncludeApplicationsMode}"
-                                android:text="@string/only_selected_applications" />
-                        </com.google.android.material.button.MaterialButtonToggleGroup>
-
-                        <com.google.android.material.textview.MaterialTextView
-                            android:id="@+id/split_tunneling_summary"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="8dp"
-                            android:layout_marginEnd="8dp"
-                            android:text="@{config.interface.splitTunnelingMode == SplitTunnelingMode.ALL_APPLICATIONS ? @string/all_applications : config.interface.splitTunnelingMode == SplitTunnelingMode.EXCLUDE_SELECTED_APPLICATIONS ? (config.interface.excludedApplications.size > 0 ? @plurals/n_excluded_applications(config.interface.excludedApplications.size, config.interface.excludedApplications.size) : @string/no_excluded_applications_selected) : (config.interface.includedApplications.size > 0 ? @plurals/n_included_applications(config.interface.includedApplications.size, config.interface.includedApplications.size) : @string/no_included_applications_selected)}"
-                            android:textAppearance="?attr/textAppearanceBodyMedium"
-                            app:layout_constraintEnd_toEndOf="parent"
-                            app:layout_constraintStart_toStartOf="parent"
-                            app:layout_constraintTop_toBottomOf="@id/split_tunneling_mode_group"
-                            tools:text="4 excluded applications" />
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/set_excluded_applications"
-                            style="@style/Widget.Material3.Button.TextButton"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_margin="4dp"
-                            android:enabled="@{config.interface.splitTunnelingMode != SplitTunnelingMode.ALL_APPLICATIONS}"
-                            android:nextFocusUp="@id/split_tunneling_mode_all"
-                            android:nextFocusDown="@id/peers_layout"
-                            android:nextFocusForward="@id/peers_layout"
-                            android:onClick="@{fragment::onRequestSetExcludedIncludedApplications}"
-                            android:text="@string/select_applications"
-                            android:textColor="?attr/colorSecondary"
-                            app:layout_constraintBottom_toBottomOf="parent"
-                            app:layout_constraintEnd_toEndOf="parent"
-                            app:layout_constraintStart_toStartOf="parent"
-                            app:layout_constraintTop_toBottomOf="@id/split_tunneling_summary"
-                            app:rippleColor="?attr/colorSecondary"
-                            tools:text="Select applications" />
                     </androidx.constraintlayout.widget.ConstraintLayout>
                 </com.google.android.material.card.MaterialCardView>
 

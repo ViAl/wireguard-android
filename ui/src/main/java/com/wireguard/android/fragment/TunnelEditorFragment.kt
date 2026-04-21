@@ -32,7 +32,6 @@ import com.wireguard.android.util.AdminKnobs
 import com.wireguard.android.util.BiometricAuthenticator
 import com.wireguard.android.util.ErrorMessages
 import com.wireguard.android.viewmodel.ConfigProxy
-import com.wireguard.android.viewmodel.SplitTunnelingMode
 import com.wireguard.config.Config
 import kotlinx.coroutines.launch
 
@@ -46,7 +45,6 @@ class TunnelEditorFragment : BaseFragment(), MenuProvider {
 
     private fun onConfigLoaded(config: Config) {
         binding?.config = ConfigProxy(config)
-        syncSplitTunnelingModeSelection()
     }
 
     private fun onConfigSaved(savedTunnel: Tunnel, throwable: Throwable?) {
@@ -166,66 +164,6 @@ class TunnelEditorFragment : BaseFragment(), MenuProvider {
         return false
     }
 
-    @Suppress("UNUSED_PARAMETER")
-    fun onRequestSetExcludedIncludedApplications(view: View?) {
-        if (binding != null) {
-            val configInterface = binding!!.config!!.`interface`
-            val isExcluded = configInterface.splitTunnelingMode == SplitTunnelingMode.EXCLUDE_SELECTED_APPLICATIONS
-            if (!isAppSelectionEnabledForMode(configInterface.splitTunnelingMode)) {
-                Snackbar.make(binding!!.mainContainer, R.string.split_tunneling_select_mode_first, Snackbar.LENGTH_SHORT).show()
-                return
-            }
-            val selectedApps = if (isExcluded) ArrayList(configInterface.excludedApplications) else ArrayList(configInterface.includedApplications)
-            val fragment = AppListDialogFragment.newInstance(selectedApps, isExcluded)
-            childFragmentManager.setFragmentResultListener(AppListDialogFragment.REQUEST_SELECTION, viewLifecycleOwner) { _, bundle ->
-                requireNotNull(binding) { "Tried to set excluded/included apps while no view was loaded" }
-                val newSelections = requireNotNull(bundle.getStringArray(AppListDialogFragment.KEY_SELECTED_APPS))
-                val excluded = requireNotNull(bundle.getBoolean(AppListDialogFragment.KEY_IS_EXCLUDED))
-                if (excluded) {
-                    binding!!.config!!.`interface`.splitTunnelingMode = SplitTunnelingMode.EXCLUDE_SELECTED_APPLICATIONS
-                    binding!!.config!!.`interface`.includedApplications.clear()
-                    binding!!.config!!.`interface`.excludedApplications.apply {
-                        clear()
-                        addAll(newSelections)
-                    }
-                } else {
-                    binding!!.config!!.`interface`.splitTunnelingMode = SplitTunnelingMode.INCLUDE_ONLY_SELECTED_APPLICATIONS
-                    binding!!.config!!.`interface`.excludedApplications.clear()
-                    binding!!.config!!.`interface`.includedApplications.apply {
-                        clear()
-                        addAll(newSelections)
-                    }
-                }
-                syncSplitTunnelingModeSelection()
-            }
-            fragment.show(childFragmentManager, null)
-        }
-    }
-
-    fun onSelectAllApplicationsMode(view: View?) = onSplitTunnelingModeSelected(SplitTunnelingMode.ALL_APPLICATIONS)
-
-    fun onSelectExcludeApplicationsMode(view: View?) = onSplitTunnelingModeSelected(SplitTunnelingMode.EXCLUDE_SELECTED_APPLICATIONS)
-
-    fun onSelectIncludeApplicationsMode(view: View?) = onSplitTunnelingModeSelected(SplitTunnelingMode.INCLUDE_ONLY_SELECTED_APPLICATIONS)
-
-    private fun onSplitTunnelingModeSelected(mode: SplitTunnelingMode) {
-        val configInterface = binding?.config?.`interface` ?: return
-        configInterface.splitTunnelingMode = mode
-        syncSplitTunnelingModeSelection()
-    }
-
-    private fun syncSplitTunnelingModeSelection() {
-        val binding = binding ?: return
-        val configInterface = binding.config?.`interface` ?: return
-        val buttonId = when (configInterface.splitTunnelingMode) {
-            SplitTunnelingMode.ALL_APPLICATIONS -> R.id.split_tunneling_mode_all
-            SplitTunnelingMode.EXCLUDE_SELECTED_APPLICATIONS -> R.id.split_tunneling_mode_exclude
-            SplitTunnelingMode.INCLUDE_ONLY_SELECTED_APPLICATIONS -> R.id.split_tunneling_mode_include
-        }
-        if (binding.splitTunnelingModeGroup.checkedButtonId != buttonId)
-            binding.splitTunnelingModeGroup.check(buttonId)
-    }
-
     override fun onSaveInstanceState(outState: Bundle) {
         if (binding != null) outState.putParcelable(KEY_LOCAL_CONFIG, binding!!.config)
         outState.putString(KEY_ORIGINAL_NAME, if (tunnel == null) null else tunnel!!.name)
@@ -249,7 +187,6 @@ class TunnelEditorFragment : BaseFragment(), MenuProvider {
             }
         } else {
             binding!!.name = ""
-            syncSplitTunnelingModeSelection()
         }
     }
 
@@ -312,7 +249,6 @@ class TunnelEditorFragment : BaseFragment(), MenuProvider {
             val originalName = savedInstanceState.getString(KEY_ORIGINAL_NAME)
             if (tunnel != null && tunnel!!.name != originalName) onSelectedTunnelChanged(null, tunnel) else binding!!.config = config
         }
-        syncSplitTunnelingModeSelection()
         super.onViewStateRestored(savedInstanceState)
     }
 
@@ -361,8 +297,5 @@ class TunnelEditorFragment : BaseFragment(), MenuProvider {
         private const val KEY_ORIGINAL_NAME = "original_name"
         private const val TAG = "WireGuard/TunnelEditorFragment"
 
-        internal fun isAppSelectionEnabledForMode(mode: SplitTunnelingMode): Boolean {
-            return mode != SplitTunnelingMode.ALL_APPLICATIONS
-        }
     }
 }
