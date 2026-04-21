@@ -12,6 +12,10 @@ import com.wireguard.android.jail.domain.JailAuditRepository
 import com.wireguard.android.jail.domain.PerAppVpnManager
 import com.wireguard.android.jail.domain.SterileLaunchManager
 import com.wireguard.android.jail.domain.WorkProfileManager
+import com.wireguard.android.jail.enterprise.ManagedProfileOwnershipService
+import com.wireguard.android.jail.enterprise.WorkProfileAppCatalogService
+import com.wireguard.android.jail.enterprise.WorkProfileAppInstallCapabilityChecker
+import com.wireguard.android.jail.enterprise.WorkProfileAppInstallService
 import com.wireguard.android.jail.storage.JailSelectionStore
 import com.wireguard.android.jail.system.AccessibilityInspector
 import com.wireguard.android.jail.system.CrossProfileAppsWrapper
@@ -34,6 +38,18 @@ class JailComponent(
     val selectionStore: JailSelectionStore = JailSelectionStore(scope)
     val appRepository: JailAppRepository = JailAppRepository(selectionStore, classifier)
     val workProfileManager: WorkProfileManager = WorkProfileManager(appContext)
+    val managedProfileOwnershipService: ManagedProfileOwnershipService = ManagedProfileOwnershipService(appContext)
+    val workProfileCapabilityChecker: WorkProfileAppInstallCapabilityChecker = WorkProfileAppInstallCapabilityChecker(
+        context = appContext,
+        ownershipService = managedProfileOwnershipService,
+    )
+    val workProfileCatalogService: WorkProfileAppCatalogService =
+        WorkProfileAppCatalogService(workProfileCapabilityChecker)
+    val workProfileInstallService: WorkProfileAppInstallService = WorkProfileAppInstallService(
+        context = appContext,
+        capabilityChecker = workProfileCapabilityChecker,
+        fallbackLauncher = workProfileCapabilityChecker.fallbackLauncher(),
+    )
 
     private val accessibilityInspector: AccessibilityInspector = AccessibilityInspector(appContext.contentResolver)
     private val notificationInspector: NotificationAccessInspector = NotificationAccessInspector(appContext)
