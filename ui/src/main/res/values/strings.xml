@@ -525,6 +525,7 @@
     <string name="jail_provisioning_status_unsupported">Managed profile provisioning is not supported on this device.</string>
     <string name="jail_provisioning_status_allowed">You can start managed profile provisioning from here.</string>
     <string name="jail_provisioning_status_not_allowed">Provisioning is currently not allowed (device policy or OEM restriction).</string>
+    <string name="jail_provisioning_status_not_launchable">Provisioning is allowed by policy, but no compatible Android provisioning activity is available.</string>
     <string name="jail_provisioning_detail_confirmed">Android confirms this profile is managed.</string>
     <string name="jail_provisioning_detail_uncertain">A secondary profile was detected and cross-profile signals exist, but managed status cannot be fully confirmed.</string>
     <string name="jail_provisioning_detail_secondary_profile">A secondary profile exists, but managed status is unknown.</string>
