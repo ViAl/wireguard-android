@@ -24,7 +24,8 @@ import kotlinx.coroutines.withContext
  * The installed-apps list is expensive to compute (PackageManager hits + icon/label loads),
  * so it is cached in a [MutableStateFlow] that the caller refreshes explicitly via
  * [refreshInstalledApps]. Selection state is layered on top reactively; flipping a checkbox
- * does not require re-scanning PackageManager.
+ * does not require re-scanning PackageManager. Emitted lists are sorted: selected user apps,
+ * selected system apps, unselected user apps, then unselected system apps (label within each).
  */
 class JailAppRepository(
     private val selectionStore: JailSelectionStore,
@@ -42,6 +43,7 @@ class JailAppRepository(
         selectionStore.selected
     ) { base, selected ->
         base.map { it.withSelection(selected = it.packageName in selected) }
+            .sortedWith(JAIL_APP_LIST_ORDER)
     }
 
     /** @return the badge list for [app] as computed by the classifier. */
@@ -100,6 +102,25 @@ class JailAppRepository(
                 installedInMainProfile = info.installedInMainProfile,
                 installedInWorkProfile = info.installedInWorkProfile
             )
+        }
+    }
+
+    private companion object {
+        /** Selected user → selected system → unselected user → unselected system. */
+        private val JAIL_APP_LIST_ORDER =
+            compareBy<JailAppInfo>({ jailAppsSortTier(it) })
+                .thenBy(String.CASE_INSENSITIVE_ORDER) { it.label }
+                .thenBy(String.CASE_INSENSITIVE_ORDER) { it.packageName }
+
+        private fun jailAppsSortTier(app: JailAppInfo): Int {
+            val selected = app.isSelectedForJail
+            val system = app.isSystemApp
+            return when {
+                selected && !system -> 0
+                selected && system -> 1
+                !selected && !system -> 2
+                else -> 3
+            }
         }
     }
 }
