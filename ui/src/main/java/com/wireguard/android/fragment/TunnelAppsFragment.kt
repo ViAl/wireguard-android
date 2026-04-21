@@ -595,12 +595,27 @@ class TunnelAppsFragment : BaseFragment() {
             if (appList.isComputingLayout) {
                 appList.post {
                     if (binding === liveBinding)
-                        liveBinding.appList.adapter?.notifyDataSetChanged()
+                        notifyVisibleAppRowsChanged(liveBinding)
                 }
             } else {
-                liveBinding.appList.adapter?.notifyDataSetChanged()
+                notifyVisibleAppRowsChanged(liveBinding)
             }
         }
+    }
+
+    private fun notifyVisibleAppRowsChanged(liveBinding: TunnelAppsFragmentBinding) {
+        val adapter = liveBinding.appList.adapter ?: return
+        val layoutManager = liveBinding.appList.layoutManager as? LinearLayoutManager ?: run {
+            adapter.notifyDataSetChanged()
+            return
+        }
+        val first = layoutManager.findFirstVisibleItemPosition()
+        val last = layoutManager.findLastVisibleItemPosition()
+        if (first == -1 || last < first) {
+            adapter.notifyDataSetChanged()
+            return
+        }
+        adapter.notifyItemRangeChanged(first, last - first + 1)
     }
 
     private fun createSummaryText(): CharSequence {
