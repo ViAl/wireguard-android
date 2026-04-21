@@ -12,10 +12,13 @@ import androidx.activity.OnBackPressedCallback
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.commit
+import androidx.lifecycle.lifecycleScope
 import com.google.android.material.tabs.TabLayout
+import com.wireguard.android.Application
 import com.wireguard.android.databinding.JailFragmentBinding
 import com.wireguard.android.jail.model.JailDestination
 import com.wireguard.android.jail.viewmodel.JailViewModel
+import kotlinx.coroutines.launch
 
 /**
  * Root of the Jail tab. Hosts a top [TabLayout] that acts as a coarse navigation bar for the
@@ -47,7 +50,7 @@ class JailFragment : Fragment(), JailFragmentHost {
             add(binding.jailNavHost.id, JailHelpFragment(), HELP_FRAGMENT_TAG)
             addToBackStack(HELP_BACK_STACK_NAME)
         }
-        backPressedCallback?.isEnabled = true
+        updateBackCallbackEnabled()
     }
 
     override fun openAppDetail(packageName: String) {
@@ -58,7 +61,7 @@ class JailFragment : Fragment(), JailFragmentHost {
             add(binding.jailNavHost.id, JailAppDetailFragment.newInstance(packageName), DETAIL_FRAGMENT_TAG)
             addToBackStack(DETAIL_BACK_STACK_NAME)
         }
-        backPressedCallback?.isEnabled = true
+        updateBackCallbackEnabled()
     }
 
     private fun dismissAppDetailIfPresent(): Boolean {
@@ -115,6 +118,10 @@ class JailFragment : Fragment(), JailFragmentHost {
         navigationController.navigate(initialDestination)
         syncTabToDestination(initialDestination)
 
+        viewLifecycleOwner.lifecycleScope.launch {
+            Application.getJailComponent().appRepository.refreshInstalledApps(requireContext().applicationContext)
+        }
+
         val detailRestored = childFragmentManager.findFragmentByTag(DETAIL_FRAGMENT_TAG) != null
         val helpRestored = childFragmentManager.findFragmentByTag(HELP_FRAGMENT_TAG) != null
         backPressedCallback = object : OnBackPressedCallback(
@@ -122,12 +129,11 @@ class JailFragment : Fragment(), JailFragmentHost {
         ) {
             override fun handleOnBackPressed() {
                 if (dismissAppDetailIfPresent()) {
-                    isEnabled = navigationController.currentDestination != JailDestination.OVERVIEW ||
-                        childFragmentManager.findFragmentByTag(HELP_FRAGMENT_TAG) != null
+                    updateBackCallbackEnabled()
                     return
                 }
                 if (dismissHelpIfPresent()) {
-                    isEnabled = navigationController.currentDestination != JailDestination.OVERVIEW
+                    updateBackCallbackEnabled()
                     return
                 }
                 if (!navigationController.popToOverview()) {
@@ -138,6 +144,12 @@ class JailFragment : Fragment(), JailFragmentHost {
         }.also { callback ->
             requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, callback)
         }
+        updateBackCallbackEnabled()
+    }
+
+    override fun onHiddenChanged(hidden: Boolean) {
+        super.onHiddenChanged(hidden)
+        updateBackCallbackEnabled()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -154,9 +166,7 @@ class JailFragment : Fragment(), JailFragmentHost {
     }
 
     private fun syncTabToDestination(destination: JailDestination) {
-        backPressedCallback?.isEnabled = destination != JailDestination.OVERVIEW ||
-            childFragmentManager.findFragmentByTag(DETAIL_FRAGMENT_TAG) != null ||
-            childFragmentManager.findFragmentByTag(HELP_FRAGMENT_TAG) != null
+        updateBackCallbackEnabled()
         val binding = binding ?: return
         val tab = binding.jailTabs.getTabAt(destination.ordinal) ?: return
         if (binding.jailTabs.selectedTabPosition == destination.ordinal)
@@ -167,6 +177,22 @@ class JailFragment : Fragment(), JailFragmentHost {
         } finally {
             suppressTabSelection = false
         }
+    }
+
+    /**
+     * Only consume system Back while this tab is visible ([isHidden] is false). Parent tabs use
+     * hide/show, so otherwise we would steal Back from VPN/Routing flows.
+     */
+    private fun updateBackCallbackEnabled() {
+        val cb = backPressedCallback ?: return
+        if (!isAdded || isHidden) {
+            cb.isEnabled = false
+            return
+        }
+        if (!::navigationController.isInitialized) return
+        cb.isEnabled = navigationController.currentDestination != JailDestination.OVERVIEW ||
+            childFragmentManager.findFragmentByTag(DETAIL_FRAGMENT_TAG) != null ||
+            childFragmentManager.findFragmentByTag(HELP_FRAGMENT_TAG) != null
     }
 
     private fun createFragmentFor(destination: JailDestination): Fragment = when (destination) {
