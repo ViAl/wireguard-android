@@ -57,9 +57,16 @@ android {
         warning += "MissingTranslation"
         warning += "ImpliedQuantity"
     }
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
 }
 
 dependencies {
+    testImplementation(libs.junit)
+    testImplementation(libs.androidx.test.core)
+    testImplementation(libs.robolectric)
+
     implementation(project(":tunnel"))
     implementation(libs.androidx.activity.ktx)
     implementation(libs.androidx.annotation)
