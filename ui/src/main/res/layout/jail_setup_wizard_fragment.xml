@@ -24,6 +24,37 @@
         android:textAppearance="?attr/textAppearanceBodySmall"
         tools:text="Step 2 of 6" />
 
+
+    <TextView
+        android:id="@+id/jail_wizard_provisioning_status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:textAppearance="?attr/textAppearanceBodyMedium"
+        tools:text="Work profile setup is available" />
+
+    <TextView
+        android:id="@+id/jail_wizard_provisioning_detail"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:textAppearance="?attr/textAppearanceBodySmall"
+        tools:text="No secondary profile detected yet." />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/jail_wizard_provisioning_action"
+        style="?attr/materialButtonOutlinedStyle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:text="@string/jail_provisioning_action_create" />
+
+    <TextView
+        android:id="@+id/jail_wizard_provisioning_message"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:textAppearance="?attr/textAppearanceBodySmall" />
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
