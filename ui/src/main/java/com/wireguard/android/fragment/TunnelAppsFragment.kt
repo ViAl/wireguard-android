@@ -7,12 +7,12 @@ package com.wireguard.android.fragment
 import android.graphics.drawable.Drawable
 import android.graphics.Typeface
 import android.os.Bundle
+import android.os.SystemClock
 import android.text.InputType
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.StyleSpan
 import android.text.TextWatcher
-import android.os.SystemClock
 import android.util.Log
 import android.view.KeyEvent
 import android.view.LayoutInflater
@@ -45,7 +45,6 @@ import com.wireguard.android.viewmodel.ConfigProxy
 import com.wireguard.android.viewmodel.SplitTunnelingMode
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -89,6 +88,8 @@ class TunnelAppsFragment : BaseFragment() {
     private var suppressModeDropdownSelection = false
     private var isAnimatingModeTransition = false
     private var filterJob: Job? = null
+    private val iconLoadJobs = mutableMapOf<String, Job>()
+    private val iconCache = mutableMapOf<String, Drawable>()
     private lateinit var modeSelectorAdapter: ArrayAdapter<String>
     private val modeSelectorModes = listOf(
         SplitTunnelingMode.ALL_APPLICATIONS,
@@ -108,6 +109,7 @@ class TunnelAppsFragment : BaseFragment() {
             binding.selectedCheckbox.isEnabled = selectionEnabled
             binding.selectedCheckbox.isClickable = selectionEnabled
             binding.selectedCheckbox.isFocusable = selectionEnabled
+            ensureRowIconLoaded(item)
         }
     }
 
@@ -241,6 +243,9 @@ class TunnelAppsFragment : BaseFragment() {
         tunnels = null
         loadJob?.cancel()
         filterJob?.cancel()
+        iconLoadJobs.values.forEach { it.cancel() }
+        iconLoadJobs.clear()
+        iconCache.clear()
         binding = null
         super.onDestroyView()
     }
@@ -293,27 +298,24 @@ class TunnelAppsFragment : BaseFragment() {
         val loadStartedAt = SystemClock.elapsedRealtime()
         loadJob?.cancel()
         filterJob?.cancel()
+        iconLoadJobs.values.forEach { it.cancel() }
+        iconLoadJobs.clear()
         binding.noTunnelState.visibility = View.GONE
         binding.content.visibility = View.VISIBLE
         binding.progressBar.visibility = View.VISIBLE
         loadJob = lifecycleScope.launch {
             try {
-                val configDeferred = async(Dispatchers.IO) { tunnel.getConfigAsync() }
-                val appLoadDeferred = async(Dispatchers.Default) {
-                    AppDataLoader.load(requireContext().packageManager, emptySet()) { onAppSelectionChanged() }
-                }
-                val config = configDeferred.await()
+                val config = withContext(Dispatchers.IO) { tunnel.getConfigAsync() }
                 val proxy = ConfigProxy(config)
                 val mode = proxy.`interface`.splitTunnelingMode
                 val loadedExcludedApps = proxy.`interface`.excludedApplications.toSet()
                 val loadedIncludedApps = proxy.`interface`.includedApplications.toSet()
-                val loadedApps = appLoadDeferred.await()
                 if (!isAdded || requestId != latestLoadRequestId || selectedTunnelName != tunnel.name)
                     return@launch
                 suppressSelectionUpdates = true
                 selectedMode = mode
                 allAppData.clear()
-                allAppData.addAll(loadedApps)
+                appData.clear()
                 excludedSelectedApps.clear()
                 excludedSelectedApps.addAll(loadedExcludedApps)
                 includedSelectedApps.clear()
@@ -328,6 +330,23 @@ class TunnelAppsFragment : BaseFragment() {
                 applyFilter()
                 saveStatus = SaveStatus.IDLE
                 updateModeUi()
+                if (mode == SplitTunnelingMode.ALL_APPLICATIONS) {
+                    Log.d(TAG, "Routing tunnel config loaded in ${SystemClock.elapsedRealtime() - loadStartedAt} ms (apps skipped for ALL mode)")
+                    return@launch
+                }
+                val selectedPackages = when (mode) {
+                    SplitTunnelingMode.EXCLUDE_SELECTED_APPLICATIONS -> loadedExcludedApps
+                    SplitTunnelingMode.INCLUDE_ONLY_SELECTED_APPLICATIONS -> loadedIncludedApps
+                    SplitTunnelingMode.ALL_APPLICATIONS -> emptySet()
+                }
+                val loadedApps = withContext(Dispatchers.Default) {
+                    AppDataLoader.load(requireContext().packageManager, selectedPackages) { onAppSelectionChanged() }
+                }
+                if (!isAdded || requestId != latestLoadRequestId || selectedTunnelName != tunnel.name)
+                    return@launch
+                allAppData.clear()
+                allAppData.addAll(loadedApps)
+                applyFilter()
                 Log.d(TAG, "Routing tab load for ${tunnel.name} completed in ${SystemClock.elapsedRealtime() - loadStartedAt} ms")
             } catch (_: CancellationException) {
                 return@launch
@@ -696,6 +715,34 @@ class TunnelAppsFragment : BaseFragment() {
                 if (selectedMode != SplitTunnelingMode.ALL_APPLICATIONS && searchQuery.isNotBlank()) View.VISIBLE else View.GONE
             updateSummaryUi()
             Log.d(TAG, "Routing first list render/refresh applied (visible=${newList.size})")
+        }
+    }
+
+    private fun ensureRowIconLoaded(item: ApplicationData) {
+        if (item.hasLoadedIcon)
+            return
+        val packageName = item.packageName
+        iconCache[packageName]?.let { cachedIcon ->
+            item.icon = cachedIcon
+            item.hasLoadedIcon = true
+            return
+        }
+        if (iconLoadJobs.containsKey(packageName))
+            return
+        iconLoadJobs[packageName] = lifecycleScope.launch(Dispatchers.IO) {
+            val icon = runCatching { requireContext().packageManager.getApplicationIcon(packageName) }.getOrNull()
+            withContext(Dispatchers.Main.immediate) {
+                iconLoadJobs.remove(packageName)
+                if (icon == null)
+                    return@withContext
+                if (!isViewUsableForUiUpdates())
+                    return@withContext
+                iconCache[packageName] = icon
+                allAppData.asSequence().filter { it.packageName == packageName }.forEach {
+                    it.icon = icon
+                    it.hasLoadedIcon = true
+                }
+            }
         }
     }
 

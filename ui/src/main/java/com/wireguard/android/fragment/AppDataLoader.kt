@@ -20,7 +20,6 @@ object AppDataLoader {
     private const val TAG = "WireGuard/AppDataLoader"
 
     private data class CachedApplicationRecord(
-        val icon: android.graphics.drawable.Drawable,
         val name: String,
         val packageName: String,
         val isSystemApp: Boolean
@@ -34,10 +33,11 @@ object AppDataLoader {
         val loadStart = SystemClock.elapsedRealtime()
         val baseData = getOrBuildCachedApplicationRecords(pm)
         val hydrationStart = SystemClock.elapsedRealtime()
+        val placeholderIcon = pm.defaultActivityIcon
         val applicationData = ArrayList<ApplicationData>(baseData.size)
         baseData.forEach { cached ->
             val appData = ApplicationData(
-                drawableForListItem(cached.icon),
+                drawableForListItem(placeholderIcon),
                 cached.name,
                 cached.packageName,
                 cached.isSystemApp,
@@ -76,7 +76,6 @@ object AppDataLoader {
                     (appInfo.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0
                 cached.add(
                     CachedApplicationRecord(
-                        icon = appInfo.loadIcon(pm),
                         name = appInfo.loadLabel(pm).toString(),
                         packageName = packageName,
                         isSystemApp = isSystemApp
@@ -88,7 +87,7 @@ object AppDataLoader {
                     .thenBy(String.CASE_INSENSITIVE_ORDER, CachedApplicationRecord::packageName)
             )
             cachedApplications = cached
-            Log.d(TAG, "Built app metadata/icon cache in ${SystemClock.elapsedRealtime() - buildStart} ms (size=${cached.size})")
+            Log.d(TAG, "Built app metadata cache in ${SystemClock.elapsedRealtime() - buildStart} ms (size=${cached.size})")
             return cached
         }
     }
