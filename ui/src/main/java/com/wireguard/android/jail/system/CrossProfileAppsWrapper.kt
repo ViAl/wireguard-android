@@ -13,29 +13,36 @@ import android.os.UserHandle
 import android.os.UserManager
 
 /**
- * Thin seam over cross-profile discovery. Used by app inventory, sterile launch, and work-profile
- * guidance. Safe on devices without a managed profile.
+ * Thin seam over cross-profile discovery. Used by app inventory, sterile launch, and profile
+ * guidance. Safe on devices without secondary profiles.
  */
 open class CrossProfileAppsWrapper(private val context: Context) {
+    private val profileDetector = ManagedProfileDetector(context)
 
     private val userManager: UserManager?
         get() = context.getSystemService(Context.USER_SERVICE) as? UserManager
 
     /** @return `true` when a secondary user/profile handle exists besides the current user. */
-    open fun hasManagedProfile(): Boolean {
-        val um = userManager ?: return false
-        if (!UserManager.supportsMultipleUsers()) return false
-        val profiles = um.userProfiles ?: return false
-        val mine = Process.myUserHandle()
-        return profiles.any { it != mine }
-    }
+    open fun hasSecondaryProfile(): Boolean = profileDetector.hasSecondaryProfile()
 
     /**
-     * @return `true` if installed in another profile assumed to be work/managed,
-     *  `false` if we know there is another profile but the package is absent there,
+     * Transitional compatibility shim.
+     *
+     * This method name is semantically misleading now: it no longer guarantees a managed/work
+     * profile and currently mirrors [hasSecondaryProfile]. New code must use [hasSecondaryProfile].
+     */
+    @Deprecated(
+        message = "Compatibility shim only; does not guarantee managed/work profile semantics.",
+        replaceWith = ReplaceWith("hasSecondaryProfile()"),
+    )
+    open fun hasManagedProfile(): Boolean = hasSecondaryProfile()
+
+    /**
+     * @return `true` if installed in another profile,
+     *  `false` if we know another profile exists but the package is absent there,
      *  `null` if no secondary profile exists or introspection failed.
      */
-    open fun isInstalledInWorkProfile(packageName: String): Boolean? {
+    open fun isInstalledInOtherProfile(packageName: String): Boolean? {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) return null
         val um = userManager ?: return null
         val profiles = um.userProfiles ?: return null
@@ -60,6 +67,19 @@ open class CrossProfileAppsWrapper(private val context: Context) {
         return found
     }
 
+    /**
+     * Transitional compatibility shim.
+     *
+     * This method name is semantically misleading now: it does not prove a work profile and
+     * currently mirrors [isInstalledInOtherProfile]. New code must use
+     * [isInstalledInOtherProfile].
+     */
+    @Deprecated(
+        message = "Compatibility shim only; does not guarantee managed/work profile semantics.",
+        replaceWith = ReplaceWith("isInstalledInOtherProfile(packageName)"),
+    )
+    open fun isInstalledInWorkProfile(packageName: String): Boolean? = isInstalledInOtherProfile(packageName)
+
     /** UserHandle for the first non-current profile, if any. */
     fun otherProfileHandle(): UserHandle? {
         val um = userManager ?: return null
@@ -69,8 +89,8 @@ open class CrossProfileAppsWrapper(private val context: Context) {
     }
 
     /**
-     * Starts the app's main launcher activity in the first non-current user profile (typically
-     * work), if one exists and the app is installed there. Returns `false` if nothing was started.
+     * Starts the app's main launcher activity in the first non-current user profile, if one
+     * exists and the app is installed there. Returns `false` if nothing was started.
      */
     open fun tryStartMainActivityInOtherProfile(packageName: String): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) return false

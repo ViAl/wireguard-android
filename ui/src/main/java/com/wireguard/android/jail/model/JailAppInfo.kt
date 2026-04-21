@@ -14,10 +14,10 @@ import android.graphics.drawable.Drawable
  * list whenever the selection or the system's installed apps change, so the UI can treat
  * this class as read-only.
  *
- * [installedInWorkProfile] encodes three states honestly:
- *  * `true` — confirmed present in a managed/work profile.
- *  * `false` — the device exposes a managed profile but the app is not installed there.
- *  * `null` — the device has no managed profile (or detection is unsupported on this SDK).
+ * [installedInOtherProfile] encodes profile presence without over-claiming profile type:
+ *  * `true` — confirmed present in another profile.
+ *  * `false` — another profile exists, but the app is not installed there.
+ *  * `null` — no secondary profile is exposed (or detection is unsupported).
  *
  * Avoid deriving "risk" here; that belongs to [com.wireguard.android.jail.domain.AppAuditManager]
  * (Phase 3) so callers do not confuse presence signals with risk signals.
@@ -31,6 +31,6 @@ data class JailAppInfo(
     val isSystemApp: Boolean,
     val hasInternetPermission: Boolean,
     val installedInMainProfile: Boolean,
-    val installedInWorkProfile: Boolean?,
+    val installedInOtherProfile: Boolean?,
     val isSelectedForJail: Boolean
 )

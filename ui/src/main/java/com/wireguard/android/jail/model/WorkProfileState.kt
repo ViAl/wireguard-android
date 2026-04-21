@@ -4,10 +4,17 @@
  */
 package com.wireguard.android.jail.model
 
-/** Coarse device capability / presence signal for work-profile guidance. */
+/**
+ * Coarse capability/presence signal used by profile guidance.
+ *
+ * IMPORTANT: [MANAGED_PROFILE_CONFIRMED] means Android confirmed that the **current**
+ * user/profile is managed (via `UserManager.isManagedProfile`). It does not by itself prove
+ * that some *other* detected profile is managed.
+ */
 enum class WorkProfileState {
+    NO_SECONDARY_PROFILE,
+    SECONDARY_PROFILE_PRESENT,
+    MANAGED_PROFILE_CONFIRMED,
+    MANAGED_PROFILE_UNCERTAIN,
     UNSUPPORTED,
-    NONE_DETECTED,
-    PROFILE_DETECTED,
-    UNKNOWN,
 }

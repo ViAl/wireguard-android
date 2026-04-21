@@ -125,7 +125,7 @@ class AppAuditManager(
         if (ForegroundServiceInspector.TYPE_CAMERA in background.foregroundServiceTypes)
             reasons += reasonFor(AuditSignal.FOREGROUND_SERVICE_CAMERA)
 
-        if (crossProfile.hasManagedProfile() && crossProfile.isInstalledInWorkProfile(permissions.packageName) == false)
+        if (crossProfile.hasSecondaryProfile() && crossProfile.isInstalledInOtherProfile(permissions.packageName) == false)
             reasons += reasonFor(AuditSignal.MISSING_WORK_PROFILE)
 
         // Sort so the dominant reasons appear first in the detail screen.

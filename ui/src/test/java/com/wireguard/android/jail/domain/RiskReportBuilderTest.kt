@@ -22,7 +22,7 @@ class RiskReportBuilderTest {
         isSystemApp = false,
         hasInternetPermission = true,
         installedInMainProfile = true,
-        installedInWorkProfile = null,
+        installedInOtherProfile = null,
         isSelectedForJail = true,
     )
 

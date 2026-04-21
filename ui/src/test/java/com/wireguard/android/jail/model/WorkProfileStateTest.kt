@@ -10,8 +10,8 @@ import org.junit.Test
 class WorkProfileStateTest {
     @Test
     fun enumEntries_stableNamesForPersistence() {
-        assertEquals(4, WorkProfileState.entries.size)
+        assertEquals(5, WorkProfileState.entries.size)
         assertEquals("UNSUPPORTED", WorkProfileState.UNSUPPORTED.name)
-        assertEquals("PROFILE_DETECTED", WorkProfileState.PROFILE_DETECTED.name)
+        assertEquals("MANAGED_PROFILE_CONFIRMED", WorkProfileState.MANAGED_PROFILE_CONFIRMED.name)
     }
 }

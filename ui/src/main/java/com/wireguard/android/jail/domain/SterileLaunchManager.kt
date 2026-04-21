@@ -111,7 +111,7 @@ class SterileLaunchManager(
             )
         }
 
-        val workCopy = crossProfile.isInstalledInWorkProfile(packageName)
+        val workCopy = crossProfile.isInstalledInOtherProfile(packageName)
         if (preset.requiredProfile == LaunchProfile.WORK && preset.warnIfNoWorkProfileCopy) {
             items += SterileLaunchCheckItem(
                 id = "work_copy",
