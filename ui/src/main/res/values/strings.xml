@@ -421,8 +421,8 @@
     <string name="jail_launch_tunnel_label">Jail tunnel (existing WireGuard tunnel)</string>
     <string name="jail_launch_tunnel_save">Save tunnel choice</string>
     <string name="jail_launch_pick_app">Pick a jailed app</string>
-    <string name="jail_launch_preset_saved">Preset saved</string>
-    <string name="jail_launch_save_preset">Save preset</string>
+    <string name="jail_launch_preset_restored">Restored default checklist options for this app</string>
+    <string name="jail_launch_save_preset">Restore default preset</string>
     <string name="jail_launch_checklist_title">Pre-launch checklist</string>
     <string name="jail_launch_launch_anyway">Launch anyway</string>
     <string name="jail_launch_fix_first">Fix issues first</string>

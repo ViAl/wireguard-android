@@ -75,7 +75,7 @@ class JailLaunchFragment : Fragment() {
             val preset = SterileLaunchPreset.defaultFor(pkg)
             lifecycleScope.launch {
                 JailStore.updateLaunchPreset(preset)
-                Snackbar.make(binding.root, R.string.jail_launch_preset_saved, Snackbar.LENGTH_SHORT).show()
+                Snackbar.make(binding.root, R.string.jail_launch_preset_restored, Snackbar.LENGTH_SHORT).show()
             }
         }
 
@@ -120,6 +120,7 @@ class JailLaunchFragment : Fragment() {
                     .collect { (apps, tunnelName, presets) ->
                         lifecycleScope.launch {
                             val binding = binding ?: return@launch
+                            val previouslySelectedPkg = selectedPkg
                             launchPresetsSnapshot = presets
 
                             val tunnels = Application.getTunnelManager().getTunnels()
@@ -147,11 +148,14 @@ class JailLaunchFragment : Fragment() {
                                 android.R.layout.simple_spinner_dropdown_item,
                                 labels,
                             )
-                            if (jailedApps.isNotEmpty()) {
-                                binding.jailLaunchAppSpinner.setSelection(0)
-                                selectedPkg = jailedApps[0].packageName
-                            } else {
+                            if (jailedApps.isEmpty()) {
                                 selectedPkg = null
+                            } else {
+                                val position = previouslySelectedPkg?.let { pkg ->
+                                    jailedApps.indexOfFirst { it.packageName == pkg }.takeIf { it >= 0 }
+                                } ?: 0
+                                binding.jailLaunchAppSpinner.setSelection(position)
+                                selectedPkg = jailedApps[position].packageName
                             }
                             refreshChecklist()
                         }

@@ -145,19 +145,40 @@ object JailStore {
 
     suspend fun updateAuditSnapshot(snapshot: AuditSnapshot) {
         Application.getPreferencesDataStore().edit { prefs ->
+            val selectedPackages = prefs[KEY_SELECTED_APPS] ?: emptySet()
             val current = prefs[KEY_AUDIT_SNAPSHOTS]?.let(::decodeSnapshots) ?: emptyMap()
             val next = current.toMutableMap().apply { put(snapshot.packageName, snapshot) }
-            val capped = trimSnapshotsToMax(next)
+            val capped = trimSnapshotsToMax(next, selectedPackages)
             prefs[KEY_AUDIT_SNAPSHOTS] = encodeSnapshots(capped)
         }
     }
 
-    private fun trimSnapshotsToMax(map: Map<String, AuditSnapshot>): Map<String, AuditSnapshot> {
+    /**
+     * Keeps all snapshots for [selectedPackages] first (newest wins if over cap), then fills
+     * remaining slots with the newest non-selected entries.
+     */
+    private fun trimSnapshotsToMax(
+        map: Map<String, AuditSnapshot>,
+        selectedPackages: Set<String>,
+    ): Map<String, AuditSnapshot> {
         if (map.size <= MAX_AUDIT_SNAPSHOT_ENTRIES) return map
-        return map.entries
+
+        val forSelected = map.filterKeys { it in selectedPackages }
+        if (forSelected.size >= MAX_AUDIT_SNAPSHOT_ENTRIES) {
+            return forSelected.entries
+                .sortedByDescending { it.value.generatedAtMillis }
+                .take(MAX_AUDIT_SNAPSHOT_ENTRIES)
+                .associate { it.key to it.value }
+        }
+
+        val remainingSlots = MAX_AUDIT_SNAPSHOT_ENTRIES - forSelected.size
+        val nonSelected = map.filterKeys { it !in selectedPackages }
+            .entries
             .sortedByDescending { it.value.generatedAtMillis }
-            .take(MAX_AUDIT_SNAPSHOT_ENTRIES)
+            .take(remainingSlots)
             .associate { it.key to it.value }
+
+        return forSelected + nonSelected
     }
 
     /**
