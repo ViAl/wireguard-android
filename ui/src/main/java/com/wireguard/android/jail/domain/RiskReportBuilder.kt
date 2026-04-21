@@ -29,7 +29,7 @@ import com.wireguard.android.jail.model.VisibilityEstimate
  *  * Section content ordering is deterministic per input. Tests can snapshot the emitted list.
  *
  * When the snapshot is null we only emit the baseline bullets that do not depend on audit
- * results (e.g. self-UI visibility, work-profile framing), and flag [RiskReport.auditGenerated]
+ * results (e.g. self-UI visibility, secondary-profile framing), and flag [RiskReport.auditGenerated]
  * as false so the UI can prompt the user to run the audit first.
  */
 class RiskReportBuilder {
@@ -147,7 +147,7 @@ class RiskReportBuilder {
     }
 
     private fun addWorkProfileSection(app: JailAppInfo, out: MutableList<VisibilityEstimate>) {
-        when (app.installedInWorkProfile) {
+        when (app.installedInOtherProfile) {
             null -> out += estimate(R.string.jail_report_work_profile_none, AuditConfidence.LIKELY, VisibilityEstimate.Area.WORK_PROFILE_DELTA)
             true -> out += estimate(R.string.jail_report_work_profile_present, AuditConfidence.LIKELY, VisibilityEstimate.Area.WORK_PROFILE_DELTA)
             false -> out += estimate(R.string.jail_report_work_profile_missing, AuditConfidence.LIKELY, VisibilityEstimate.Area.WORK_PROFILE_DELTA)

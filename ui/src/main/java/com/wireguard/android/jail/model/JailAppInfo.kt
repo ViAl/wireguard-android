@@ -14,7 +14,7 @@ import android.graphics.drawable.Drawable
  * list whenever the selection or the system's installed apps change, so the UI can treat
  * this class as read-only.
  *
- * [installedInWorkProfile] encodes profile presence without over-claiming profile type:
+ * [installedInOtherProfile] encodes profile presence without over-claiming profile type:
  *  * `true` — confirmed present in another profile.
  *  * `false` — another profile exists, but the app is not installed there.
  *  * `null` — no secondary profile is exposed (or detection is unsupported).
@@ -31,6 +31,6 @@ data class JailAppInfo(
     val isSystemApp: Boolean,
     val hasInternetPermission: Boolean,
     val installedInMainProfile: Boolean,
-    val installedInWorkProfile: Boolean?,
+    val installedInOtherProfile: Boolean?,
     val isSelectedForJail: Boolean
 )

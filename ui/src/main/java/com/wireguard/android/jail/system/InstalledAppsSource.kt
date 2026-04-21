@@ -94,7 +94,7 @@ object InstalledAppsSource {
             isSystemApp = isSystemApp,
             hasInternetPermission = hasInternet,
             installedInMainProfile = true,
-            installedInWorkProfile = null,
+            installedInOtherProfile = null,
             isSelectedForJail = packageName in selectedPackages
         )
     }

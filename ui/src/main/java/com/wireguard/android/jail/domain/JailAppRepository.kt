@@ -75,7 +75,7 @@ class JailAppRepository(
         val isSystemApp: Boolean,
         val hasInternetPermission: Boolean,
         val installedInMainProfile: Boolean,
-        val installedInWorkProfile: Boolean?
+        val installedInOtherProfile: Boolean?
     ) {
         fun withSelection(selected: Boolean): JailAppInfo = JailAppInfo(
             label = label,
@@ -86,7 +86,7 @@ class JailAppRepository(
             isSystemApp = isSystemApp,
             hasInternetPermission = hasInternetPermission,
             installedInMainProfile = installedInMainProfile,
-            installedInWorkProfile = installedInWorkProfile,
+            installedInOtherProfile = installedInOtherProfile,
             isSelectedForJail = selected
         )
 
@@ -100,7 +100,7 @@ class JailAppRepository(
                 isSystemApp = info.isSystemApp,
                 hasInternetPermission = info.hasInternetPermission,
                 installedInMainProfile = info.installedInMainProfile,
-                installedInWorkProfile = info.installedInWorkProfile
+                installedInOtherProfile = info.installedInOtherProfile
             )
         }
     }

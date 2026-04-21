@@ -15,31 +15,20 @@ import com.wireguard.android.jail.model.WorkProfileState
  * Best-effort profile detector with conservative semantics:
  *  * "secondary profile present" is factual (another profile handle exists).
  *  * "managed profile confirmed" is only used when Android confirms the current profile is managed.
+ *    This is a **current-user** fact, not proof that any secondary profile is managed.
  *  * "managed profile uncertain" is used for hints that suggest profile isolation, without certainty.
  */
-class ManagedProfileDetector(private val context: Context) {
+open class ManagedProfileDetector(private val context: Context) {
 
     fun detectState(): WorkProfileState {
-        val um = context.getSystemService(Context.USER_SERVICE) as? UserManager ?: return WorkProfileState.UNSUPPORTED
-        return try {
-            if (!UserManager.supportsMultipleUsers()) return WorkProfileState.UNSUPPORTED
-
-            val profiles = um.userProfiles.orEmpty()
-            val hasSecondary = profiles.any { it != Process.myUserHandle() }
-            if (!hasSecondary) return WorkProfileState.NO_SECONDARY_PROFILE
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && um.isManagedProfile) {
-                return WorkProfileState.MANAGED_PROFILE_CONFIRMED
-            }
-
-            if (crossProfileTargetsAvailable()) {
-                WorkProfileState.MANAGED_PROFILE_UNCERTAIN
-            } else {
-                WorkProfileState.SECONDARY_PROFILE_PRESENT
-            }
-        } catch (_: Throwable) {
-            WorkProfileState.UNSUPPORTED
-        }
+        val snapshot = runCatching { readSnapshot() }.getOrElse { return WorkProfileState.UNSUPPORTED }
+        if (!snapshot.supportsMultipleUsers) return WorkProfileState.UNSUPPORTED
+        if (!snapshot.hasSecondaryProfile) return WorkProfileState.NO_SECONDARY_PROFILE
+        if (snapshot.currentProfileManaged) return WorkProfileState.MANAGED_PROFILE_CONFIRMED
+        return if (snapshot.hasCrossProfileTargets)
+            WorkProfileState.MANAGED_PROFILE_UNCERTAIN
+        else
+            WorkProfileState.SECONDARY_PROFILE_PRESENT
     }
 
     fun hasSecondaryProfile(): Boolean = when (detectState()) {
@@ -47,9 +36,34 @@ class ManagedProfileDetector(private val context: Context) {
         else -> true
     }
 
+    internal open fun readSnapshot(): DetectionSnapshot {
+        val um = context.getSystemService(Context.USER_SERVICE) as? UserManager
+            ?: return DetectionSnapshot(
+                supportsMultipleUsers = false,
+                hasSecondaryProfile = false,
+                currentProfileManaged = false,
+                hasCrossProfileTargets = false,
+            )
+
+        val profiles = um.userProfiles.orEmpty()
+        return DetectionSnapshot(
+            supportsMultipleUsers = UserManager.supportsMultipleUsers(),
+            hasSecondaryProfile = profiles.any { it != Process.myUserHandle() },
+            currentProfileManaged = Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && um.isManagedProfile,
+            hasCrossProfileTargets = crossProfileTargetsAvailable(),
+        )
+    }
+
     private fun crossProfileTargetsAvailable(): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return false
         val crossProfileApps = context.getSystemService(CrossProfileApps::class.java) ?: return false
         return runCatching { crossProfileApps.targetUserProfiles.isNotEmpty() }.getOrDefault(false)
     }
+
+    internal data class DetectionSnapshot(
+        val supportsMultipleUsers: Boolean,
+        val hasSecondaryProfile: Boolean,
+        val currentProfileManaged: Boolean,
+        val hasCrossProfileTargets: Boolean,
+    )
 }

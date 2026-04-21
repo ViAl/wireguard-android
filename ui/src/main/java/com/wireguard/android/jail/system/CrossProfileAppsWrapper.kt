@@ -26,9 +26,15 @@ open class CrossProfileAppsWrapper(private val context: Context) {
     open fun hasSecondaryProfile(): Boolean = profileDetector.hasSecondaryProfile()
 
     /**
-     * Legacy shim retained for compatibility with existing call sites.
-     * Prefer [hasSecondaryProfile] for uncertainty-aware wording in new code.
+     * Transitional compatibility shim.
+     *
+     * This method name is semantically misleading now: it no longer guarantees a managed/work
+     * profile and currently mirrors [hasSecondaryProfile]. New code must use [hasSecondaryProfile].
      */
+    @Deprecated(
+        message = "Compatibility shim only; does not guarantee managed/work profile semantics.",
+        replaceWith = ReplaceWith("hasSecondaryProfile()"),
+    )
     open fun hasManagedProfile(): Boolean = hasSecondaryProfile()
 
     /**
@@ -61,7 +67,17 @@ open class CrossProfileAppsWrapper(private val context: Context) {
         return found
     }
 
-    /** Legacy shim retained for compatibility. Prefer [isInstalledInOtherProfile]. */
+    /**
+     * Transitional compatibility shim.
+     *
+     * This method name is semantically misleading now: it does not prove a work profile and
+     * currently mirrors [isInstalledInOtherProfile]. New code must use
+     * [isInstalledInOtherProfile].
+     */
+    @Deprecated(
+        message = "Compatibility shim only; does not guarantee managed/work profile semantics.",
+        replaceWith = ReplaceWith("isInstalledInOtherProfile(packageName)"),
+    )
     open fun isInstalledInWorkProfile(packageName: String): Boolean? = isInstalledInOtherProfile(packageName)
 
     /** UserHandle for the first non-current profile, if any. */
@@ -73,8 +89,8 @@ open class CrossProfileAppsWrapper(private val context: Context) {
     }
 
     /**
-     * Starts the app's main launcher activity in the first non-current user profile (typically
-     * work), if one exists and the app is installed there. Returns `false` if nothing was started.
+     * Starts the app's main launcher activity in the first non-current user profile, if one
+     * exists and the app is installed there. Returns `false` if nothing was started.
      */
     open fun tryStartMainActivityInOtherProfile(packageName: String): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) return false
