@@ -13,11 +13,17 @@ import androidx.fragment.app.commit
 import com.google.android.material.tabs.TabLayout
 import com.wireguard.android.R
 import com.wireguard.android.databinding.MainTabsFragmentBinding
+import com.wireguard.android.jail.ui.JailFragment
 
 class MainTabsFragment : Fragment() {
-    enum class MainTab {
-        VPN,
-        APPS
+    enum class MainTab(val tag: String) {
+        VPN("vpn_tab"),
+        APPS("apps_tab"),
+        JAIL("jail_tab");
+
+        companion object {
+            fun fromPosition(position: Int): MainTab = entries.getOrElse(position) { VPN }
+        }
     }
 
     interface Listener {
@@ -42,13 +48,12 @@ class MainTabsFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         val binding = requireNotNull(binding)
-        val targetTabIndex = if (selectedTab == MainTab.VPN) 0 else 1
-        binding.tabs.selectTab(binding.tabs.getTabAt(targetTabIndex))
+        binding.tabs.selectTab(binding.tabs.getTabAt(selectedTab.ordinal))
         binding.tabs.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
             override fun onTabReselected(tab: TabLayout.Tab?) = Unit
             override fun onTabUnselected(tab: TabLayout.Tab?) = Unit
             override fun onTabSelected(tab: TabLayout.Tab?) {
-                val newTab = if ((tab?.position ?: 0) == 0) MainTab.VPN else MainTab.APPS
+                val newTab = MainTab.fromPosition(tab?.position ?: 0)
                 if (selectedTab == newTab)
                     return
                 selectedTab = newTab
@@ -71,30 +76,30 @@ class MainTabsFragment : Fragment() {
     }
 
     private fun showCurrentTab() {
-        val tag = if (selectedTab == MainTab.VPN) VPN_TAG else APPS_TAG
         val fragmentManager = childFragmentManager
-        val targetFragment = fragmentManager.findFragmentByTag(tag) ?: when (selectedTab) {
-            MainTab.VPN -> TunnelListFragment()
-            MainTab.APPS -> TunnelAppsFragment()
-        }
+        val targetTag = selectedTab.tag
+        val targetFragment = fragmentManager.findFragmentByTag(targetTag) ?: createFragmentFor(selectedTab)
         fragmentManager.commit {
             setReorderingAllowed(true)
-            fragmentManager.findFragmentByTag(VPN_TAG)?.let {
-                if (it == targetFragment) show(it) else hide(it)
-            }
-            fragmentManager.findFragmentByTag(APPS_TAG)?.let {
-                if (it == targetFragment) show(it) else hide(it)
+            MainTab.entries.forEach { tab ->
+                fragmentManager.findFragmentByTag(tab.tag)?.let { existing ->
+                    if (existing === targetFragment) show(existing) else hide(existing)
+                }
             }
             if (targetFragment.isAdded)
                 show(targetFragment)
             else
-                add(R.id.main_tab_content, targetFragment, tag)
+                add(R.id.main_tab_content, targetFragment, targetTag)
         }
+    }
+
+    private fun createFragmentFor(tab: MainTab): Fragment = when (tab) {
+        MainTab.VPN -> TunnelListFragment()
+        MainTab.APPS -> TunnelAppsFragment()
+        MainTab.JAIL -> JailFragment()
     }
 
     companion object {
         private const val KEY_SELECTED_TAB = "selected_tab"
-        private const val VPN_TAG = "vpn_tab"
-        private const val APPS_TAG = "apps_tab"
     }
 }

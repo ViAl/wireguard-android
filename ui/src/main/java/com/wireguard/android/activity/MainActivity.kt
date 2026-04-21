@@ -111,7 +111,7 @@ class MainActivity : BaseActivity(), FragmentManager.OnBackStackChangedListener,
     override fun onMainTabChanged(tab: MainTabsFragment.MainTab) {
         selectedMainTab = tab
         invalidateOptionsMenu()
-        if (tab == MainTabsFragment.MainTab.APPS) {
+        if (tab != MainTabsFragment.MainTab.VPN) {
             selectedTunnel = null
             supportFragmentManager.popBackStackImmediate(0, FragmentManager.POP_BACK_STACK_INCLUSIVE)
         }
@@ -125,7 +125,7 @@ class MainActivity : BaseActivity(), FragmentManager.OnBackStackChangedListener,
         if (fragmentManager.isStateSaved) {
             return false
         }
-        if (selectedMainTab == MainTabsFragment.MainTab.APPS) {
+        if (selectedMainTab != MainTabsFragment.MainTab.VPN) {
             fragmentManager.popBackStackImmediate(0, FragmentManager.POP_BACK_STACK_INCLUSIVE)
             return newTunnel == null
         }

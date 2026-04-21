@@ -21,6 +21,7 @@ import com.wireguard.android.backend.Backend
 import com.wireguard.android.backend.GoBackend
 import com.wireguard.android.backend.WgQuickBackend
 import com.wireguard.android.configStore.FileConfigStore
+import com.wireguard.android.jail.JailComponent
 import com.wireguard.android.model.TunnelManager
 import com.wireguard.android.updater.Updater
 import com.wireguard.android.util.RootShell
@@ -48,6 +49,7 @@ class Application : android.app.Application() {
     private lateinit var preferencesDataStore: DataStore<Preferences>
     private lateinit var toolsInstaller: ToolsInstaller
     private lateinit var tunnelManager: TunnelManager
+    private lateinit var jailComponent: JailComponent
 
     override fun attachBaseContext(context: Context) {
         super.attachBaseContext(context)
@@ -108,6 +110,7 @@ class Application : android.app.Application() {
         }
         tunnelManager = TunnelManager(FileConfigStore(applicationContext))
         tunnelManager.onCreate()
+        jailComponent = JailComponent(applicationContext, coroutineScope)
         coroutineScope.launch(Dispatchers.IO) {
             try {
                 backend = determineBackend()
@@ -149,6 +152,8 @@ class Application : android.app.Application() {
         fun getTunnelManager() = get().tunnelManager
 
         fun getCoroutineScope() = get().coroutineScope
+
+        fun getJailComponent() = get().jailComponent
     }
 
     init {
