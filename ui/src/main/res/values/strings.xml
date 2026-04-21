@@ -405,7 +405,7 @@
     <string name="jail_wizard_back">Back</string>
     <string name="jail_wizard_done">Done</string>
     <string name="jail_wizard_step_what_title">What is a work profile?</string>
-    <string name="jail_wizard_step_what_body">A work profile is a separate space on your device with its own app installs and data. On supported devices, Jail can launch Android's managed-profile provisioning flow to create one.</string>
+    <string name="jail_wizard_step_what_body">A work profile is a separate space on your device with its own app installs and data. On supported devices, Jail can launch Android\'s managed-profile provisioning flow to create one.</string>
     <string name="jail_wizard_step_detect_title">Check whether you already have one</string>
     <string name="jail_wizard_step_detect_body">Look for a briefcase badge on app icons, or open Android Settings and search for “Work profile”. Jail reports profile state conservatively: it can detect profile presence, but OEM behavior may limit exact confirmation.</string>
     <string name="jail_wizard_step_install_title">Apps are installed separately</string>
