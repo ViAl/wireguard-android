@@ -405,9 +405,9 @@
     <string name="jail_wizard_back">Back</string>
     <string name="jail_wizard_done">Done</string>
     <string name="jail_wizard_step_what_title">What is a work profile?</string>
-    <string name="jail_wizard_step_what_body">A work profile is a separate space on your device with its own app installs and data. It is created by Android or your organisation — Jail cannot create it for you.</string>
+    <string name="jail_wizard_step_what_body">A work profile is a separate space on your device with its own app installs and data. On supported devices, Jail can launch Android\'s managed-profile provisioning flow to create one.</string>
     <string name="jail_wizard_step_detect_title">Check whether you already have one</string>
-    <string name="jail_wizard_step_detect_body">Look for a briefcase badge on app icons, or open Android Settings and search for \u201CWork profile\u201D. Jail can detect that another profile exists, but cannot always confirm its exact type. If nothing exists, use Settings \u2192 Accounts (or your IT instructions) to add one — not from this screen.</string>
+    <string name="jail_wizard_step_detect_body">Look for a briefcase badge on app icons, or open Android Settings and search for “Work profile”. Jail reports profile state conservatively: it can detect profile presence, but OEM behavior may limit exact confirmation.</string>
     <string name="jail_wizard_step_install_title">Apps are installed separately</string>
     <string name="jail_wizard_step_install_body">Putting an app \u201Cin work\u201D means installing it again inside the work profile. Jail does not move or clone app data automatically.</string>
     <string name="jail_wizard_step_icons_title">Choose the right icon</string>
@@ -519,4 +519,19 @@
     <string name="biometric_prompt_private_key_title">Authenticate to view private key</string>
     <string name="biometric_auth_error">Authentication failure</string>
     <string name="biometric_auth_error_reason">Authentication failure: %s</string>
+    <string name="jail_dpc_receiver_label">Jail work profile admin</string>
+    <string name="jail_provisioning_action_create">Create work profile</string>
+    <string name="jail_provisioning_status_ready">Work profile appears to be ready.</string>
+    <string name="jail_provisioning_status_unsupported">Managed profile provisioning is not supported on this device.</string>
+    <string name="jail_provisioning_status_allowed">You can start managed profile provisioning from here.</string>
+    <string name="jail_provisioning_status_not_allowed">Provisioning is currently not allowed (device policy or OEM restriction).</string>
+    <string name="jail_provisioning_status_not_launchable">Provisioning is allowed by policy, but no compatible Android provisioning activity is available.</string>
+    <string name="jail_provisioning_detail_confirmed">Android confirms this profile is managed.</string>
+    <string name="jail_provisioning_detail_uncertain">A secondary profile was detected and cross-profile signals exist, but managed status cannot be fully confirmed.</string>
+    <string name="jail_provisioning_detail_secondary_profile">A secondary profile exists, but managed status is unknown.</string>
+    <string name="jail_provisioning_detail_none">No secondary profile is currently detected.</string>
+    <string name="jail_provisioning_detail_unsupported">Profile detection is unavailable on this Android version/device.</string>
+    <string name="jail_provisioning_launch_ok">Provisioning flow started. Complete Android setup screens to finish.</string>
+    <string name="jail_provisioning_launch_cancelled">Provisioning was cancelled.</string>
+    <string name="jail_provisioning_launch_failed">Could not launch provisioning on this device.</string>
 </resources>

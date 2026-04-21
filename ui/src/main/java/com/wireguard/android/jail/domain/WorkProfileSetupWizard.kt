@@ -7,7 +7,7 @@ package com.wireguard.android.jail.domain
 import androidx.annotation.StringRes
 import com.wireguard.android.R
 
-/** Static wizard steps (honest guidance only — no automated provisioning). */
+/** Static wizard steps for work-profile setup guidance. */
 object WorkProfileSetupWizard {
     data class Step(val id: String, @StringRes val titleRes: Int, @StringRes val bodyRes: Int)
 
