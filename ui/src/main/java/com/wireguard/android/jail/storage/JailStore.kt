@@ -32,6 +32,9 @@ import org.json.JSONObject
  *    write can refresh the whole cache without racing per-package entries.
  */
 object JailStore {
+
+    /** Cap stored audit JSON size (plan: ~200 most recent snapshots). */
+    private const val MAX_AUDIT_SNAPSHOT_ENTRIES = 200
     private val KEY_SELECTED_APPS = stringSetPreferencesKey("jail_selected_apps")
     private val KEY_AUDIT_SNAPSHOTS = stringPreferencesKey("jail_audit_snapshots")
     private val KEY_JAIL_TUNNEL_NAME = stringPreferencesKey("jail_tunnel_name")
@@ -144,8 +147,17 @@ object JailStore {
         Application.getPreferencesDataStore().edit { prefs ->
             val current = prefs[KEY_AUDIT_SNAPSHOTS]?.let(::decodeSnapshots) ?: emptyMap()
             val next = current.toMutableMap().apply { put(snapshot.packageName, snapshot) }
-            prefs[KEY_AUDIT_SNAPSHOTS] = encodeSnapshots(next)
+            val capped = trimSnapshotsToMax(next)
+            prefs[KEY_AUDIT_SNAPSHOTS] = encodeSnapshots(capped)
         }
+    }
+
+    private fun trimSnapshotsToMax(map: Map<String, AuditSnapshot>): Map<String, AuditSnapshot> {
+        if (map.size <= MAX_AUDIT_SNAPSHOT_ENTRIES) return map
+        return map.entries
+            .sortedByDescending { it.value.generatedAtMillis }
+            .take(MAX_AUDIT_SNAPSHOT_ENTRIES)
+            .associate { it.key to it.value }
     }
 
     /**

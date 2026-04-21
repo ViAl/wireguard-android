@@ -4,6 +4,7 @@
  */
 package com.wireguard.android.jail.system
 
+import android.content.ComponentName
 import android.content.Context
 import android.content.pm.LauncherApps
 import android.os.Build
@@ -65,5 +66,29 @@ open class CrossProfileAppsWrapper(private val context: Context) {
         val profiles = um.userProfiles ?: return null
         val mine = Process.myUserHandle()
         return profiles.firstOrNull { it != mine }
+    }
+
+    /**
+     * Starts the app's main launcher activity in the first non-current user profile (typically
+     * work), if one exists and the app is installed there. Returns `false` if nothing was started.
+     */
+    open fun tryStartMainActivityInOtherProfile(packageName: String): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) return false
+        val handle = otherProfileHandle() ?: return false
+        val launcherApps = context.getSystemService(Context.LAUNCHER_APPS_SERVICE) as? LauncherApps
+            ?: return false
+        val activities = try {
+            launcherApps.getActivityList(packageName, handle)
+        } catch (_: Throwable) {
+            return false
+        }
+        val first = activities.firstOrNull() ?: return false
+        val component: ComponentName = first.componentName
+        return try {
+            launcherApps.startMainActivity(component, handle, null, null)
+            true
+        } catch (_: Throwable) {
+            false
+        }
     }
 }

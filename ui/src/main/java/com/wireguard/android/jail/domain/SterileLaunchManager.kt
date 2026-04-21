@@ -88,6 +88,16 @@ class SterileLaunchManager(
             it == AuditRiskLevel.HIGH || it == AuditRiskLevel.CRITICAL
         } == true
 
+        val heavyReasons = snap?.score?.reasons.orEmpty().filter { it.weight >= 25 }
+        if (heavyReasons.isNotEmpty()) {
+            items += SterileLaunchCheckItem(
+                id = "heavy_reasons",
+                title = context.getString(R.string.jail_launch_check_heavy_reasons),
+                detail = heavyReasons.joinToString { it.signalId },
+                status = CheckStatus.WARNING,
+            )
+        }
+
         if (preset.warnIfRiskyPermissions) {
             items += SterileLaunchCheckItem(
                 id = "risk",
@@ -135,6 +145,30 @@ class SterileLaunchManager(
 
         return SterileLaunchChecklist(items)
     }
+
+    /**
+     * Opens [packageName] respecting [preset.requiredProfile]. Never silently toggles tunnels.
+     */
+    fun launch(packageName: String, preset: SterileLaunchPreset): SterileLaunchResult =
+        when (preset.requiredProfile) {
+            LaunchProfile.WORK ->
+                if (crossProfile.tryStartMainActivityInOtherProfile(packageName)) {
+                    SterileLaunchResult.Launched(viaWorkProfile = true)
+                } else {
+                    SterileLaunchResult.NeedsUserAction(
+                        context.getString(R.string.jail_launch_work_manual_hint),
+                    )
+                }
+
+            LaunchProfile.MAIN -> launchMainProfile(packageName)
+
+            LaunchProfile.ANY ->
+                if (crossProfile.tryStartMainActivityInOtherProfile(packageName)) {
+                    SterileLaunchResult.Launched(viaWorkProfile = true)
+                } else {
+                    launchMainProfile(packageName)
+                }
+        }
 
     fun launchMainProfile(packageName: String): SterileLaunchResult {
         val pm = context.packageManager

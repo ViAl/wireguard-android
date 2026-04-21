@@ -71,11 +71,28 @@
                 android:orientation="vertical"
                 android:padding="16dp">
 
-                <TextView
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="@string/jail_detail_overall_risk"
-                    android:textAppearance="?attr/textAppearanceTitleSmall" />
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/jail_detail_overall_risk"
+                        android:textAppearance="?attr/textAppearanceTitleSmall" />
+
+                    <ImageButton
+                        android:id="@+id/jail_detail_risk_help"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:contentDescription="@string/jail_detail_risk_help_cd"
+                        android:src="@android:drawable/ic_menu_help"
+                        app:tint="?attr/colorControlNormal" />
+                </LinearLayout>
 
                 <LinearLayout
                     android:layout_width="match_parent"

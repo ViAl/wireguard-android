@@ -92,6 +92,10 @@ class JailAppDetailFragment : Fragment() {
 
         binding.jailDetailRefresh.setOnClickListener { triggerRefresh() }
 
+        binding.jailDetailRiskHelp.setOnClickListener {
+            (parentFragment as? JailFragmentHost)?.openHelp()
+        }
+
         val routingLabels = routingModes.map { getString(it.labelRes()) }
         binding.jailDetailRoutingSpinner.adapter =
             ArrayAdapter(requireContext(), android.R.layout.simple_spinner_dropdown_item, routingLabels)
@@ -223,29 +227,40 @@ class JailAppDetailFragment : Fragment() {
         val binding = binding ?: return
         val selectedMode = routingModes[binding.jailDetailRoutingSpinner.selectedItemPosition.coerceIn(0, routingModes.lastIndex)]
 
-        viewLifecycleOwner.lifecycleScope.launch {
-            val policies = routingPoliciesSnapshot
-            val previouslyManaged = jailManagedPackagesSnapshot
-            val next = policies.toMutableMap()
-            when (selectedMode) {
-                JailTunnelMode.DEFAULT -> next.remove(packageName)
-                else -> next[packageName] = selectedMode
-            }
-
-            when (val result = perAppVpnManager.applyJailRouting(tunnelName, next, previouslyManaged)) {
-                PerAppVpnManager.ApplyResult.Success -> {
-                    JailStore.setRoutingPolicies(next)
-                    Toast.makeText(requireContext(), R.string.jail_detail_routing_applied, Toast.LENGTH_SHORT).show()
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.jail_merge_confirm_title)
+            .setMessage(getString(R.string.jail_detail_routing_merge_tunnel_message, tunnelName))
+            .setNegativeButton(R.string.jail_merge_cancel, null)
+            .setPositiveButton(R.string.jail_merge_continue) { _, _ ->
+                viewLifecycleOwner.lifecycleScope.launch {
+                    performRoutingApply(tunnelName, selectedMode)
                 }
-                is PerAppVpnManager.ApplyResult.Conflict ->
-                    MaterialAlertDialogBuilder(requireContext())
-                        .setTitle(R.string.jail_detail_routing_title)
-                        .setMessage(getString(R.string.jail_detail_routing_conflict, result.message))
-                        .setPositiveButton(android.R.string.ok, null)
-                        .show()
-                PerAppVpnManager.ApplyResult.TunnelNotFound ->
-                    Toast.makeText(requireContext(), R.string.jail_detail_routing_no_tunnel, Toast.LENGTH_SHORT).show()
             }
+            .show()
+    }
+
+    private suspend fun performRoutingApply(tunnelName: String, selectedMode: JailTunnelMode) {
+        val policies = routingPoliciesSnapshot
+        val previouslyManaged = jailManagedPackagesSnapshot
+        val next = policies.toMutableMap()
+        when (selectedMode) {
+            JailTunnelMode.DEFAULT -> next.remove(packageName)
+            else -> next[packageName] = selectedMode
+        }
+
+        when (val result = perAppVpnManager.applyJailRouting(tunnelName, next, previouslyManaged)) {
+            PerAppVpnManager.ApplyResult.Success -> {
+                JailStore.setRoutingPolicies(next)
+                Toast.makeText(requireContext(), R.string.jail_detail_routing_applied, Toast.LENGTH_SHORT).show()
+            }
+            is PerAppVpnManager.ApplyResult.Conflict ->
+                MaterialAlertDialogBuilder(requireContext())
+                    .setTitle(R.string.jail_detail_routing_title)
+                    .setMessage(getString(R.string.jail_detail_routing_conflict, result.message))
+                    .setPositiveButton(android.R.string.ok, null)
+                    .show()
+            PerAppVpnManager.ApplyResult.TunnelNotFound ->
+                Toast.makeText(requireContext(), R.string.jail_detail_routing_no_tunnel, Toast.LENGTH_SHORT).show()
         }
     }
 

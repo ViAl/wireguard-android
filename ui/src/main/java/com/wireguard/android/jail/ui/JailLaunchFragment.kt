@@ -26,7 +26,6 @@ import com.wireguard.android.jail.model.SterileLaunchResult
 import com.wireguard.android.jail.model.JailAppInfo
 import com.wireguard.android.jail.storage.JailStore
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -45,6 +44,7 @@ class JailLaunchFragment : Fragment() {
 
     private var tunnelNames: List<String> = emptyList()
     private var jailedApps: List<JailAppInfo> = emptyList()
+    private var launchPresetsSnapshot: Map<String, SterileLaunchPreset> = emptyMap()
     private var selectedPkg: String? = null
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
@@ -89,7 +89,8 @@ class JailLaunchFragment : Fragment() {
 
         binding.jailLaunchLaunch.setOnClickListener {
             val pkg = selectedPkg ?: return@setOnClickListener
-            when (val r = sterileLaunch.launchMainProfile(pkg)) {
+            val preset = launchPresetsSnapshot[pkg] ?: SterileLaunchPreset.defaultFor(pkg)
+            when (val r = sterileLaunch.launch(pkg, preset)) {
                 is SterileLaunchResult.Launched -> Unit
                 is SterileLaunchResult.Failed ->
                     Snackbar.make(binding.root, r.message, Snackbar.LENGTH_LONG).show()
@@ -116,9 +117,11 @@ class JailLaunchFragment : Fragment() {
                     JailStore.jailTunnelName,
                     JailStore.launchPresets,
                 ) { apps, tunnelName, presets -> Triple(apps, tunnelName, presets) }
-                    .collect { (apps, tunnelName, _) ->
+                    .collect { (apps, tunnelName, presets) ->
                         lifecycleScope.launch {
                             val binding = binding ?: return@launch
+                            launchPresetsSnapshot = presets
+
                             val tunnels = Application.getTunnelManager().getTunnels()
                             tunnelNames = tunnels.map { it.name }
 
@@ -163,7 +166,7 @@ class JailLaunchFragment : Fragment() {
             binding.jailLaunchChecklistText.text = ""
             return
         }
-        val preset = SterileLaunchPreset.defaultFor(pkg)
+        val preset = launchPresetsSnapshot[pkg] ?: SterileLaunchPreset.defaultFor(pkg)
         val selected = jailedApps.any { it.packageName == pkg && it.isSelectedForJail }
         lifecycleScope.launch {
             val checklist = sterileLaunch.buildChecklist(pkg, preset, selected)

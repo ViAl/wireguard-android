@@ -286,6 +286,7 @@
     <string name="jail_confidence_unknown">Unknown</string>
     <string name="jail_detail_title">%1$s audit</string>
     <string name="jail_detail_overall_risk">Overall risk</string>
+    <string name="jail_detail_risk_help_cd">About risk scores</string>
     <string name="jail_detail_score_format">%1$d / %2$d</string>
     <string name="jail_detail_confidence_note">Each signal is tagged with a confidence level. Known signals are observed from the OS; likely signals are inferred from the app\u2019s manifest and may or may not be active right now.</string>
     <string name="jail_detail_reasons_header">Signals contributing to the score</string>
@@ -436,6 +437,8 @@
     <string name="jail_launch_check_work_copy">Work-profile copy available (best-effort detection)</string>
     <string name="jail_launch_check_location">Location services may be on</string>
     <string name="jail_launch_check_battery">Battery optimisation disabled for this app</string>
+    <string name="jail_launch_check_heavy_reasons">Strong audit signals remain (see App detail for weights)</string>
+    <string name="jail_launch_work_manual_hint">Could not open the work-profile copy from here. Open the app from your work launcher (briefcase badge), or change the preset to Main profile.</string>
     <string name="jail_detail_routing_title">Jail routing on your tunnel</string>
     <string name="jail_detail_routing_tunnel_hint">Uses the Jail tunnel name saved on the Launch tab.</string>
     <string name="jail_detail_routing_mode">Routing mode for this app</string>
@@ -447,6 +450,7 @@
     <string name="jail_detail_routing_help_body">Jail routing edits the include/exclude app lists on the tunnel you picked as the Jail tunnel (same lists as the Routing tab). Jail merges your choice with what is already there; if the tunnel is in the wrong split-tunnel mode (include-only vs exclude-only), Android cannot merge automatically — switch mode in Routing, or pick another tunnel.</string>
     <string name="jail_merge_confirm_title">Merge Jail routing?</string>
     <string name="jail_merge_confirm_body">This updates the chosen tunnel\u2019s per-app routing lists. Existing entries from the Routing tab are preserved where possible; Jail only removes entries it previously added when you clear a Jail routing mode.</string>
+    <string name="jail_detail_routing_merge_tunnel_message">This updates \"%1$s\" include/exclude lists. Entries from the Routing tab stay merged; Jail only removes packages it previously managed when you revert a Jail policy.</string>
     <string name="jail_merge_continue">Continue</string>
     <string name="jail_merge_cancel">Cancel</string>
     <string name="jail_mode_default">Default</string>
