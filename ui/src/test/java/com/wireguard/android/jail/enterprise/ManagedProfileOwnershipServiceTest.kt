@@ -30,13 +30,33 @@ class ManagedProfileOwnershipServiceTest {
     }
 
     @Test
-    fun state_managedPresentNotOurs() {
+    fun state_secondaryProfilePresentNotOurs() {
+        val service = ManagedProfileOwnershipService(
+            context = app,
+            detector = fakeDetector(WorkProfileState.SECONDARY_PROFILE_PRESENT),
+            systemApi = fakeSystemApi(false),
+        )
+        assertEquals(ManagedProfileOwnershipState.SECONDARY_PROFILE_PRESENT_NOT_OURS, service.state())
+    }
+
+    @Test
+    fun state_managedConfirmedNotOurs() {
+        val service = ManagedProfileOwnershipService(
+            context = app,
+            detector = fakeDetector(WorkProfileState.MANAGED_PROFILE_CONFIRMED),
+            systemApi = fakeSystemApi(false),
+        )
+        assertEquals(ManagedProfileOwnershipState.MANAGED_PROFILE_PRESENT_NOT_OURS, service.state())
+    }
+
+    @Test
+    fun state_managedUncertainNotOurs() {
         val service = ManagedProfileOwnershipService(
             context = app,
             detector = fakeDetector(WorkProfileState.MANAGED_PROFILE_UNCERTAIN),
             systemApi = fakeSystemApi(false),
         )
-        assertEquals(ManagedProfileOwnershipState.MANAGED_PROFILE_PRESENT_NOT_OURS, service.state())
+        assertEquals(ManagedProfileOwnershipState.OWNERSHIP_UNCERTAIN, service.state())
     }
 
     @Test

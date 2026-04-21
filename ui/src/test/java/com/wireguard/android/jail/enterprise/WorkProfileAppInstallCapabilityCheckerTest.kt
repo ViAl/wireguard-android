@@ -35,14 +35,14 @@ class WorkProfileAppInstallCapabilityCheckerTest {
     @Test
     fun capability_manualFallbackWhenNotOwned() {
         val checker = checker(
-            ownership = ManagedProfileOwnershipState.MANAGED_PROFILE_PRESENT_NOT_OURS,
+            ownership = ManagedProfileOwnershipState.SECONDARY_PROFILE_PRESENT_NOT_OURS,
             inParent = true,
             inWork = false,
             fallback = true,
         )
         val capability = checker.capabilityFor(PKG)
         assertEquals(WorkProfileAppAvailability.REQUIRES_MANUAL_INSTALL, capability.availability)
-        assertEquals(WorkProfileAppAction.OPEN_STORE_IN_WORK, capability.action)
+        assertEquals(WorkProfileAppAction.OPEN_STORE_MANUALLY, capability.action)
     }
 
     @Test

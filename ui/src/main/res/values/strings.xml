@@ -541,7 +541,7 @@
     <string name="jail_detail_work_profile_state_unavailable">Work-profile install is unavailable</string>
     <string name="jail_detail_work_profile_action_open">Open in work profile</string>
     <string name="jail_detail_work_profile_action_install">Install automatically</string>
-    <string name="jail_detail_work_profile_action_store">Open store in work profile</string>
+    <string name="jail_detail_work_profile_action_store">Open store manually</string>
     <string name="jail_detail_work_profile_action_unavailable">Unavailable</string>
     <string name="jail_detail_work_profile_result_installed">Installed in work profile.</string>
     <string name="jail_detail_work_profile_result_already">Already installed in work profile.</string>

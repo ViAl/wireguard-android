@@ -7,6 +7,6 @@ package com.wireguard.android.jail.model
 enum class WorkProfileAppAction {
     OPEN_IN_WORK,
     INSTALL_AUTOMATICALLY,
-    OPEN_STORE_IN_WORK,
+    OPEN_STORE_MANUALLY,
     NONE,
 }

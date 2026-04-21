@@ -112,7 +112,7 @@ class WorkProfileAppInstallServiceTest {
         action = when {
             installedInWork -> WorkProfileAppAction.OPEN_IN_WORK
             canAuto -> WorkProfileAppAction.INSTALL_AUTOMATICALLY
-            canFallback -> WorkProfileAppAction.OPEN_STORE_IN_WORK
+            canFallback -> WorkProfileAppAction.OPEN_STORE_MANUALLY
             else -> WorkProfileAppAction.NONE
         },
     )

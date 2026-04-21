@@ -12,6 +12,9 @@ import com.wireguard.android.jail.system.ManagedProfileDetector
 
 /**
  * Ownership/environment checks for managed profile operations.
+ *
+ * This service intentionally separates "secondary profile present" from "managed profile
+ * confirmed" to avoid overclaiming enterprise state.
  */
 class ManagedProfileOwnershipService(
     context: Context,
@@ -23,21 +26,20 @@ class ManagedProfileOwnershipService(
     override fun state(): ManagedProfileOwnershipState {
         val profileState = runCatching { detector.detectState() }
             .getOrElse { return ManagedProfileOwnershipState.OWNERSHIP_UNCERTAIN }
-        val secondaryExists = profileState != WorkProfileState.NO_SECONDARY_PROFILE &&
-            profileState != WorkProfileState.UNSUPPORTED
-
         if (profileState == WorkProfileState.UNSUPPORTED) return ManagedProfileOwnershipState.UNSUPPORTED
-        if (!secondaryExists) return ManagedProfileOwnershipState.NO_MANAGED_PROFILE
+        if (profileState == WorkProfileState.NO_SECONDARY_PROFILE) return ManagedProfileOwnershipState.NO_MANAGED_PROFILE
 
         val profileOwner = runCatching { systemApi.isProfileOwnerApp(appPackageName) }.getOrNull()
             ?: return ManagedProfileOwnershipState.OWNERSHIP_UNCERTAIN
 
         return when {
             profileOwner -> ManagedProfileOwnershipState.MANAGED_PROFILE_OURS
-            profileState == WorkProfileState.MANAGED_PROFILE_CONFIRMED ||
-                profileState == WorkProfileState.MANAGED_PROFILE_UNCERTAIN ||
-                profileState == WorkProfileState.SECONDARY_PROFILE_PRESENT ->
+            profileState == WorkProfileState.MANAGED_PROFILE_CONFIRMED ->
                 ManagedProfileOwnershipState.MANAGED_PROFILE_PRESENT_NOT_OURS
+            profileState == WorkProfileState.SECONDARY_PROFILE_PRESENT ->
+                ManagedProfileOwnershipState.SECONDARY_PROFILE_PRESENT_NOT_OURS
+            profileState == WorkProfileState.MANAGED_PROFILE_UNCERTAIN ->
+                ManagedProfileOwnershipState.OWNERSHIP_UNCERTAIN
             else -> ManagedProfileOwnershipState.OWNERSHIP_UNCERTAIN
         }
     }

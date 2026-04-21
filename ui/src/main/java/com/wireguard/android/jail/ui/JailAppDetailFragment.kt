@@ -210,7 +210,7 @@ class JailAppDetailFragment : Fragment() {
         binding.jailDetailWorkProfileState.text = when (entry.action) {
             WorkProfileAppAction.OPEN_IN_WORK -> getString(R.string.jail_detail_work_profile_state_installed)
             WorkProfileAppAction.INSTALL_AUTOMATICALLY -> getString(R.string.jail_detail_work_profile_state_auto)
-            WorkProfileAppAction.OPEN_STORE_IN_WORK -> getString(R.string.jail_detail_work_profile_state_manual)
+            WorkProfileAppAction.OPEN_STORE_MANUALLY -> getString(R.string.jail_detail_work_profile_state_manual)
             WorkProfileAppAction.NONE -> getString(R.string.jail_detail_work_profile_state_unavailable)
         }
         binding.jailDetailWorkProfileReason.text = entry.actionReason.orEmpty()
@@ -219,12 +219,12 @@ class JailAppDetailFragment : Fragment() {
         binding.jailDetailWorkProfileAction.text = when (entry.action) {
             WorkProfileAppAction.OPEN_IN_WORK -> getString(R.string.jail_detail_work_profile_action_unavailable)
             WorkProfileAppAction.INSTALL_AUTOMATICALLY -> getString(R.string.jail_detail_work_profile_action_install)
-            WorkProfileAppAction.OPEN_STORE_IN_WORK -> getString(R.string.jail_detail_work_profile_action_store)
+            WorkProfileAppAction.OPEN_STORE_MANUALLY -> getString(R.string.jail_detail_work_profile_action_store)
             WorkProfileAppAction.NONE -> getString(R.string.jail_detail_work_profile_action_unavailable)
         }
         binding.jailDetailWorkProfileAction.isEnabled =
             entry.action == WorkProfileAppAction.INSTALL_AUTOMATICALLY ||
-                entry.action == WorkProfileAppAction.OPEN_STORE_IN_WORK
+                entry.action == WorkProfileAppAction.OPEN_STORE_MANUALLY
         binding.jailDetailWorkProfileAction.tag = entry.action
     }
 
@@ -232,7 +232,7 @@ class JailAppDetailFragment : Fragment() {
         val action = (binding?.jailDetailWorkProfileAction?.tag as? WorkProfileAppAction) ?: return
         val result = when (action) {
             WorkProfileAppAction.INSTALL_AUTOMATICALLY -> workProfileInstallService.install(packageName)
-            WorkProfileAppAction.OPEN_STORE_IN_WORK -> workProfileInstallService.launchManualInstall(packageName)
+            WorkProfileAppAction.OPEN_STORE_MANUALLY -> workProfileInstallService.launchManualInstall(packageName)
             WorkProfileAppAction.OPEN_IN_WORK -> InstallResult.AlreadyInstalled
             WorkProfileAppAction.NONE -> return
         }

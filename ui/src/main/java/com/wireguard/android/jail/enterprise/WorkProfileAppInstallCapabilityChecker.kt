@@ -68,9 +68,12 @@ open class WorkProfileAppInstallCapabilityChecker(
                 canInstallAutomatically = false,
                 canLaunchManualFallback = true,
                 availability = WorkProfileAppAvailability.REQUIRES_MANUAL_INSTALL,
-                action = WorkProfileAppAction.OPEN_STORE_IN_WORK,
+                action = WorkProfileAppAction.OPEN_STORE_MANUALLY,
                 reason = when (ownership) {
-                    ManagedProfileOwnershipState.MANAGED_PROFILE_PRESENT_NOT_OURS -> "Profile is not owned by this app"
+                    ManagedProfileOwnershipState.MANAGED_PROFILE_PRESENT_NOT_OURS ->
+                        "Managed profile is not owned by this app"
+                    ManagedProfileOwnershipState.SECONDARY_PROFILE_PRESENT_NOT_OURS ->
+                        "Secondary profile is present, but managed ownership is not confirmed"
                     ManagedProfileOwnershipState.NO_MANAGED_PROFILE -> "No managed profile detected"
                     ManagedProfileOwnershipState.UNSUPPORTED -> "Managed profile APIs unsupported"
                     ManagedProfileOwnershipState.OWNERSHIP_UNCERTAIN -> "Ownership could not be verified"
