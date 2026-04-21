@@ -4,11 +4,14 @@
  */
 package com.wireguard.android.jail.storage
 
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import com.wireguard.android.Application
 import com.wireguard.android.jail.model.AuditSnapshot
+import com.wireguard.android.jail.model.JailTunnelMode
+import com.wireguard.android.jail.model.SterileLaunchPreset
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import org.json.JSONException
@@ -31,14 +34,91 @@ import org.json.JSONObject
 object JailStore {
     private val KEY_SELECTED_APPS = stringSetPreferencesKey("jail_selected_apps")
     private val KEY_AUDIT_SNAPSHOTS = stringPreferencesKey("jail_audit_snapshots")
+    private val KEY_JAIL_TUNNEL_NAME = stringPreferencesKey("jail_tunnel_name")
+    private val KEY_ROUTING_POLICIES = stringPreferencesKey("jail_routing_policies")
+    private val KEY_JAIL_MANAGED_PACKAGES = stringSetPreferencesKey("jail_managed_packages")
+    private val KEY_LAUNCH_PRESETS = stringPreferencesKey("jail_launch_presets")
+    private val KEY_SETUP_STEPS = stringSetPreferencesKey("jail_setup_completed_steps")
+    private val KEY_ONBOARDING_COMPLETED = booleanPreferencesKey("jail_onboarding_completed")
 
     val selectedApps: Flow<Set<String>>
         get() = Application.getPreferencesDataStore().data.map { it[KEY_SELECTED_APPS] ?: emptySet() }
+
+    val jailTunnelName: Flow<String?>
+        get() = Application.getPreferencesDataStore().data.map { it[KEY_JAIL_TUNNEL_NAME] }
+
+    val routingPolicies: Flow<Map<String, JailTunnelMode>>
+        get() = Application.getPreferencesDataStore().data.map { prefs ->
+            RoutingPolicyCodec.decode(prefs[KEY_ROUTING_POLICIES])
+        }
+
+    val jailManagedPackages: Flow<Set<String>>
+        get() = Application.getPreferencesDataStore().data.map { it[KEY_JAIL_MANAGED_PACKAGES] ?: emptySet() }
+
+    val launchPresets: Flow<Map<String, SterileLaunchPreset>>
+        get() = Application.getPreferencesDataStore().data.map { prefs ->
+            LaunchPresetCodec.decode(prefs[KEY_LAUNCH_PRESETS])
+        }
+
+    val setupCompletedSteps: Flow<Set<String>>
+        get() = Application.getPreferencesDataStore().data.map { it[KEY_SETUP_STEPS] ?: emptySet() }
+
+    val onboardingCompleted: Flow<Boolean>
+        get() = Application.getPreferencesDataStore().data.map { it[KEY_ONBOARDING_COMPLETED] == true }
 
     suspend fun setSelectedApps(packages: Set<String>) {
         Application.getPreferencesDataStore().edit { prefs ->
             if (packages.isEmpty()) prefs.remove(KEY_SELECTED_APPS)
             else prefs[KEY_SELECTED_APPS] = packages
+        }
+    }
+
+    suspend fun setJailTunnelName(name: String?) {
+        Application.getPreferencesDataStore().edit { prefs ->
+            if (name.isNullOrBlank()) prefs.remove(KEY_JAIL_TUNNEL_NAME)
+            else prefs[KEY_JAIL_TUNNEL_NAME] = name
+        }
+    }
+
+    suspend fun setRoutingPolicies(policies: Map<String, JailTunnelMode>) {
+        Application.getPreferencesDataStore().edit { prefs ->
+            if (policies.isEmpty()) prefs.remove(KEY_ROUTING_POLICIES)
+            else prefs[KEY_ROUTING_POLICIES] = RoutingPolicyCodec.encode(policies)
+        }
+    }
+
+    suspend fun setJailManagedPackages(packages: Set<String>) {
+        Application.getPreferencesDataStore().edit { prefs ->
+            if (packages.isEmpty()) prefs.remove(KEY_JAIL_MANAGED_PACKAGES)
+            else prefs[KEY_JAIL_MANAGED_PACKAGES] = packages
+        }
+    }
+
+    suspend fun setLaunchPresets(presets: Map<String, SterileLaunchPreset>) {
+        Application.getPreferencesDataStore().edit { prefs ->
+            if (presets.isEmpty()) prefs.remove(KEY_LAUNCH_PRESETS)
+            else prefs[KEY_LAUNCH_PRESETS] = LaunchPresetCodec.encode(presets)
+        }
+    }
+
+    suspend fun updateLaunchPreset(preset: SterileLaunchPreset) {
+        Application.getPreferencesDataStore().edit { prefs ->
+            val current = LaunchPresetCodec.decode(prefs[KEY_LAUNCH_PRESETS]).toMutableMap()
+            current[preset.packageName] = preset
+            prefs[KEY_LAUNCH_PRESETS] = LaunchPresetCodec.encode(current)
+        }
+    }
+
+    suspend fun setSetupCompletedSteps(steps: Set<String>) {
+        Application.getPreferencesDataStore().edit { prefs ->
+            if (steps.isEmpty()) prefs.remove(KEY_SETUP_STEPS)
+            else prefs[KEY_SETUP_STEPS] = steps
+        }
+    }
+
+    suspend fun setOnboardingCompleted(done: Boolean) {
+        Application.getPreferencesDataStore().edit { prefs ->
+            prefs[KEY_ONBOARDING_COMPLETED] = done
         }
     }
 

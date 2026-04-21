@@ -110,7 +110,7 @@ class Application : android.app.Application() {
         }
         tunnelManager = TunnelManager(FileConfigStore(applicationContext))
         tunnelManager.onCreate()
-        jailComponent = JailComponent(applicationContext, coroutineScope)
+        jailComponent = JailComponent(applicationContext, coroutineScope, tunnelManager)
         coroutineScope.launch(Dispatchers.IO) {
             try {
                 backend = determineBackend()
