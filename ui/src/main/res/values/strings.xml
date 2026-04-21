@@ -534,4 +534,18 @@
     <string name="jail_provisioning_launch_ok">Provisioning flow started. Complete Android setup screens to finish.</string>
     <string name="jail_provisioning_launch_cancelled">Provisioning was cancelled.</string>
     <string name="jail_provisioning_launch_failed">Could not launch provisioning on this device.</string>
+    <string name="jail_detail_work_profile_title">Work profile app availability</string>
+    <string name="jail_detail_work_profile_state_installed">Installed in work profile</string>
+    <string name="jail_detail_work_profile_state_auto">Automatic install is available</string>
+    <string name="jail_detail_work_profile_state_manual">Manual install is required</string>
+    <string name="jail_detail_work_profile_state_unavailable">Work-profile install is unavailable</string>
+    <string name="jail_detail_work_profile_action_open">Open in work profile</string>
+    <string name="jail_detail_work_profile_action_install">Install automatically</string>
+    <string name="jail_detail_work_profile_action_store">Open store manually</string>
+    <string name="jail_detail_work_profile_action_unavailable">Unavailable</string>
+    <string name="jail_detail_work_profile_result_installed">Installed in work profile.</string>
+    <string name="jail_detail_work_profile_result_already">Already installed in work profile.</string>
+    <string name="jail_detail_work_profile_result_manual">Manual action required to finish installation.</string>
+    <string name="jail_detail_work_profile_result_unsupported">Automatic install is unsupported in this profile state.</string>
+    <string name="jail_detail_work_profile_result_failed">Work-profile operation failed.</string>
 </resources>
