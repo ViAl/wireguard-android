@@ -6,6 +6,7 @@ package com.wireguard.android.jail.enterprise
 
 import android.app.Application
 import android.app.PendingIntent
+import android.content.ComponentName
 import android.content.Intent
 import android.content.IntentSender
 import android.os.UserHandle
@@ -82,6 +83,23 @@ class AndroidWorkProfileMarketLauncherTest {
         assertFalse(launcher.launchInWorkProfile(PKG))
     }
 
+    @Test
+    fun launchInWorkProfile_fallsBackToStartMainActivityWhenIntentSenderUnavailable() {
+        val launcher = AndroidWorkProfileMarketLauncher(
+            context = app,
+            bridge = FakeBridge(
+                profiles = listOf(appUserHandle()),
+                sender = null,
+                hasAppMarketActivity = true,
+                startMainActivityResult = true,
+            ),
+            launchIntentSender = { false },
+        )
+
+        assertTrue(launcher.canLaunchInWorkProfile(PKG))
+        assertTrue(launcher.launchInWorkProfile(PKG))
+    }
+
     private fun pendingIntentSender(): IntentSender = PendingIntent.getActivity(
         app,
         0,
@@ -94,6 +112,8 @@ class AndroidWorkProfileMarketLauncherTest {
     private class FakeBridge(
         private val profiles: List<UserHandle>,
         private val sender: IntentSender?,
+        private val hasAppMarketActivity: Boolean = false,
+        private val startMainActivityResult: Boolean = false,
     ) : LauncherAppsBridge {
         override fun otherProfiles(): List<UserHandle> = profiles
 
@@ -101,6 +121,12 @@ class AndroidWorkProfileMarketLauncherTest {
             packageName: String,
             targetProfile: UserHandle,
         ): IntentSender? = sender
+
+        override fun findAppMarketActivity(targetProfile: UserHandle): ComponentName? =
+            if (hasAppMarketActivity) ComponentName("com.android.vending", "FakePlayStoreActivity") else null
+
+        override fun startMainActivity(activity: ComponentName, targetProfile: UserHandle): Boolean =
+            startMainActivityResult
     }
 
     companion object {
