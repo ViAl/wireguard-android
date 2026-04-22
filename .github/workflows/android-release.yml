@@ -156,6 +156,7 @@ jobs:
           name: wireguard-android-apk-${{ github.run_id }}
           path: ${{ steps.sign.outputs.final_apk || steps.final.outputs.final_apk }}
           if-no-files-found: error
+          retention-days: 3
 
       - name: Optionally push APK to artifacts branch
         if: ${{ github.event_name != 'pull_request' && ((github.event_name == 'workflow_dispatch' && inputs.push_to_artifacts_branch) || vars.PUSH_ARTIFACTS_BRANCH == 'true') }}
