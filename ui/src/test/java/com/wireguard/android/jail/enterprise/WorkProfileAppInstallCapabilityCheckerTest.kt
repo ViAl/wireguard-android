@@ -109,17 +109,33 @@ class WorkProfileAppInstallCapabilityCheckerTest {
         assertEquals(WorkProfileInstallEnvironmentReason.NO_FALLBACK_AVAILABLE, capability.environment.environmentReason)
     }
 
+    @Test
+    fun capability_manualAvailableWhenLegacyDeepLinkFallbackIsRunnable() {
+        val checker = checker(
+            ownership = ManagedProfileOwnershipState.SECONDARY_PROFILE_PRESENT_NOT_OURS,
+            inParent = true,
+            inWork = false,
+            fallback = true,
+            sdkInt = 34,
+            hasTargetProfiles = false,
+        )
+        val capability = checker.capabilityFor(PKG)
+        assertEquals(WorkProfileAppAvailability.REQUIRES_MANUAL_INSTALL, capability.availability)
+        assertEquals(WorkProfileAppAction.OPEN_STORE_MANUALLY, capability.action)
+    }
+
     private fun checker(
         ownership: ManagedProfileOwnershipState,
         inParent: Boolean,
         inWork: Boolean,
         fallback: Boolean,
         sdkInt: Int,
+        hasTargetProfiles: Boolean = true,
     ): WorkProfileAppInstallCapabilityChecker {
         val packageInspector = object : WorkProfileAppInstallCapabilityChecker.PackageInspector {
             override fun isInstalledInParent(packageName: String): Boolean = inParent
             override fun isInstalledInWorkProfile(packageName: String): Boolean = inWork
-            override fun hasTargetProfiles(): Boolean = true
+            override fun hasTargetProfiles(): Boolean = hasTargetProfiles
             override fun appLabel(packageName: String): String = "Label"
         }
         val fallbackLauncher = object : WorkProfileAppInstallCapabilityChecker.FallbackLauncher {

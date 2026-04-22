@@ -41,19 +41,35 @@ class AndroidWorkProfileMarketLauncher(
         }.getOrDefault(false)
     },
 ) : WorkProfileMarketLauncher {
-    override fun canLaunchInWorkProfile(packageName: String): Boolean =
-        targetProfile()?.let { profile ->
-            canLaunchViaAppMarketIntentSender(packageName, profile) ||
-                canLaunchViaWorkProfileMainActivity(profile)
-        } ?: false
+    override fun canLaunchInWorkProfile(packageName: String): Boolean {
+        if (isAppMarketIntentApiSupported()) {
+            val profile = targetProfile() ?: return false
+            return canLaunchViaAppMarketIntentSender(packageName, profile)
+        }
 
-    override fun launchInWorkProfile(packageName: String): Boolean {
-        val profile = targetProfile() ?: return false
-        if (launchViaAppMarketIntentSender(packageName, profile)) return true
-
-        return launchViaLegacyPath(packageName, profile)
+        return canLaunchViaDeepLink(packageName) || targetProfile()?.let { profile ->
+            canLaunchViaWorkProfileMainActivity(profile)
+        } == true
     }
 
+    override fun launchInWorkProfile(packageName: String): Boolean {
+        if (isAppMarketIntentApiSupported()) {
+            val profile = targetProfile() ?: return false
+            return launchViaAppMarketIntentSender(packageName, profile)
+        }
+
+        // Best-effort details deep link in current profile (cannot enforce cross-profile here).
+        if (launchViaDeepLink(packageName)) return true
+
+        // Guaranteed cross-profile fallback when another profile is available.
+        val profile = targetProfile() ?: return false
+        return launchViaWorkProfileMainActivity(profile)
+    }
+
+    /**
+     * Selects the first non-current profile exposed to this app.
+     * This is a practical fallback target; it does not prove managed-profile ownership.
+     */
     private fun targetProfile(): UserHandle? = bridge.otherProfiles().firstOrNull()
 
     private fun canLaunchViaAppMarketIntentSender(packageName: String, profile: UserHandle): Boolean {
@@ -72,17 +88,22 @@ class AndroidWorkProfileMarketLauncher(
         return bridge.findPlayStoreMainActivity(profile) != null
     }
 
-    private fun launchViaLegacyPath(packageName: String, profile: UserHandle): Boolean {
+    private fun launchViaDeepLink(packageName: String): Boolean {
         if (isAppMarketIntentApiSupported()) return false
 
-        // Best-effort details deep link in current profile (cannot enforce cross-profile here).
-        val deepLinkLaunched = deepLinkIntents(packageName)
+        return deepLinkIntents(packageName)
             .firstOrNull { it.resolveActivity(packageManager) != null }
             ?.let { bridge.startActivity(it) }
             ?: false
-        if (deepLinkLaunched) return true
+    }
 
-        // Guaranteed cross-profile fallback: open Play Store home in target profile.
+    private fun canLaunchViaDeepLink(packageName: String): Boolean {
+        if (isAppMarketIntentApiSupported()) return false
+        return deepLinkIntents(packageName).any { it.resolveActivity(packageManager) != null }
+    }
+
+    private fun launchViaWorkProfileMainActivity(profile: UserHandle): Boolean {
+        if (isAppMarketIntentApiSupported()) return false
         val playStoreMain = bridge.findPlayStoreMainActivity(profile) ?: return false
         return bridge.startMainActivity(playStoreMain, profile)
     }

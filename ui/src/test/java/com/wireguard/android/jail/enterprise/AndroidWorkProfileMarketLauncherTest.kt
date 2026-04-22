@@ -144,7 +144,7 @@ class AndroidWorkProfileMarketLauncherTest {
 
     @Config(sdk = [34])
     @Test
-    fun launchInWorkProfile_oldApiUnavailableWhenNoWorkProfileMainActivity() {
+    fun launchInWorkProfile_oldApi_stillAvailableWhenOnlyDeepLinkIsResolvable() {
         makePlayStoreIntentResolvable()
         val bridge = FakeBridge(
             profiles = listOf(appUserHandle()),
@@ -160,8 +160,10 @@ class AndroidWorkProfileMarketLauncherTest {
             launchIntentSender = { false },
         )
 
-        assertFalse(launcher.canLaunchInWorkProfile(PKG))
+        assertTrue(launcher.canLaunchInWorkProfile(PKG))
         assertFalse(launcher.launchInWorkProfile(PKG))
+        assertEquals(1, bridge.startActivityCalls)
+        assertEquals(0, bridge.startMainActivityCalls)
     }
 
     @Config(sdk = [34])
@@ -185,6 +187,53 @@ class AndroidWorkProfileMarketLauncherTest {
         assertTrue(launcher.launchInWorkProfile(PKG))
         assertEquals(0, bridge.startActivityCalls)
         assertEquals(1, bridge.startMainActivityCalls)
+    }
+
+    @Config(sdk = [34])
+    @Test
+    fun launchInWorkProfile_oldApi_availableAndLaunchesViaDeepLinkWithoutTargetProfile() {
+        makePlayStoreIntentResolvable()
+        val bridge = FakeBridge(
+            profiles = emptyList(),
+            sender = null,
+            playStoreMainComponent = null,
+            deepLinkStartResult = true,
+            startMainActivityResult = false,
+        )
+        val launcher = AndroidWorkProfileMarketLauncher(
+            context = app,
+            packageManager = app.packageManager,
+            bridge = bridge,
+            launchIntentSender = { false },
+        )
+
+        assertTrue(launcher.canLaunchInWorkProfile(PKG))
+        assertTrue(launcher.launchInWorkProfile(PKG))
+        assertEquals(1, bridge.startActivityCalls)
+        assertEquals(0, bridge.startMainActivityCalls)
+    }
+
+    @Config(sdk = [34])
+    @Test
+    fun launchInWorkProfile_oldApi_unavailableWhenNoDeepLinkAndNoMainActivityPath() {
+        val bridge = FakeBridge(
+            profiles = emptyList(),
+            sender = null,
+            playStoreMainComponent = null,
+            deepLinkStartResult = false,
+            startMainActivityResult = false,
+        )
+        val launcher = AndroidWorkProfileMarketLauncher(
+            context = app,
+            packageManager = app.packageManager,
+            bridge = bridge,
+            launchIntentSender = { false },
+        )
+
+        assertFalse(launcher.canLaunchInWorkProfile(PKG))
+        assertFalse(launcher.launchInWorkProfile(PKG))
+        assertEquals(0, bridge.startActivityCalls)
+        assertEquals(0, bridge.startMainActivityCalls)
     }
 
     private fun pendingIntentSender(): IntentSender = PendingIntent.getActivity(
