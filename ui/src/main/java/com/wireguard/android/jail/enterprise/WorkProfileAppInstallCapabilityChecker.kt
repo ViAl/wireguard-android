@@ -178,8 +178,8 @@ open class WorkProfileAppInstallCapabilityChecker(
                 WorkProfileInstallGuide.playStoreHttpsIntent(packageName),
             ).map { it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
 
-            val candidate = intents.firstOrNull { resolvable(it) } ?: return false
-            return runCatching {
+            val candidate = intents.firstOrNull { resolvable(it) }
+            return candidate != null && runCatching {
                 appContext.startActivity(candidate)
                 true
             }.getOrDefault(false)
