@@ -171,6 +171,7 @@ open class WorkProfileAppInstallCapabilityChecker(
         }
 
         override fun launchStoreIntent(packageName: String): Boolean {
+            if (launchStoreDetailsInOtherProfile(packageName)) return true
             if (launchStoreInOtherProfile()) return true
 
             val intents = listOf(
@@ -183,6 +184,26 @@ open class WorkProfileAppInstallCapabilityChecker(
                 appContext.startActivity(candidate)
                 true
             }.getOrDefault(false)
+        }
+
+        private fun launchStoreDetailsInOtherProfile(packageName: String): Boolean {
+            val detailsIntents = listOf(
+                WorkProfileInstallGuide.playStoreDetailsIntent(packageName),
+                WorkProfileInstallGuide.playStoreHttpsIntent(packageName),
+            )
+            return otherProfiles().any { profile ->
+                detailsIntents.any { baseIntent ->
+                    val intent = Intent(baseIntent).apply {
+                        setPackage(PLAY_STORE_PACKAGE)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        putExtra(EXTRA_USER, profile)
+                    }
+                    runCatching {
+                        appContext.startActivity(intent)
+                        true
+                    }.getOrDefault(false)
+                }
+            }
         }
 
         private fun canLaunchStoreInOtherProfile(): Boolean =
@@ -211,6 +232,7 @@ open class WorkProfileAppInstallCapabilityChecker(
 
         private companion object {
             const val PLAY_STORE_PACKAGE = "com.android.vending"
+            const val EXTRA_USER = "android.intent.extra.USER"
         }
     }
 }
