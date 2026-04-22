@@ -537,11 +537,19 @@
     <string name="jail_detail_work_profile_state_auto">Automatic install is available</string>
     <string name="jail_detail_work_profile_state_manual">Manual install is required</string>
     <string name="jail_detail_work_profile_state_unavailable">Work-profile install is unavailable</string>
+    <string name="jail_detail_work_profile_state_waiting_user">Waiting for manual installation to complete</string>
+    <string name="jail_detail_work_profile_state_verifying">Checking work-profile app state</string>
+    <string name="jail_detail_work_profile_state_installed_detected">App detected in work profile</string>
+    <string name="jail_detail_work_profile_state_failed">Install attempt did not complete successfully</string>
     <string name="jail_detail_work_profile_action_open">Open in work profile</string>
     <string name="jail_detail_work_profile_action_installed">Installed</string>
     <string name="jail_detail_work_profile_action_install">Install automatically</string>
     <string name="jail_detail_work_profile_action_store">Open store manually</string>
     <string name="jail_detail_work_profile_action_unavailable">Unavailable</string>
+    <string name="jail_detail_work_profile_action_checking">Checking…</string>
+    <string name="jail_detail_work_profile_action_check_again">Check again</string>
+    <string name="jail_detail_work_profile_action_retry_auto">Retry automatic install</string>
+    <string name="jail_detail_work_profile_action_retry_manual">Retry manual flow</string>
     <string name="jail_detail_work_profile_result_installed">Installed in work profile.</string>
     <string name="jail_detail_work_profile_result_already">Already installed in work profile.</string>
     <string name="jail_detail_work_profile_result_manual">Manual action required to finish installation.</string>
@@ -558,4 +566,8 @@
     <string name="jail_detail_work_profile_reason_manual_only">Automatic install is not available in this environment; manual store install is the supported path.</string>
     <string name="jail_detail_work_profile_reason_no_path">No supported automatic or manual install path is currently available.</string>
     <string name="jail_detail_work_profile_reason_unknown">Install environment could not be diagnosed reliably.</string>
+    <string name="jail_detail_work_profile_reason_verifying">Checking whether the app is now installed in the work profile.</string>
+    <string name="jail_detail_work_profile_reason_still_not_visible">Still not visible in the work profile.</string>
+    <string name="jail_detail_work_profile_reason_detected">The app is now visible in the work profile.</string>
+    <string name="jail_detail_work_profile_reason_failed">Install attempt failed. You can retry.</string>
 </resources>

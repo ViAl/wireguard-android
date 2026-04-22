@@ -29,14 +29,13 @@ import com.wireguard.android.jail.domain.JailAppRepository
 import com.wireguard.android.jail.domain.JailAuditRepository
 import com.wireguard.android.jail.domain.PerAppVpnManager
 import com.wireguard.android.jail.enterprise.WorkProfileAppCatalogService
-import com.wireguard.android.jail.enterprise.WorkProfileAppInstallService
 import com.wireguard.android.jail.model.AuditSnapshot
-import com.wireguard.android.jail.model.InstallResult
 import com.wireguard.android.jail.model.JailAppInfo
 import com.wireguard.android.jail.model.JailTunnelMode
 import com.wireguard.android.jail.model.RiskReason
 import com.wireguard.android.jail.model.WorkProfileAppAction
 import com.wireguard.android.jail.model.WorkProfileInstallEnvironmentReason
+import com.wireguard.android.jail.model.WorkProfileInstallSessionState
 import com.wireguard.android.jail.storage.JailStore
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
@@ -65,13 +64,14 @@ class JailAppDetailFragment : Fragment() {
         get() = Application.getJailComponent().perAppVpnManager
     private val workProfileCatalogService: WorkProfileAppCatalogService
         get() = Application.getJailComponent().workProfileCatalogService
-    private val workProfileInstallService: WorkProfileAppInstallService
-        get() = Application.getJailComponent().workProfileInstallService
+    private val workProfileInstallSessionManager
+        get() = Application.getJailComponent().workProfileInstallSessionManager
 
     /** Latest routing snapshot for Apply (tunnel name + merge baseline). */
     private var routingPoliciesSnapshot: Map<String, JailTunnelMode> = emptyMap()
     private var jailTunnelNameSnapshot: String? = null
     private var jailManagedPackagesSnapshot: Set<String> = emptySet()
+    private var workProfileInstallSessionState: WorkProfileInstallSessionState = WorkProfileInstallSessionState.Idle
 
     private val packageName: String
         get() = requireArguments().getString(ARG_PACKAGE).orEmpty()
@@ -149,6 +149,22 @@ class JailAppDetailFragment : Fragment() {
                 }
             }
         }
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                workProfileInstallSessionManager.sessionState(packageName).collect { state ->
+                    workProfileInstallSessionState = state
+                    renderWorkProfileState()
+                }
+            }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        viewLifecycleOwner.lifecycleScope.launch {
+            workProfileInstallSessionManager.reconcileIfPending(packageName)
+        }
     }
 
     override fun onDestroyView() {
@@ -208,25 +224,70 @@ class JailAppDetailFragment : Fragment() {
     private fun renderWorkProfileState() {
         val binding = binding ?: return
         val entry = workProfileCatalogService.buildCatalog(listOf(packageName)).firstOrNull() ?: return
-        binding.jailDetailWorkProfileState.text = when (entry.action) {
-            WorkProfileAppAction.OPEN_IN_WORK -> getString(R.string.jail_detail_work_profile_state_installed)
-            WorkProfileAppAction.INSTALL_AUTOMATICALLY -> getString(R.string.jail_detail_work_profile_state_auto)
-            WorkProfileAppAction.OPEN_STORE_MANUALLY -> getString(R.string.jail_detail_work_profile_state_manual)
-            WorkProfileAppAction.NONE -> getString(R.string.jail_detail_work_profile_state_unavailable)
+        when (val sessionState = workProfileInstallSessionState) {
+            WorkProfileInstallSessionState.Idle -> {
+                binding.jailDetailWorkProfileState.text = when (entry.action) {
+                    WorkProfileAppAction.OPEN_IN_WORK -> getString(R.string.jail_detail_work_profile_state_installed)
+                    WorkProfileAppAction.INSTALL_AUTOMATICALLY -> getString(R.string.jail_detail_work_profile_state_auto)
+                    WorkProfileAppAction.OPEN_STORE_MANUALLY -> getString(R.string.jail_detail_work_profile_state_manual)
+                    WorkProfileAppAction.NONE -> getString(R.string.jail_detail_work_profile_state_unavailable)
+                }
+                val reasonText = environmentReasonText(entry.environmentReason)
+                binding.jailDetailWorkProfileReason.text = reasonText
+                binding.jailDetailWorkProfileReason.visibility = if (reasonText.isBlank()) View.GONE else View.VISIBLE
+                binding.jailDetailWorkProfileAction.text = when (entry.action) {
+                    WorkProfileAppAction.OPEN_IN_WORK -> getString(R.string.jail_detail_work_profile_action_installed)
+                    WorkProfileAppAction.INSTALL_AUTOMATICALLY -> getString(R.string.jail_detail_work_profile_action_install)
+                    WorkProfileAppAction.OPEN_STORE_MANUALLY -> getString(R.string.jail_detail_work_profile_action_store)
+                    WorkProfileAppAction.NONE -> getString(R.string.jail_detail_work_profile_action_unavailable)
+                }
+                binding.jailDetailWorkProfileAction.isEnabled =
+                    entry.action == WorkProfileAppAction.INSTALL_AUTOMATICALLY ||
+                        entry.action == WorkProfileAppAction.OPEN_STORE_MANUALLY
+                binding.jailDetailWorkProfileAction.tag = entry.action
+            }
+            is WorkProfileInstallSessionState.InstallAttempted,
+            is WorkProfileInstallSessionState.Verifying,
+            -> {
+                binding.jailDetailWorkProfileState.text = getString(R.string.jail_detail_work_profile_state_verifying)
+                binding.jailDetailWorkProfileReason.text = getString(R.string.jail_detail_work_profile_reason_verifying)
+                binding.jailDetailWorkProfileReason.visibility = View.VISIBLE
+                binding.jailDetailWorkProfileAction.text = getString(R.string.jail_detail_work_profile_action_checking)
+                binding.jailDetailWorkProfileAction.isEnabled = false
+                binding.jailDetailWorkProfileAction.tag = WorkProfileAppAction.NONE
+            }
+            is WorkProfileInstallSessionState.WaitingForUserAction -> {
+                binding.jailDetailWorkProfileState.text = getString(R.string.jail_detail_work_profile_state_waiting_user)
+                binding.jailDetailWorkProfileReason.text = getString(R.string.jail_detail_work_profile_reason_still_not_visible)
+                binding.jailDetailWorkProfileReason.visibility = View.VISIBLE
+                binding.jailDetailWorkProfileAction.text = getString(R.string.jail_detail_work_profile_action_check_again)
+                binding.jailDetailWorkProfileAction.isEnabled = true
+                binding.jailDetailWorkProfileAction.tag = WORK_PROFILE_ACTION_CHECK_AGAIN
+            }
+            is WorkProfileInstallSessionState.Installed -> {
+                binding.jailDetailWorkProfileState.text = getString(R.string.jail_detail_work_profile_state_installed_detected)
+                binding.jailDetailWorkProfileReason.text = getString(R.string.jail_detail_work_profile_reason_detected)
+                binding.jailDetailWorkProfileReason.visibility = View.VISIBLE
+                binding.jailDetailWorkProfileAction.text = getString(R.string.jail_detail_work_profile_action_installed)
+                binding.jailDetailWorkProfileAction.isEnabled = false
+                binding.jailDetailWorkProfileAction.tag = WorkProfileAppAction.NONE
+            }
+            is WorkProfileInstallSessionState.Failed -> {
+                binding.jailDetailWorkProfileState.text = getString(R.string.jail_detail_work_profile_state_failed)
+                binding.jailDetailWorkProfileReason.text =
+                    sessionState.message ?: getString(R.string.jail_detail_work_profile_reason_failed)
+                binding.jailDetailWorkProfileReason.visibility = View.VISIBLE
+                binding.jailDetailWorkProfileAction.text = when (entry.action) {
+                    WorkProfileAppAction.INSTALL_AUTOMATICALLY -> getString(R.string.jail_detail_work_profile_action_retry_auto)
+                    WorkProfileAppAction.OPEN_STORE_MANUALLY -> getString(R.string.jail_detail_work_profile_action_retry_manual)
+                    else -> getString(R.string.jail_detail_work_profile_action_unavailable)
+                }
+                binding.jailDetailWorkProfileAction.isEnabled =
+                    entry.action == WorkProfileAppAction.INSTALL_AUTOMATICALLY ||
+                        entry.action == WorkProfileAppAction.OPEN_STORE_MANUALLY
+                binding.jailDetailWorkProfileAction.tag = entry.action
+            }
         }
-        val reasonText = environmentReasonText(entry.environmentReason)
-        binding.jailDetailWorkProfileReason.text = reasonText
-        binding.jailDetailWorkProfileReason.visibility = if (reasonText.isBlank()) View.GONE else View.VISIBLE
-        binding.jailDetailWorkProfileAction.text = when (entry.action) {
-            WorkProfileAppAction.OPEN_IN_WORK -> getString(R.string.jail_detail_work_profile_action_installed)
-            WorkProfileAppAction.INSTALL_AUTOMATICALLY -> getString(R.string.jail_detail_work_profile_action_install)
-            WorkProfileAppAction.OPEN_STORE_MANUALLY -> getString(R.string.jail_detail_work_profile_action_store)
-            WorkProfileAppAction.NONE -> getString(R.string.jail_detail_work_profile_action_unavailable)
-        }
-        binding.jailDetailWorkProfileAction.isEnabled =
-            entry.action == WorkProfileAppAction.INSTALL_AUTOMATICALLY ||
-                entry.action == WorkProfileAppAction.OPEN_STORE_MANUALLY
-        binding.jailDetailWorkProfileAction.tag = entry.action
     }
 
     private fun environmentReasonText(reason: WorkProfileInstallEnvironmentReason): String = when (reason) {
@@ -255,22 +316,15 @@ class JailAppDetailFragment : Fragment() {
     }
 
     private fun onWorkProfileActionClicked() {
-        val action = (binding?.jailDetailWorkProfileAction?.tag as? WorkProfileAppAction) ?: return
-        val result = when (action) {
-            WorkProfileAppAction.INSTALL_AUTOMATICALLY -> workProfileInstallService.install(packageName)
-            WorkProfileAppAction.OPEN_STORE_MANUALLY -> workProfileInstallService.launchManualInstall(packageName)
-            WorkProfileAppAction.OPEN_IN_WORK -> InstallResult.AlreadyInstalled
-            WorkProfileAppAction.NONE -> return
+        val tag = binding?.jailDetailWorkProfileAction?.tag ?: return
+        viewLifecycleOwner.lifecycleScope.launch {
+            when (tag) {
+                WORK_PROFILE_ACTION_CHECK_AGAIN -> workProfileInstallSessionManager.reconcileIfPending(packageName)
+                WorkProfileAppAction.INSTALL_AUTOMATICALLY -> workProfileInstallSessionManager.installAutomatically(packageName)
+                WorkProfileAppAction.OPEN_STORE_MANUALLY -> workProfileInstallSessionManager.launchManualStore(packageName)
+                else -> Unit
+            }
         }
-        val messageRes = when (result) {
-            InstallResult.Installed -> R.string.jail_detail_work_profile_result_installed
-            InstallResult.AlreadyInstalled -> R.string.jail_detail_work_profile_result_already
-            is InstallResult.UserActionRequired -> R.string.jail_detail_work_profile_result_manual
-            is InstallResult.Unsupported -> R.string.jail_detail_work_profile_result_unsupported
-            is InstallResult.Failed -> R.string.jail_detail_work_profile_result_failed
-        }
-        Toast.makeText(requireContext(), messageRes, Toast.LENGTH_SHORT).show()
-        renderWorkProfileState()
     }
 
     private fun triggerRefresh() {
@@ -376,6 +430,7 @@ class JailAppDetailFragment : Fragment() {
 
     companion object {
         private const val ARG_PACKAGE = "package_name"
+        private const val WORK_PROFILE_ACTION_CHECK_AGAIN = "check_again"
 
         fun newInstance(packageName: String): JailAppDetailFragment = JailAppDetailFragment().apply {
             arguments = Bundle().apply { putString(ARG_PACKAGE, packageName) }
