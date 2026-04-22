@@ -16,9 +16,31 @@ import android.os.UserHandle
 import android.os.UserManager
 
 interface WorkProfileMarketLauncher {
-    fun canLaunchInWorkProfile(packageName: String): Boolean
-    fun launchInWorkProfile(packageName: String): Boolean
+    fun resolveLaunchPath(packageName: String): WorkProfileMarketLaunchPath
+    fun launch(packageName: String): WorkProfileMarketLaunchResult
 }
+
+enum class WorkProfileMarketLaunchPath {
+    APP_MARKET_INTENT_SENDER,
+    CURRENT_PROFILE_PLAY_DETAILS,
+    WORK_PROFILE_PLAY_STORE_HOME,
+    UNAVAILABLE,
+}
+
+data class WorkProfileMarketLaunchResult(
+    val launched: Boolean,
+    val path: WorkProfileMarketLaunchPath,
+)
+
+private fun WorkProfileMarketLaunchPath.isAvailable(): Boolean = this != WorkProfileMarketLaunchPath.UNAVAILABLE
+
+private fun WorkProfileMarketLaunchResult.isLaunched(): Boolean = launched
+
+fun WorkProfileMarketLauncher.canLaunchInWorkProfile(packageName: String): Boolean =
+    resolveLaunchPath(packageName).isAvailable()
+
+fun WorkProfileMarketLauncher.launchInWorkProfile(packageName: String): Boolean =
+    launch(packageName).isLaunched()
 
 class AndroidWorkProfileMarketLauncher(
     context: Context,
@@ -41,29 +63,51 @@ class AndroidWorkProfileMarketLauncher(
         }.getOrDefault(false)
     },
 ) : WorkProfileMarketLauncher {
-    override fun canLaunchInWorkProfile(packageName: String): Boolean {
+    override fun resolveLaunchPath(packageName: String): WorkProfileMarketLaunchPath {
         if (isAppMarketIntentApiSupported()) {
-            val profile = targetProfile() ?: return false
-            return canLaunchViaAppMarketIntentSender(packageName, profile)
+            val profile = targetProfile() ?: return WorkProfileMarketLaunchPath.UNAVAILABLE
+            return if (canLaunchViaAppMarketIntentSender(packageName, profile)) {
+                WorkProfileMarketLaunchPath.APP_MARKET_INTENT_SENDER
+            } else {
+                WorkProfileMarketLaunchPath.UNAVAILABLE
+            }
         }
 
-        return canLaunchViaDeepLink(packageName) || targetProfile()?.let { profile ->
-            canLaunchViaWorkProfileMainActivity(profile)
-        } == true
+        if (canLaunchViaDeepLink(packageName)) return WorkProfileMarketLaunchPath.CURRENT_PROFILE_PLAY_DETAILS
+        return if (targetProfile()?.let { canLaunchViaWorkProfileMainActivity(it) } == true) {
+            WorkProfileMarketLaunchPath.WORK_PROFILE_PLAY_STORE_HOME
+        } else {
+            WorkProfileMarketLaunchPath.UNAVAILABLE
+        }
     }
 
-    override fun launchInWorkProfile(packageName: String): Boolean {
+    override fun launch(packageName: String): WorkProfileMarketLaunchResult {
         if (isAppMarketIntentApiSupported()) {
-            val profile = targetProfile() ?: return false
-            return launchViaAppMarketIntentSender(packageName, profile)
+            val profile = targetProfile()
+                ?: return WorkProfileMarketLaunchResult(false, WorkProfileMarketLaunchPath.UNAVAILABLE)
+            val launched = launchViaAppMarketIntentSender(packageName, profile)
+            return WorkProfileMarketLaunchResult(
+                launched = launched,
+                path = if (launched) {
+                    WorkProfileMarketLaunchPath.APP_MARKET_INTENT_SENDER
+                } else {
+                    WorkProfileMarketLaunchPath.UNAVAILABLE
+                },
+            )
         }
 
         // Best-effort details deep link in current profile (cannot enforce cross-profile here).
-        if (launchViaDeepLink(packageName)) return true
+        if (launchViaDeepLink(packageName)) {
+            return WorkProfileMarketLaunchResult(true, WorkProfileMarketLaunchPath.CURRENT_PROFILE_PLAY_DETAILS)
+        }
 
         // Guaranteed cross-profile fallback when another profile is available.
-        val profile = targetProfile() ?: return false
-        return launchViaWorkProfileMainActivity(profile)
+        val profile = targetProfile()
+        if (profile != null && launchViaWorkProfileMainActivity(profile)) {
+            return WorkProfileMarketLaunchResult(true, WorkProfileMarketLaunchPath.WORK_PROFILE_PLAY_STORE_HOME)
+        }
+
+        return WorkProfileMarketLaunchResult(false, WorkProfileMarketLaunchPath.UNAVAILABLE)
     }
 
     /**

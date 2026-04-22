@@ -160,11 +160,11 @@ open class WorkProfileAppInstallCapabilityChecker(
             AndroidWorkProfileMarketLauncher(context)
 
         override fun canLaunchStoreIntent(packageName: String): Boolean {
-            return workProfileMarketLauncher.canLaunchInWorkProfile(packageName)
+            return workProfileMarketLauncher.resolveLaunchPath(packageName) != WorkProfileMarketLaunchPath.UNAVAILABLE
         }
 
         override fun launchStoreIntent(packageName: String): Boolean {
-            return workProfileMarketLauncher.launchInWorkProfile(packageName)
+            return workProfileMarketLauncher.launch(packageName).launched
         }
     }
 }

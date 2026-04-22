@@ -39,8 +39,11 @@ class AndroidWorkProfileMarketLauncherTest {
             launchIntentSender = { true },
         )
 
+        assertEquals(WorkProfileMarketLaunchPath.APP_MARKET_INTENT_SENDER, launcher.resolveLaunchPath(PKG))
         assertTrue(launcher.canLaunchInWorkProfile(PKG))
-        assertTrue(launcher.launchInWorkProfile(PKG))
+        val result = launcher.launch(PKG)
+        assertTrue(result.launched)
+        assertEquals(WorkProfileMarketLaunchPath.APP_MARKET_INTENT_SENDER, result.path)
     }
 
     @Test
@@ -56,6 +59,7 @@ class AndroidWorkProfileMarketLauncherTest {
             launchIntentSender = { true },
         )
 
+        assertEquals(WorkProfileMarketLaunchPath.UNAVAILABLE, launcher.resolveLaunchPath(PKG))
         assertFalse(launcher.canLaunchInWorkProfile(PKG))
         assertFalse(launcher.launchInWorkProfile(PKG))
     }
@@ -73,6 +77,7 @@ class AndroidWorkProfileMarketLauncherTest {
             launchIntentSender = { true },
         )
 
+        assertEquals(WorkProfileMarketLaunchPath.UNAVAILABLE, launcher.resolveLaunchPath(PKG))
         assertFalse(launcher.canLaunchInWorkProfile(PKG))
         assertFalse(launcher.launchInWorkProfile(PKG))
     }
@@ -90,8 +95,11 @@ class AndroidWorkProfileMarketLauncherTest {
             launchIntentSender = { false },
         )
 
+        assertEquals(WorkProfileMarketLaunchPath.APP_MARKET_INTENT_SENDER, launcher.resolveLaunchPath(PKG))
         assertTrue(launcher.canLaunchInWorkProfile(PKG))
-        assertFalse(launcher.launchInWorkProfile(PKG))
+        val result = launcher.launch(PKG)
+        assertFalse(result.launched)
+        assertEquals(WorkProfileMarketLaunchPath.UNAVAILABLE, result.path)
     }
 
     @Config(sdk = [34])
@@ -112,8 +120,11 @@ class AndroidWorkProfileMarketLauncherTest {
             launchIntentSender = { false },
         )
 
+        assertEquals(WorkProfileMarketLaunchPath.CURRENT_PROFILE_PLAY_DETAILS, launcher.resolveLaunchPath(PKG))
         assertTrue(launcher.canLaunchInWorkProfile(PKG))
-        assertTrue(launcher.launchInWorkProfile(PKG))
+        val result = launcher.launch(PKG)
+        assertTrue(result.launched)
+        assertEquals(WorkProfileMarketLaunchPath.CURRENT_PROFILE_PLAY_DETAILS, result.path)
         assertEquals(1, bridge.startActivityCalls)
         assertEquals(0, bridge.startMainActivityCalls)
     }
@@ -136,8 +147,11 @@ class AndroidWorkProfileMarketLauncherTest {
             launchIntentSender = { false },
         )
 
+        assertEquals(WorkProfileMarketLaunchPath.CURRENT_PROFILE_PLAY_DETAILS, launcher.resolveLaunchPath(PKG))
         assertTrue(launcher.canLaunchInWorkProfile(PKG))
-        assertTrue(launcher.launchInWorkProfile(PKG))
+        val result = launcher.launch(PKG)
+        assertTrue(result.launched)
+        assertEquals(WorkProfileMarketLaunchPath.WORK_PROFILE_PLAY_STORE_HOME, result.path)
         assertEquals(1, bridge.startActivityCalls)
         assertEquals(1, bridge.startMainActivityCalls)
     }
@@ -160,8 +174,11 @@ class AndroidWorkProfileMarketLauncherTest {
             launchIntentSender = { false },
         )
 
+        assertEquals(WorkProfileMarketLaunchPath.CURRENT_PROFILE_PLAY_DETAILS, launcher.resolveLaunchPath(PKG))
         assertTrue(launcher.canLaunchInWorkProfile(PKG))
-        assertFalse(launcher.launchInWorkProfile(PKG))
+        val result = launcher.launch(PKG)
+        assertFalse(result.launched)
+        assertEquals(WorkProfileMarketLaunchPath.UNAVAILABLE, result.path)
         assertEquals(1, bridge.startActivityCalls)
         assertEquals(0, bridge.startMainActivityCalls)
     }
@@ -183,8 +200,11 @@ class AndroidWorkProfileMarketLauncherTest {
             launchIntentSender = { false },
         )
 
+        assertEquals(WorkProfileMarketLaunchPath.WORK_PROFILE_PLAY_STORE_HOME, launcher.resolveLaunchPath(PKG))
         assertTrue(launcher.canLaunchInWorkProfile(PKG))
-        assertTrue(launcher.launchInWorkProfile(PKG))
+        val result = launcher.launch(PKG)
+        assertTrue(result.launched)
+        assertEquals(WorkProfileMarketLaunchPath.WORK_PROFILE_PLAY_STORE_HOME, result.path)
         assertEquals(0, bridge.startActivityCalls)
         assertEquals(1, bridge.startMainActivityCalls)
     }
@@ -207,8 +227,11 @@ class AndroidWorkProfileMarketLauncherTest {
             launchIntentSender = { false },
         )
 
+        assertEquals(WorkProfileMarketLaunchPath.CURRENT_PROFILE_PLAY_DETAILS, launcher.resolveLaunchPath(PKG))
         assertTrue(launcher.canLaunchInWorkProfile(PKG))
-        assertTrue(launcher.launchInWorkProfile(PKG))
+        val result = launcher.launch(PKG)
+        assertTrue(result.launched)
+        assertEquals(WorkProfileMarketLaunchPath.CURRENT_PROFILE_PLAY_DETAILS, result.path)
         assertEquals(1, bridge.startActivityCalls)
         assertEquals(0, bridge.startMainActivityCalls)
     }
@@ -230,6 +253,7 @@ class AndroidWorkProfileMarketLauncherTest {
             launchIntentSender = { false },
         )
 
+        assertEquals(WorkProfileMarketLaunchPath.UNAVAILABLE, launcher.resolveLaunchPath(PKG))
         assertFalse(launcher.canLaunchInWorkProfile(PKG))
         assertFalse(launcher.launchInWorkProfile(PKG))
         assertEquals(0, bridge.startActivityCalls)
