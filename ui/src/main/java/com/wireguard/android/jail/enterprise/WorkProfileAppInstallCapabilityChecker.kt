@@ -171,18 +171,19 @@ open class WorkProfileAppInstallCapabilityChecker(
         }
 
         override fun launchStoreIntent(packageName: String): Boolean {
-            if (launchStoreInOtherProfile()) return true
-
             val intents = listOf(
                 WorkProfileInstallGuide.playStoreDetailsIntent(packageName),
                 WorkProfileInstallGuide.playStoreHttpsIntent(packageName),
             ).map { it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
 
-            val candidate = intents.firstOrNull { resolvable(it) } ?: return false
-            return runCatching {
+            val candidate = intents.firstOrNull { resolvable(it) }
+            val launchedDirect = candidate != null && runCatching {
                 appContext.startActivity(candidate)
                 true
             }.getOrDefault(false)
+            if (launchedDirect) return true
+
+            return launchStoreInOtherProfile()
         }
 
         private fun canLaunchStoreInOtherProfile(): Boolean =
