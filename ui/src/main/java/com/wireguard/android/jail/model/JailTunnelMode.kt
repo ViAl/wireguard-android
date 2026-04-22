@@ -18,9 +18,6 @@ enum class JailTunnelMode {
     /** Force this package out of the tunnel (excluded list) on the Jail tunnel. */
     JAIL_EXCLUDE_FROM_TUNNEL,
 
-    /** Same routing as [JAIL_ROUTE_THROUGH_TUNNEL]; Sterile Launch adds a work-profile expectation. */
-    JAIL_STRICT_PROFILE,
-
     /** Explicitly no Jail routing side-effect for this package. */
     DISABLED,
 }

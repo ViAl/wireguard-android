@@ -72,6 +72,7 @@ class JailAppDetailFragment : Fragment() {
     private var jailTunnelNameSnapshot: String? = null
     private var jailManagedPackagesSnapshot: Set<String> = emptySet()
     private var workProfileInstallSessionState: WorkProfileInstallSessionState = WorkProfileInstallSessionState.Idle
+    private var tunnelNames: List<String> = emptyList()
 
     private val packageName: String
         get() = requireArguments().getString(ARG_PACKAGE).orEmpty()
@@ -80,7 +81,6 @@ class JailAppDetailFragment : Fragment() {
         JailTunnelMode.DEFAULT,
         JailTunnelMode.JAIL_ROUTE_THROUGH_TUNNEL,
         JailTunnelMode.JAIL_EXCLUDE_FROM_TUNNEL,
-        JailTunnelMode.JAIL_STRICT_PROFILE,
         JailTunnelMode.DISABLED,
     )
 
@@ -116,6 +116,18 @@ class JailAppDetailFragment : Fragment() {
                 .show()
         }
         binding.jailDetailRoutingApply.setOnClickListener { applyRoutingSelection() }
+        binding.jailDetailTunnelSave.setOnClickListener {
+            val index = binding.jailDetailTunnelSpinner.selectedItemPosition
+            viewLifecycleOwner.lifecycleScope.launch {
+                if (index <= 0) {
+                    JailStore.setJailTunnelName(null)
+                } else {
+                    val name = tunnelNames.getOrNull(index - 1) ?: return@launch
+                    JailStore.setJailTunnelName(name)
+                }
+                Toast.makeText(requireContext(), R.string.saved, Toast.LENGTH_SHORT).show()
+            }
+        }
         binding.jailDetailWorkProfileAction.setOnClickListener { onWorkProfileActionClicked() }
 
         viewLifecycleOwner.lifecycleScope.launch {
@@ -145,6 +157,8 @@ class JailAppDetailFragment : Fragment() {
                     routingPoliciesSnapshot = policies
                     jailTunnelNameSnapshot = tunnelName
                     jailManagedPackagesSnapshot = managed
+                    tunnelNames = Application.getTunnelManager().getTunnels().map { it.name }
+                    bindTunnelSpinner(tunnelName)
                     bindRoutingSpinner(policies, tunnelName)
                 }
             }
@@ -339,7 +353,6 @@ class JailAppDetailFragment : Fragment() {
         JailTunnelMode.DEFAULT -> R.string.jail_mode_default
         JailTunnelMode.JAIL_ROUTE_THROUGH_TUNNEL -> R.string.jail_mode_route
         JailTunnelMode.JAIL_EXCLUDE_FROM_TUNNEL -> R.string.jail_mode_exclude
-        JailTunnelMode.JAIL_STRICT_PROFILE -> R.string.jail_mode_strict
         JailTunnelMode.DISABLED -> R.string.jail_mode_disabled
     }
 
@@ -349,6 +362,18 @@ class JailAppDetailFragment : Fragment() {
         val idx = routingModes.indexOf(mode).takeIf { it >= 0 } ?: 0
         binding.jailDetailRoutingSpinner.setSelection(idx)
         binding.jailDetailRoutingApply.isEnabled = !tunnelName.isNullOrBlank()
+    }
+
+    private fun bindTunnelSpinner(tunnelName: String?) {
+        val binding = binding ?: return
+        val items = listOf(getString(R.string.jail_detail_routing_tunnel_none)) + tunnelNames
+        binding.jailDetailTunnelSpinner.adapter = ArrayAdapter(
+            requireContext(),
+            android.R.layout.simple_spinner_dropdown_item,
+            items,
+        )
+        val selected = if (tunnelName.isNullOrBlank()) 0 else (tunnelNames.indexOf(tunnelName).takeIf { it >= 0 }?.plus(1) ?: 0)
+        binding.jailDetailTunnelSpinner.setSelection(selected)
     }
 
     private fun applyRoutingSelection() {

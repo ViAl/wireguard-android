@@ -10,7 +10,6 @@ import com.wireguard.android.jail.domain.JailAppClassifier
 import com.wireguard.android.jail.domain.JailAppRepository
 import com.wireguard.android.jail.domain.JailAuditRepository
 import com.wireguard.android.jail.domain.PerAppVpnManager
-import com.wireguard.android.jail.domain.SterileLaunchManager
 import com.wireguard.android.jail.domain.WorkProfileManager
 import com.wireguard.android.jail.enterprise.ManagedProfileOwnershipService
 import com.wireguard.android.jail.enterprise.WorkProfileAppCatalogService
@@ -73,11 +72,4 @@ class JailComponent(
         scope = scope,
     )
     val perAppVpnManager: PerAppVpnManager = PerAppVpnManager(tunnelManager)
-    val sterileLaunchManager: SterileLaunchManager = SterileLaunchManager(
-        context = appContext,
-        tunnelManager = tunnelManager,
-        crossProfile = crossProfileApps,
-        auditRepository = auditRepository,
-        powerManager = powerManager,
-    )
 }

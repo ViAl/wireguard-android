@@ -199,7 +199,6 @@ class JailFragment : Fragment(), JailFragmentHost {
         JailDestination.OVERVIEW -> JailOverviewFragment()
         JailDestination.APPS -> JailAppsFragment()
         JailDestination.REPORT -> JailReportFragment()
-        JailDestination.LAUNCH -> JailLaunchFragment()
         JailDestination.SETUP -> JailSetupWizardFragment()
     }
 

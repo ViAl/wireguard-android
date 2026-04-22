@@ -10,7 +10,7 @@ package com.wireguard.android.jail.model
  * Where a permission audit lists the individual OS primitives that are granted, the capability
  * matrix aggregates them into the user-visible categories the risk report speaks about
  * ("can see your location", "can read contacts"). Keeping this transformation pure and in the
- * model layer lets the Phase 4 report builder, the Phase 5 sterile-launch checklist, and tests
+ * model layer lets the Phase 4 report builder and tests
  * share the same interpretation of "what can this app do".
  *
  * Each capability falls into three states honest about Android's real answer:

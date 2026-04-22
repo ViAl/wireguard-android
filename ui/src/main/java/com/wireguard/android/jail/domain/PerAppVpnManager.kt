@@ -115,7 +115,7 @@ class PerAppVpnManager(private val tunnelManager: TunnelManager) {
     }
 
     private fun isRouteMode(mode: JailTunnelMode) =
-        mode == JailTunnelMode.JAIL_ROUTE_THROUGH_TUNNEL || mode == JailTunnelMode.JAIL_STRICT_PROFILE
+        mode == JailTunnelMode.JAIL_ROUTE_THROUGH_TUNNEL
 
     suspend fun findTunnel(name: String): ObservableTunnel? = withContext(Dispatchers.Main.immediate) {
         tunnelManager.getTunnels().find { it.name == name }
