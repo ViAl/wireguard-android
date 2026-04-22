@@ -4,10 +4,14 @@
  */
 package com.wireguard.android.jail.enterprise
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
+import android.content.IntentSender
 import android.content.pm.LauncherApps
+import android.os.Build
 import android.os.Process
+import android.os.UserHandle
 import com.wireguard.android.jail.domain.WorkProfileInstallGuide
 import com.wireguard.android.jail.model.WorkProfileAppAction
 import com.wireguard.android.jail.model.WorkProfileAppAvailability
@@ -171,8 +175,7 @@ open class WorkProfileAppInstallCapabilityChecker(
         }
 
         override fun launchStoreIntent(packageName: String): Boolean {
-            if (launchStoreDetailsInOtherProfile(packageName)) return true
-            if (launchStoreInOtherProfile()) return true
+            if (launchAppMarketInOtherProfiles(packageName)) return true
 
             val intents = listOf(
                 WorkProfileInstallGuide.playStoreDetailsIntent(packageName),
@@ -186,24 +189,54 @@ open class WorkProfileAppInstallCapabilityChecker(
             }.getOrDefault(false)
         }
 
-        private fun launchStoreDetailsInOtherProfile(packageName: String): Boolean {
-            val detailsIntents = listOf(
-                WorkProfileInstallGuide.playStoreDetailsIntent(packageName),
-                WorkProfileInstallGuide.playStoreHttpsIntent(packageName),
-            )
-            return otherProfiles().any { profile ->
-                detailsIntents.any { baseIntent ->
-                    val intent = Intent(baseIntent).apply {
-                        setPackage(PLAY_STORE_PACKAGE)
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        putExtra(EXTRA_USER, profile)
-                    }
-                    runCatching {
-                        appContext.startActivity(intent)
-                        true
-                    }.getOrDefault(false)
-                }
+        /**
+         * Opens the work (or other non-current) profile's Play Store on the requested package
+         * listing. `startActivity` with VIEW intents always resolves in the caller profile; the
+         * supported cross-profile entry is [LauncherApps.getAppMarketActivityIntent] (API 35+),
+         * with a reflective attempt on older releases where the system may still expose the API.
+         */
+        private fun launchAppMarketInOtherProfiles(packageName: String): Boolean {
+            val svc = launcherApps ?: return false
+            for (profile in otherProfiles()) {
+                val sender = appMarketActivityIntentSender(svc, packageName, profile) ?: continue
+                val launched = runCatching {
+                    val fillIn = Intent().addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    // Context has two 5-arg overloads; Kotlin targets (flagsMask, flagsValues, int extraFlags).
+                    appContext.startIntentSender(sender, fillIn, 0, 0, 0)
+                    true
+                }.getOrDefault(false)
+                if (launched) return true
             }
+            return false
+        }
+
+        private fun appMarketActivityIntentSender(
+            launcherApps: LauncherApps,
+            packageName: String,
+            profile: UserHandle,
+        ): IntentSender? {
+            if (Build.VERSION.SDK_INT >= 35) {
+                return runCatching { launcherApps.getAppMarketActivityIntent(packageName, profile) }.getOrNull()
+            }
+            return getAppMarketActivityIntentReflective(launcherApps, packageName, profile)
+        }
+
+        @SuppressLint("PrivateApi")
+        private fun getAppMarketActivityIntentReflective(
+            launcherApps: LauncherApps,
+            packageName: String,
+            profile: UserHandle,
+        ): IntentSender? {
+            val method = runCatching {
+                LauncherApps::class.java.getMethod(
+                    "getAppMarketActivityIntent",
+                    String::class.java,
+                    UserHandle::class.java,
+                )
+            }.getOrNull() ?: return null
+            return runCatching {
+                method.invoke(launcherApps, packageName, profile) as? IntentSender
+            }.getOrNull()
         }
 
         private fun canLaunchStoreInOtherProfile(): Boolean =
@@ -212,27 +245,12 @@ open class WorkProfileAppInstallCapabilityChecker(
                     .getOrDefault(false)
             }
 
-        private fun launchStoreInOtherProfile(): Boolean {
-            val candidate = otherProfiles().firstNotNullOfOrNull { handle ->
-                val activity = runCatching {
-                    launcherApps?.getActivityList(PLAY_STORE_PACKAGE, handle).orEmpty().firstOrNull()
-                }.getOrNull() ?: return@firstNotNullOfOrNull null
-                handle to activity.componentName
-            } ?: return false
-
-            return runCatching {
-                launcherApps?.startMainActivity(candidate.second, candidate.first, null, null)
-                true
-            }.getOrDefault(false)
-        }
-
         private fun otherProfiles() = launcherApps?.profiles.orEmpty().filterNot { it == Process.myUserHandle() }
 
         private fun resolvable(intent: Intent): Boolean = intent.resolveActivity(packageManager) != null
 
         private companion object {
             const val PLAY_STORE_PACKAGE = "com.android.vending"
-            const val EXTRA_USER = "android.intent.extra.USER"
         }
     }
 }
