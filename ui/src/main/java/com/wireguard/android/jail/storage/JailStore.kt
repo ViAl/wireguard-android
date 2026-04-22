@@ -12,6 +12,7 @@ import com.wireguard.android.Application
 import com.wireguard.android.jail.model.AuditSnapshot
 import com.wireguard.android.jail.model.JailTunnelMode
 import com.wireguard.android.jail.model.SterileLaunchPreset
+import com.wireguard.android.jail.model.WorkProfileInstallSessionState
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import org.json.JSONException
@@ -43,6 +44,7 @@ object JailStore {
     private val KEY_LAUNCH_PRESETS = stringPreferencesKey("jail_launch_presets")
     private val KEY_SETUP_STEPS = stringSetPreferencesKey("jail_setup_completed_steps")
     private val KEY_ONBOARDING_COMPLETED = booleanPreferencesKey("jail_onboarding_completed")
+    private val KEY_WORK_PROFILE_INSTALL_SESSIONS = stringPreferencesKey("jail_work_profile_install_sessions")
 
     val selectedApps: Flow<Set<String>>
         get() = Application.getPreferencesDataStore().data.map { it[KEY_SELECTED_APPS] ?: emptySet() }
@@ -68,6 +70,11 @@ object JailStore {
 
     val onboardingCompleted: Flow<Boolean>
         get() = Application.getPreferencesDataStore().data.map { it[KEY_ONBOARDING_COMPLETED] == true }
+
+    val workProfileInstallSessions: Flow<Map<String, WorkProfileInstallSessionState>>
+        get() = Application.getPreferencesDataStore().data.map { prefs ->
+            WorkProfileInstallSessionCodec.decode(prefs[KEY_WORK_PROFILE_INSTALL_SESSIONS])
+        }
 
     suspend fun setSelectedApps(packages: Set<String>) {
         Application.getPreferencesDataStore().edit { prefs ->
@@ -130,6 +137,31 @@ object JailStore {
     suspend fun setOnboardingCompleted(done: Boolean) {
         Application.getPreferencesDataStore().edit { prefs ->
             prefs[KEY_ONBOARDING_COMPLETED] = done
+        }
+    }
+
+    suspend fun setWorkProfileInstallSession(
+        packageName: String,
+        state: WorkProfileInstallSessionState,
+    ) {
+        Application.getPreferencesDataStore().edit { prefs ->
+            val current = WorkProfileInstallSessionCodec.decode(prefs[KEY_WORK_PROFILE_INSTALL_SESSIONS]).toMutableMap()
+            if (state is WorkProfileInstallSessionState.Idle) {
+                current.remove(packageName)
+            } else {
+                current[packageName] = state
+            }
+            if (current.isEmpty()) prefs.remove(KEY_WORK_PROFILE_INSTALL_SESSIONS)
+            else prefs[KEY_WORK_PROFILE_INSTALL_SESSIONS] = WorkProfileInstallSessionCodec.encode(current)
+        }
+    }
+
+    suspend fun clearWorkProfileInstallSession(packageName: String) {
+        Application.getPreferencesDataStore().edit { prefs ->
+            val current = WorkProfileInstallSessionCodec.decode(prefs[KEY_WORK_PROFILE_INSTALL_SESSIONS]).toMutableMap()
+            current.remove(packageName)
+            if (current.isEmpty()) prefs.remove(KEY_WORK_PROFILE_INSTALL_SESSIONS)
+            else prefs[KEY_WORK_PROFILE_INSTALL_SESSIONS] = WorkProfileInstallSessionCodec.encode(current)
         }
     }
 

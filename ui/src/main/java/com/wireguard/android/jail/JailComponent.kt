@@ -16,6 +16,7 @@ import com.wireguard.android.jail.enterprise.ManagedProfileOwnershipService
 import com.wireguard.android.jail.enterprise.WorkProfileAppCatalogService
 import com.wireguard.android.jail.enterprise.WorkProfileAppInstallCapabilityChecker
 import com.wireguard.android.jail.enterprise.WorkProfileAppInstallService
+import com.wireguard.android.jail.enterprise.WorkProfileInstallSessionManager
 import com.wireguard.android.jail.storage.JailSelectionStore
 import com.wireguard.android.jail.system.AccessibilityInspector
 import com.wireguard.android.jail.system.CrossProfileAppsWrapper
@@ -50,6 +51,11 @@ class JailComponent(
         capabilityChecker = workProfileCapabilityChecker,
         fallbackLauncher = workProfileCapabilityChecker.fallbackLauncher(),
     )
+    val workProfileInstallSessionManager: WorkProfileInstallSessionManager = WorkProfileInstallSessionManager(
+        installService = workProfileInstallService,
+        capabilityChecker = workProfileCapabilityChecker,
+    )
+
 
     private val accessibilityInspector: AccessibilityInspector = AccessibilityInspector(appContext.contentResolver)
     private val notificationInspector: NotificationAccessInspector = NotificationAccessInspector(appContext)
