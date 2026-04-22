@@ -137,7 +137,7 @@ class WorkProfileInstallSessionManager(
         suspend fun clear(packageName: String)
     }
 
-    internal interface InstallExecutor {
+    interface InstallExecutor {
         fun install(packageName: String): InstallResult
         fun launchManualInstall(packageName: String): InstallResult
     }
