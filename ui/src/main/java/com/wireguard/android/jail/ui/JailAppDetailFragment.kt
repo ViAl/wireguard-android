@@ -80,7 +80,6 @@ class JailAppDetailFragment : Fragment() {
         JailTunnelMode.DEFAULT,
         JailTunnelMode.JAIL_ROUTE_THROUGH_TUNNEL,
         JailTunnelMode.JAIL_EXCLUDE_FROM_TUNNEL,
-        JailTunnelMode.JAIL_STRICT_PROFILE,
         JailTunnelMode.DISABLED,
     )
 
@@ -339,7 +338,6 @@ class JailAppDetailFragment : Fragment() {
         JailTunnelMode.DEFAULT -> R.string.jail_mode_default
         JailTunnelMode.JAIL_ROUTE_THROUGH_TUNNEL -> R.string.jail_mode_route
         JailTunnelMode.JAIL_EXCLUDE_FROM_TUNNEL -> R.string.jail_mode_exclude
-        JailTunnelMode.JAIL_STRICT_PROFILE -> R.string.jail_mode_strict
         JailTunnelMode.DISABLED -> R.string.jail_mode_disabled
     }
 

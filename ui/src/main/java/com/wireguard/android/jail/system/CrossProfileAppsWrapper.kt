@@ -13,7 +13,7 @@ import android.os.UserHandle
 import android.os.UserManager
 
 /**
- * Thin seam over cross-profile discovery. Used by app inventory, sterile launch, and profile
+ * Thin seam over cross-profile discovery. Used by app inventory and profile
  * guidance. Safe on devices without secondary profiles.
  */
 open class CrossProfileAppsWrapper(private val context: Context) {

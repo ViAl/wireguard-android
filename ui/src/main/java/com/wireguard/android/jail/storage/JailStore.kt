@@ -11,7 +11,6 @@ import androidx.datastore.preferences.core.stringSetPreferencesKey
 import com.wireguard.android.Application
 import com.wireguard.android.jail.model.AuditSnapshot
 import com.wireguard.android.jail.model.JailTunnelMode
-import com.wireguard.android.jail.model.SterileLaunchPreset
 import com.wireguard.android.jail.model.WorkProfileInstallSessionState
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -27,7 +26,7 @@ import org.json.JSONObject
  *  * Keeping Jail state inside the existing DataStore avoids introducing a second
  *    storage file and keeps the serialization guarantees consistent with the rest of the app.
  *  * Every piece of Jail state has its own key; no mega-blob. Later phases add keys here
- *    (routing policies as JSON, launch presets, onboarding progress, ...).
+ *    (routing policies as JSON, onboarding progress, ...).
  *  * Writes are off-main because `DataStore.edit` is a `suspend` function.
  *  * Audit snapshots are encoded as a single JSON object keyed by package name so one
  *    write can refresh the whole cache without racing per-package entries.
@@ -41,7 +40,6 @@ object JailStore {
     private val KEY_JAIL_TUNNEL_NAME = stringPreferencesKey("jail_tunnel_name")
     private val KEY_ROUTING_POLICIES = stringPreferencesKey("jail_routing_policies")
     private val KEY_JAIL_MANAGED_PACKAGES = stringSetPreferencesKey("jail_managed_packages")
-    private val KEY_LAUNCH_PRESETS = stringPreferencesKey("jail_launch_presets")
     private val KEY_SETUP_STEPS = stringSetPreferencesKey("jail_setup_completed_steps")
     private val KEY_ONBOARDING_COMPLETED = booleanPreferencesKey("jail_onboarding_completed")
     private val KEY_WORK_PROFILE_INSTALL_SESSIONS = stringPreferencesKey("jail_work_profile_install_sessions")
@@ -59,11 +57,6 @@ object JailStore {
 
     val jailManagedPackages: Flow<Set<String>>
         get() = Application.getPreferencesDataStore().data.map { it[KEY_JAIL_MANAGED_PACKAGES] ?: emptySet() }
-
-    val launchPresets: Flow<Map<String, SterileLaunchPreset>>
-        get() = Application.getPreferencesDataStore().data.map { prefs ->
-            LaunchPresetCodec.decode(prefs[KEY_LAUNCH_PRESETS])
-        }
 
     val setupCompletedSteps: Flow<Set<String>>
         get() = Application.getPreferencesDataStore().data.map { it[KEY_SETUP_STEPS] ?: emptySet() }
@@ -101,21 +94,6 @@ object JailStore {
         Application.getPreferencesDataStore().edit { prefs ->
             if (packages.isEmpty()) prefs.remove(KEY_JAIL_MANAGED_PACKAGES)
             else prefs[KEY_JAIL_MANAGED_PACKAGES] = packages
-        }
-    }
-
-    suspend fun setLaunchPresets(presets: Map<String, SterileLaunchPreset>) {
-        Application.getPreferencesDataStore().edit { prefs ->
-            if (presets.isEmpty()) prefs.remove(KEY_LAUNCH_PRESETS)
-            else prefs[KEY_LAUNCH_PRESETS] = LaunchPresetCodec.encode(presets)
-        }
-    }
-
-    suspend fun updateLaunchPreset(preset: SterileLaunchPreset) {
-        Application.getPreferencesDataStore().edit { prefs ->
-            val current = LaunchPresetCodec.decode(prefs[KEY_LAUNCH_PRESETS]).toMutableMap()
-            current[preset.packageName] = preset
-            prefs[KEY_LAUNCH_PRESETS] = LaunchPresetCodec.encode(current)
         }
     }
 

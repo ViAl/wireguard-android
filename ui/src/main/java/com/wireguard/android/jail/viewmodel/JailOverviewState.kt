@@ -35,13 +35,6 @@ data class JailOverviewState(
                 destination = JailDestination.APPS
             ),
             JailOverviewCard(
-                id = "sterile_launch",
-                titleRes = R.string.jail_card_sterile_launch_title,
-                subtitleRes = R.string.jail_card_sterile_launch_subtitle,
-                iconRes = R.drawable.ic_jail_card_launch,
-                destination = JailDestination.LAUNCH
-            ),
-            JailOverviewCard(
                 id = "risk_report",
                 titleRes = R.string.jail_card_risk_report_title,
                 subtitleRes = R.string.jail_card_risk_report_subtitle,
