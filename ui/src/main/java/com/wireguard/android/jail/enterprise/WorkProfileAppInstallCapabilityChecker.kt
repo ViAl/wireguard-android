@@ -192,16 +192,21 @@ open class WorkProfileAppInstallCapabilityChecker(
                 WorkProfileInstallGuide.playStoreHttpsIntent(packageName),
             )
             return otherProfiles().any { profile ->
-                detailsIntents.any { baseIntent ->
-                    val intent = Intent(baseIntent).apply {
-                        setPackage(PLAY_STORE_PACKAGE)
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        putExtra(EXTRA_USER, profile)
+                val profilePlayStoreActivities = runCatching {
+                    launcherApps?.getActivityList(PLAY_STORE_PACKAGE, profile).orEmpty()
+                }.getOrDefault(emptyList())
+                profilePlayStoreActivities.any { activityInfo ->
+                    detailsIntents.any { baseIntent ->
+                        val intent = Intent(baseIntent).apply {
+                            component = activityInfo.componentName
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            putExtra(EXTRA_USER, profile)
+                        }
+                        runCatching {
+                            appContext.startActivity(intent)
+                            true
+                        }.getOrDefault(false)
                     }
-                    runCatching {
-                        appContext.startActivity(intent)
-                        true
-                    }.getOrDefault(false)
                 }
             }
         }
