@@ -194,14 +194,6 @@ enum class AuditSignal(
         criticalFloor = false,
         shortRes = R.string.jail_signal_fg_service_camera_short,
         detailRes = R.string.jail_signal_fg_service_camera_detail,
-    ),
-    MISSING_WORK_PROFILE(
-        id = "missing_work_profile",
-        baseWeight = 15,
-        confidence = AuditConfidence.LIKELY,
-        criticalFloor = false,
-        shortRes = R.string.jail_signal_missing_work_profile_short,
-        detailRes = R.string.jail_signal_missing_work_profile_detail,
     );
 
     companion object {

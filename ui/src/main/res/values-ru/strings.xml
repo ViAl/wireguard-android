@@ -358,8 +358,6 @@
     <string name="jail_signal_fg_service_microphone_detail">Объявлен тип foreground-сервиса «микрофон» — возможна запись при показанном уведомлении.</string>
     <string name="jail_signal_fg_service_camera_short">Foreground-сервис камеры</string>
     <string name="jail_signal_fg_service_camera_detail">Объявлен тип foreground-сервиса «камера» — возможно использование камеры при показанном уведомлении.</string>
-    <string name="jail_signal_missing_work_profile_short">Нет копии в рабочем профиле</string>
-    <string name="jail_signal_missing_work_profile_detail">На устройстве есть управляемый профиль, но приложение установлено только в основном — данные основного профиля для него доступны.</string>
     <string name="jail_report_title">Отчёт о рисках</string>
     <string name="jail_report_intro">Кратко и простым языком — что приложение может увидеть или предположить. Jail снижает часть этого, но не убирает всё.</string>
     <string name="jail_report_empty_title">Приложения не выбраны</string>

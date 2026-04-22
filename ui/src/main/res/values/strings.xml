@@ -337,8 +337,6 @@
     <string name="jail_signal_fg_service_microphone_detail">The app declares a foreground service of type \u201Cmicrophone\u201D, meaning it may keep recording audio while a notification is visible.</string>
     <string name="jail_signal_fg_service_camera_short">Camera foreground service</string>
     <string name="jail_signal_fg_service_camera_detail">The app declares a foreground service of type \u201Ccamera\u201D, meaning it may keep using the camera while a notification is visible.</string>
-    <string name="jail_signal_missing_work_profile_short">Not installed in another profile</string>
-    <string name="jail_signal_missing_work_profile_detail">Another profile appears to exist on this device, but this app is only installed in the main profile. Main-profile data therefore remains visible to this copy.</string>
     <!-- Phase 4: human-readable report -->
     <string name="jail_report_title">Risk report</string>
     <string name="jail_report_intro">Plain-language summary of what each selected app can probably observe. Jail lowers some of this; it cannot eliminate it.</string>
@@ -540,6 +538,7 @@
     <string name="jail_detail_work_profile_state_manual">Manual install is required</string>
     <string name="jail_detail_work_profile_state_unavailable">Work-profile install is unavailable</string>
     <string name="jail_detail_work_profile_action_open">Open in work profile</string>
+    <string name="jail_detail_work_profile_action_installed">Installed</string>
     <string name="jail_detail_work_profile_action_install">Install automatically</string>
     <string name="jail_detail_work_profile_action_store">Open store manually</string>
     <string name="jail_detail_work_profile_action_unavailable">Unavailable</string>

@@ -218,7 +218,7 @@ class JailAppDetailFragment : Fragment() {
         binding.jailDetailWorkProfileReason.text = reasonText
         binding.jailDetailWorkProfileReason.visibility = if (reasonText.isBlank()) View.GONE else View.VISIBLE
         binding.jailDetailWorkProfileAction.text = when (entry.action) {
-            WorkProfileAppAction.OPEN_IN_WORK -> getString(R.string.jail_detail_work_profile_action_unavailable)
+            WorkProfileAppAction.OPEN_IN_WORK -> getString(R.string.jail_detail_work_profile_action_installed)
             WorkProfileAppAction.INSTALL_AUTOMATICALLY -> getString(R.string.jail_detail_work_profile_action_install)
             WorkProfileAppAction.OPEN_STORE_MANUALLY -> getString(R.string.jail_detail_work_profile_action_store)
             WorkProfileAppAction.NONE -> getString(R.string.jail_detail_work_profile_action_unavailable)
