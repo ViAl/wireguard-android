@@ -7,6 +7,7 @@ package com.wireguard.android.jail.enterprise
 import android.content.Context
 import android.content.Intent
 import android.content.pm.LauncherApps
+import android.os.Process
 import com.wireguard.android.jail.domain.WorkProfileInstallGuide
 import com.wireguard.android.jail.model.WorkProfileAppAction
 import com.wireguard.android.jail.model.WorkProfileAppAvailability
@@ -160,14 +161,18 @@ open class WorkProfileAppInstallCapabilityChecker(
     private class AndroidFallbackLauncher(context: Context) : FallbackLauncher {
         private val packageManager = context.packageManager
         private val appContext = context.applicationContext
+        private val launcherApps = context.getSystemService(LauncherApps::class.java)
 
         override fun canLaunchStoreIntent(packageName: String): Boolean {
+            if (canLaunchStoreInOtherProfile()) return true
             val primary = WorkProfileInstallGuide.playStoreDetailsIntent(packageName)
             val fallback = WorkProfileInstallGuide.playStoreHttpsIntent(packageName)
             return resolvable(primary) || resolvable(fallback)
         }
 
         override fun launchStoreIntent(packageName: String): Boolean {
+            if (launchStoreInOtherProfile()) return true
+
             val intents = listOf(
                 WorkProfileInstallGuide.playStoreDetailsIntent(packageName),
                 WorkProfileInstallGuide.playStoreHttpsIntent(packageName),
@@ -180,6 +185,32 @@ open class WorkProfileAppInstallCapabilityChecker(
             }.getOrDefault(false)
         }
 
+        private fun canLaunchStoreInOtherProfile(): Boolean =
+            otherProfiles().any { handle ->
+                runCatching { launcherApps?.getActivityList(PLAY_STORE_PACKAGE, handle).orEmpty().isNotEmpty() }
+                    .getOrDefault(false)
+            }
+
+        private fun launchStoreInOtherProfile(): Boolean {
+            val candidate = otherProfiles().firstNotNullOfOrNull { handle ->
+                val activity = runCatching {
+                    launcherApps?.getActivityList(PLAY_STORE_PACKAGE, handle).orEmpty().firstOrNull()
+                }.getOrNull() ?: return@firstNotNullOfOrNull null
+                handle to activity.componentName
+            } ?: return false
+
+            return runCatching {
+                launcherApps?.startMainActivity(candidate.second, candidate.first, null, null)
+                true
+            }.getOrDefault(false)
+        }
+
+        private fun otherProfiles() = launcherApps?.profiles.orEmpty().filterNot { it == Process.myUserHandle() }
+
         private fun resolvable(intent: Intent): Boolean = intent.resolveActivity(packageManager) != null
+
+        private companion object {
+            const val PLAY_STORE_PACKAGE = "com.android.vending"
+        }
     }
 }
