@@ -11,6 +11,8 @@ import com.wireguard.android.jail.model.ManagedProfileOwnershipState
 import com.wireguard.android.jail.model.WorkProfileAppAction
 import com.wireguard.android.jail.model.WorkProfileAppAvailability
 import com.wireguard.android.jail.model.WorkProfileAppInstallCapability
+import com.wireguard.android.jail.model.WorkProfileInstallEnvironment
+import com.wireguard.android.jail.model.WorkProfileInstallEnvironmentReason
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -103,6 +105,24 @@ class WorkProfileAppInstallServiceTest {
         installedInWorkProfile = installedInWork,
         canInstallAutomatically = canAuto,
         canLaunchManualFallback = canFallback,
+        environment = WorkProfileInstallEnvironment(
+            ownershipState = ManagedProfileOwnershipState.MANAGED_PROFILE_OURS,
+            installedInParentProfile = true,
+            installedInWorkProfile = installedInWork,
+            installExistingPackageApiAvailable = true,
+            manualStoreFallbackResolvable = canFallback,
+            hasTargetUserProfiles = true,
+            autoInstallAllowedByEnvironment = canAuto,
+            environmentReason = if (installedInWork) {
+                WorkProfileInstallEnvironmentReason.ALREADY_INSTALLED_IN_WORK
+            } else if (canAuto) {
+                WorkProfileInstallEnvironmentReason.PROFILE_OWNER_CONFIRMED
+            } else if (canFallback) {
+                WorkProfileInstallEnvironmentReason.MANUAL_FALLBACK_ONLY
+            } else {
+                WorkProfileInstallEnvironmentReason.NO_FALLBACK_AVAILABLE
+            },
+        ),
         availability = when {
             installedInWork -> WorkProfileAppAvailability.INSTALLED_IN_WORK
             canAuto -> WorkProfileAppAvailability.INSTALLABLE_AUTOMATICALLY
@@ -120,6 +140,7 @@ class WorkProfileAppInstallServiceTest {
     private val fakeInspector = object : WorkProfileAppInstallCapabilityChecker.PackageInspector {
         override fun isInstalledInParent(packageName: String): Boolean = true
         override fun isInstalledInWorkProfile(packageName: String): Boolean = false
+        override fun hasTargetProfiles(): Boolean = true
         override fun appLabel(packageName: String): String = "Label"
     }
 

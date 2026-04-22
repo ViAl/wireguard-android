@@ -19,6 +19,7 @@ class WorkProfileAppCatalogService(
                 installedInWorkProfile = capability.installedInWorkProfile,
                 availability = capability.availability,
                 action = capability.action,
+                environmentReason = capability.environment.environmentReason,
                 actionReason = capability.reason,
             )
         }

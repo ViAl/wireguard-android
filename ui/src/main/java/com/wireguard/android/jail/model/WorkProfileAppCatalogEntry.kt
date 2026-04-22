@@ -11,6 +11,7 @@ data class WorkProfileAppCatalogEntry(
     val installedInWorkProfile: Boolean,
     val availability: WorkProfileAppAvailability,
     val action: WorkProfileAppAction,
+    val environmentReason: WorkProfileInstallEnvironmentReason,
     val actionReason: String? = null,
 )
 
@@ -21,6 +22,7 @@ data class WorkProfileAppInstallCapability(
     val installedInWorkProfile: Boolean,
     val canInstallAutomatically: Boolean,
     val canLaunchManualFallback: Boolean,
+    val environment: WorkProfileInstallEnvironment,
     val availability: WorkProfileAppAvailability,
     val action: WorkProfileAppAction,
     val reason: String? = null,
