@@ -8,6 +8,7 @@ import android.app.Application
 import androidx.test.core.app.ApplicationProvider
 import com.wireguard.android.jail.model.InstallResult
 import com.wireguard.android.jail.model.ManagedProfileOwnershipState
+import com.wireguard.android.jail.model.UnsupportedReason
 import com.wireguard.android.jail.model.WorkProfileAppAction
 import com.wireguard.android.jail.model.WorkProfileAppAvailability
 import com.wireguard.android.jail.model.WorkProfileAppInstallCapability
@@ -63,6 +64,51 @@ class WorkProfileAppInstallServiceTest {
             },
         )
         assertTrue(service.install(PKG) is InstallResult.Unsupported)
+    }
+
+    @Test
+    fun launchManualInstall_capabilityUnavailable_returnsUnsupported() {
+        val service = service(
+            first = capability(canAuto = false, canFallback = false),
+            second = capability(canAuto = false, canFallback = false),
+            installResult = false,
+        )
+
+        val result = service.launchManualInstall(PKG)
+
+        assertTrue(result is InstallResult.Unsupported)
+        assertTrue((result as InstallResult.Unsupported).reason == UnsupportedReason.UNKNOWN)
+    }
+
+    @Test
+    fun launchManualInstall_launcherFails_returnsFailed() {
+        val checker = object : WorkProfileAppInstallCapabilityChecker(
+            app,
+            ownershipService = object : ManagedProfileOwnershipStateProvider {
+                override fun state() = ManagedProfileOwnershipState.MANAGED_PROFILE_OURS
+            },
+            packageInspector = fakeInspector,
+            fallbackLauncher = fakeFallback,
+        ) {
+            override fun capabilityFor(packageName: String): WorkProfileAppInstallCapability =
+                capability(canAuto = false, canFallback = true)
+        }
+        val failingFallback = object : WorkProfileAppInstallCapabilityChecker.FallbackLauncher {
+            override fun canLaunchStoreIntent(packageName: String): Boolean = true
+            override fun launchStoreIntent(packageName: String): Boolean = false
+        }
+        val service = WorkProfileAppInstallService(
+            context = app,
+            capabilityChecker = checker,
+            fallbackLauncher = failingFallback,
+            installer = object : WorkProfileAppInstallService.EnterpriseInstaller {
+                override fun installExistingPackage(packageName: String): Boolean = false
+            },
+        )
+
+        val result = service.launchManualInstall(PKG)
+
+        assertTrue(result is InstallResult.Failed)
     }
 
     private fun service(

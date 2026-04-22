@@ -94,6 +94,21 @@ class WorkProfileAppInstallCapabilityCheckerTest {
         assertEquals(WorkProfileInstallEnvironmentReason.NO_MANAGED_PROFILE, capability.environment.environmentReason)
     }
 
+    @Test
+    fun capability_manualUnavailableWhenWorkProfileMarketUnavailable() {
+        val checker = checker(
+            ownership = ManagedProfileOwnershipState.MANAGED_PROFILE_PRESENT_NOT_OURS,
+            inParent = true,
+            inWork = false,
+            fallback = false,
+            sdkInt = 34,
+        )
+        val capability = checker.capabilityFor(PKG)
+        assertEquals(WorkProfileAppAvailability.UNAVAILABLE, capability.availability)
+        assertEquals(WorkProfileAppAction.NONE, capability.action)
+        assertEquals(WorkProfileInstallEnvironmentReason.NO_FALLBACK_AVAILABLE, capability.environment.environmentReason)
+    }
+
     private fun checker(
         ownership: ManagedProfileOwnershipState,
         inParent: Boolean,

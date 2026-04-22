@@ -544,7 +544,7 @@
     <string name="jail_detail_work_profile_action_open">Open in work profile</string>
     <string name="jail_detail_work_profile_action_installed">Installed</string>
     <string name="jail_detail_work_profile_action_install">Install automatically</string>
-    <string name="jail_detail_work_profile_action_store">Open store manually</string>
+    <string name="jail_detail_work_profile_action_store">Open store in work profile</string>
     <string name="jail_detail_work_profile_action_unavailable">Unavailable</string>
     <string name="jail_detail_work_profile_action_checking">Checking…</string>
     <string name="jail_detail_work_profile_action_check_again">Check again</string>

@@ -83,6 +83,19 @@ class InstallEnvironmentInspectorTest {
     }
 
     @Test
+    fun reason_noFallbackAvailable_whenNoSecondaryProfileTarget() {
+        val environment = inspect(
+            ownership = ManagedProfileOwnershipState.SECONDARY_PROFILE_PRESENT_NOT_OURS,
+            hasProfiles = false,
+            fallback = false,
+            sdkInt = 34,
+        )
+        assertFalse(environment.hasTargetUserProfiles)
+        assertFalse(environment.manualStoreFallbackResolvable)
+        assertEquals(WorkProfileInstallEnvironmentReason.NO_FALLBACK_AVAILABLE, environment.environmentReason)
+    }
+
+    @Test
     fun reason_unsupportedApiPath() {
         val environment = inspect(
             ownership = ManagedProfileOwnershipState.UNSUPPORTED,
