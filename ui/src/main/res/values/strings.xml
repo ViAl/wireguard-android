@@ -337,8 +337,6 @@
     <string name="jail_signal_fg_service_microphone_detail">The app declares a foreground service of type \u201Cmicrophone\u201D, meaning it may keep recording audio while a notification is visible.</string>
     <string name="jail_signal_fg_service_camera_short">Camera foreground service</string>
     <string name="jail_signal_fg_service_camera_detail">The app declares a foreground service of type \u201Ccamera\u201D, meaning it may keep using the camera while a notification is visible.</string>
-    <string name="jail_signal_missing_work_profile_short">Not installed in another profile</string>
-    <string name="jail_signal_missing_work_profile_detail">Another profile appears to exist on this device, but this app is only installed in the main profile. Main-profile data therefore remains visible to this copy.</string>
     <!-- Phase 4: human-readable report -->
     <string name="jail_report_title">Risk report</string>
     <string name="jail_report_intro">Plain-language summary of what each selected app can probably observe. Jail lowers some of this; it cannot eliminate it.</string>
@@ -540,6 +538,7 @@
     <string name="jail_detail_work_profile_state_manual">Manual install is required</string>
     <string name="jail_detail_work_profile_state_unavailable">Work-profile install is unavailable</string>
     <string name="jail_detail_work_profile_action_open">Open in work profile</string>
+    <string name="jail_detail_work_profile_action_installed">Installed</string>
     <string name="jail_detail_work_profile_action_install">Install automatically</string>
     <string name="jail_detail_work_profile_action_store">Open store manually</string>
     <string name="jail_detail_work_profile_action_unavailable">Unavailable</string>
@@ -548,4 +547,15 @@
     <string name="jail_detail_work_profile_result_manual">Manual action required to finish installation.</string>
     <string name="jail_detail_work_profile_result_unsupported">Automatic install is unsupported in this profile state.</string>
     <string name="jail_detail_work_profile_result_failed">Work-profile operation failed.</string>
+    <string name="jail_detail_work_profile_reason_installed">Already installed in the work profile.</string>
+    <string name="jail_detail_work_profile_reason_owner_confirmed">Automatic install may be available because this app appears to be profile owner.</string>
+    <string name="jail_detail_work_profile_reason_not_ours">Manual install is required because this managed profile is not owned by Jail.</string>
+    <string name="jail_detail_work_profile_reason_secondary_only">Only a secondary profile is visible; managed ownership is not confirmed.</string>
+    <string name="jail_detail_work_profile_reason_ownership_uncertain">Manual install is required because profile ownership could not be verified.</string>
+    <string name="jail_detail_work_profile_reason_no_profile">No managed profile was detected for this user state.</string>
+    <string name="jail_detail_work_profile_reason_api_unsupported">Automatic install is unavailable on this Android/API level.</string>
+    <string name="jail_detail_work_profile_reason_parent_missing">Automatic install requires the app to exist in the parent profile first.</string>
+    <string name="jail_detail_work_profile_reason_manual_only">Automatic install is not available in this environment; manual store install is the supported path.</string>
+    <string name="jail_detail_work_profile_reason_no_path">No supported automatic or manual install path is currently available.</string>
+    <string name="jail_detail_work_profile_reason_unknown">Install environment could not be diagnosed reliably.</string>
 </resources>

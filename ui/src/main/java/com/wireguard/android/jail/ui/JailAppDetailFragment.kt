@@ -36,6 +36,7 @@ import com.wireguard.android.jail.model.JailAppInfo
 import com.wireguard.android.jail.model.JailTunnelMode
 import com.wireguard.android.jail.model.RiskReason
 import com.wireguard.android.jail.model.WorkProfileAppAction
+import com.wireguard.android.jail.model.WorkProfileInstallEnvironmentReason
 import com.wireguard.android.jail.storage.JailStore
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
@@ -213,11 +214,11 @@ class JailAppDetailFragment : Fragment() {
             WorkProfileAppAction.OPEN_STORE_MANUALLY -> getString(R.string.jail_detail_work_profile_state_manual)
             WorkProfileAppAction.NONE -> getString(R.string.jail_detail_work_profile_state_unavailable)
         }
-        binding.jailDetailWorkProfileReason.text = entry.actionReason.orEmpty()
-        binding.jailDetailWorkProfileReason.visibility =
-            if (entry.actionReason.isNullOrBlank()) View.GONE else View.VISIBLE
+        val reasonText = environmentReasonText(entry.environmentReason)
+        binding.jailDetailWorkProfileReason.text = reasonText
+        binding.jailDetailWorkProfileReason.visibility = if (reasonText.isBlank()) View.GONE else View.VISIBLE
         binding.jailDetailWorkProfileAction.text = when (entry.action) {
-            WorkProfileAppAction.OPEN_IN_WORK -> getString(R.string.jail_detail_work_profile_action_unavailable)
+            WorkProfileAppAction.OPEN_IN_WORK -> getString(R.string.jail_detail_work_profile_action_installed)
             WorkProfileAppAction.INSTALL_AUTOMATICALLY -> getString(R.string.jail_detail_work_profile_action_install)
             WorkProfileAppAction.OPEN_STORE_MANUALLY -> getString(R.string.jail_detail_work_profile_action_store)
             WorkProfileAppAction.NONE -> getString(R.string.jail_detail_work_profile_action_unavailable)
@@ -226,6 +227,31 @@ class JailAppDetailFragment : Fragment() {
             entry.action == WorkProfileAppAction.INSTALL_AUTOMATICALLY ||
                 entry.action == WorkProfileAppAction.OPEN_STORE_MANUALLY
         binding.jailDetailWorkProfileAction.tag = entry.action
+    }
+
+    private fun environmentReasonText(reason: WorkProfileInstallEnvironmentReason): String = when (reason) {
+        WorkProfileInstallEnvironmentReason.ALREADY_INSTALLED_IN_WORK ->
+            getString(R.string.jail_detail_work_profile_reason_installed)
+        WorkProfileInstallEnvironmentReason.PROFILE_OWNER_CONFIRMED ->
+            getString(R.string.jail_detail_work_profile_reason_owner_confirmed)
+        WorkProfileInstallEnvironmentReason.MANAGED_PROFILE_NOT_OURS ->
+            getString(R.string.jail_detail_work_profile_reason_not_ours)
+        WorkProfileInstallEnvironmentReason.SECONDARY_PROFILE_PRESENT_ONLY ->
+            getString(R.string.jail_detail_work_profile_reason_secondary_only)
+        WorkProfileInstallEnvironmentReason.OWNERSHIP_UNCERTAIN ->
+            getString(R.string.jail_detail_work_profile_reason_ownership_uncertain)
+        WorkProfileInstallEnvironmentReason.NO_MANAGED_PROFILE ->
+            getString(R.string.jail_detail_work_profile_reason_no_profile)
+        WorkProfileInstallEnvironmentReason.API_LEVEL_UNSUPPORTED ->
+            getString(R.string.jail_detail_work_profile_reason_api_unsupported)
+        WorkProfileInstallEnvironmentReason.PARENT_PACKAGE_MISSING ->
+            getString(R.string.jail_detail_work_profile_reason_parent_missing)
+        WorkProfileInstallEnvironmentReason.MANUAL_FALLBACK_ONLY ->
+            getString(R.string.jail_detail_work_profile_reason_manual_only)
+        WorkProfileInstallEnvironmentReason.NO_FALLBACK_AVAILABLE ->
+            getString(R.string.jail_detail_work_profile_reason_no_path)
+        WorkProfileInstallEnvironmentReason.UNKNOWN ->
+            getString(R.string.jail_detail_work_profile_reason_unknown)
     }
 
     private fun onWorkProfileActionClicked() {

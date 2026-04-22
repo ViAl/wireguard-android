@@ -7,97 +7,120 @@ package com.wireguard.android.jail.enterprise
 import android.content.Context
 import android.content.Intent
 import android.content.pm.LauncherApps
-import android.os.Build
+import android.os.Process
 import com.wireguard.android.jail.domain.WorkProfileInstallGuide
-import com.wireguard.android.jail.model.ManagedProfileOwnershipState
 import com.wireguard.android.jail.model.WorkProfileAppAction
 import com.wireguard.android.jail.model.WorkProfileAppAvailability
 import com.wireguard.android.jail.model.WorkProfileAppInstallCapability
+import com.wireguard.android.jail.model.WorkProfileInstallEnvironmentReason
 
 open class WorkProfileAppInstallCapabilityChecker(
     context: Context,
-    private val ownershipService: ManagedProfileOwnershipStateProvider,
+    ownershipService: ManagedProfileOwnershipStateProvider,
     private val packageInspector: PackageInspector = AndroidPackageInspector(context),
     private val fallbackLauncher: FallbackLauncher = AndroidFallbackLauncher(context),
+    private val environmentInspector: InstallEnvironmentInspector = InstallEnvironmentInspector(
+        ownershipService = ownershipService,
+        packageInspector = packageInspector,
+        fallbackLauncher = fallbackLauncher,
+    ),
 ) {
     fun fallbackLauncher(): FallbackLauncher = fallbackLauncher
 
     open fun capabilityFor(packageName: String): WorkProfileAppInstallCapability {
-        val ownership = ownershipService.state()
-        val inParent = packageInspector.isInstalledInParent(packageName)
-        val inWork = packageInspector.isInstalledInWorkProfile(packageName)
-        val canFallback = fallbackLauncher.canLaunchStoreIntent(packageName)
+        val environment = environmentInspector.inspect(packageName)
+        val canFallback = environment.manualStoreFallbackResolvable
 
-        if (inWork) {
+        if (environment.installedInWorkProfile) {
             return WorkProfileAppInstallCapability(
                 label = packageInspector.appLabel(packageName),
-                ownershipState = ownership,
-                installedInParentProfile = inParent,
+                ownershipState = environment.ownershipState,
+                installedInParentProfile = environment.installedInParentProfile,
                 installedInWorkProfile = true,
                 canInstallAutomatically = false,
                 canLaunchManualFallback = false,
+                environment = environment,
                 availability = WorkProfileAppAvailability.INSTALLED_IN_WORK,
                 action = WorkProfileAppAction.OPEN_IN_WORK,
-                reason = "Already installed in work profile",
+                reason = reasonText(environment.environmentReason),
             )
         }
 
-        val ownedByUs = ownership == ManagedProfileOwnershipState.MANAGED_PROFILE_OURS
-        val autoInstallPossible = ownedByUs && inParent && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
+        val autoInstallPossible = environment.autoInstallAllowedByEnvironment
 
         if (autoInstallPossible) {
             return WorkProfileAppInstallCapability(
                 label = packageInspector.appLabel(packageName),
-                ownershipState = ownership,
-                installedInParentProfile = inParent,
+                ownershipState = environment.ownershipState,
+                installedInParentProfile = environment.installedInParentProfile,
                 installedInWorkProfile = false,
                 canInstallAutomatically = true,
                 canLaunchManualFallback = canFallback,
+                environment = environment,
                 availability = WorkProfileAppAvailability.INSTALLABLE_AUTOMATICALLY,
                 action = WorkProfileAppAction.INSTALL_AUTOMATICALLY,
-                reason = "Profile owner verified and source package present",
+                reason = reasonText(environment.environmentReason),
             )
         }
 
         if (canFallback) {
             return WorkProfileAppInstallCapability(
                 label = packageInspector.appLabel(packageName),
-                ownershipState = ownership,
-                installedInParentProfile = inParent,
+                ownershipState = environment.ownershipState,
+                installedInParentProfile = environment.installedInParentProfile,
                 installedInWorkProfile = false,
                 canInstallAutomatically = false,
                 canLaunchManualFallback = true,
+                environment = environment,
                 availability = WorkProfileAppAvailability.REQUIRES_MANUAL_INSTALL,
                 action = WorkProfileAppAction.OPEN_STORE_MANUALLY,
-                reason = when (ownership) {
-                    ManagedProfileOwnershipState.MANAGED_PROFILE_PRESENT_NOT_OURS ->
-                        "Managed profile is not owned by this app"
-                    ManagedProfileOwnershipState.SECONDARY_PROFILE_PRESENT_NOT_OURS ->
-                        "Secondary profile is present, but managed ownership is not confirmed"
-                    ManagedProfileOwnershipState.NO_MANAGED_PROFILE -> "No managed profile detected"
-                    ManagedProfileOwnershipState.UNSUPPORTED -> "Managed profile APIs unsupported"
-                    ManagedProfileOwnershipState.OWNERSHIP_UNCERTAIN -> "Ownership could not be verified"
-                    ManagedProfileOwnershipState.MANAGED_PROFILE_OURS -> "Package is not available for installExistingPackage"
-                },
+                reason = reasonText(environment.environmentReason),
             )
         }
 
         return WorkProfileAppInstallCapability(
             label = packageInspector.appLabel(packageName),
-            ownershipState = ownership,
-            installedInParentProfile = inParent,
+            ownershipState = environment.ownershipState,
+            installedInParentProfile = environment.installedInParentProfile,
             installedInWorkProfile = false,
             canInstallAutomatically = false,
             canLaunchManualFallback = false,
+            environment = environment,
             availability = WorkProfileAppAvailability.UNAVAILABLE,
             action = WorkProfileAppAction.NONE,
-            reason = "No automatic or manual flow is available",
+            reason = reasonText(environment.environmentReason),
         )
+    }
+
+    private fun reasonText(reason: WorkProfileInstallEnvironmentReason): String = when (reason) {
+        WorkProfileInstallEnvironmentReason.ALREADY_INSTALLED_IN_WORK ->
+            "Already installed in work profile"
+        WorkProfileInstallEnvironmentReason.PROFILE_OWNER_CONFIRMED ->
+            "Automatic install may be available because this app appears to be profile owner"
+        WorkProfileInstallEnvironmentReason.MANAGED_PROFILE_NOT_OURS ->
+            "Manual install is required because this profile is not owned by Jail"
+        WorkProfileInstallEnvironmentReason.SECONDARY_PROFILE_PRESENT_ONLY ->
+            "Only a secondary profile is visible; managed ownership is not confirmed"
+        WorkProfileInstallEnvironmentReason.OWNERSHIP_UNCERTAIN ->
+            "Manual install is required because ownership could not be verified"
+        WorkProfileInstallEnvironmentReason.NO_MANAGED_PROFILE ->
+            "No managed profile was detected on this device state"
+        WorkProfileInstallEnvironmentReason.API_LEVEL_UNSUPPORTED ->
+            "Automatic install is unavailable on this Android/API level"
+        WorkProfileInstallEnvironmentReason.PARENT_PACKAGE_MISSING ->
+            "Automatic install requires the app to be installed in the parent profile first"
+        WorkProfileInstallEnvironmentReason.MANUAL_FALLBACK_ONLY ->
+            "Automatic install is not available; manual store install is the best supported path"
+        WorkProfileInstallEnvironmentReason.NO_FALLBACK_AVAILABLE ->
+            "No automatic or manual install flow appears to be available"
+        WorkProfileInstallEnvironmentReason.UNKNOWN ->
+            "Install environment could not be diagnosed"
     }
 
     interface PackageInspector {
         fun isInstalledInParent(packageName: String): Boolean
         fun isInstalledInWorkProfile(packageName: String): Boolean
+        fun hasTargetProfiles(): Boolean
         fun appLabel(packageName: String): String?
     }
 
@@ -121,6 +144,9 @@ open class WorkProfileAppInstallCapabilityChecker(
             }
         }
 
+        override fun hasTargetProfiles(): Boolean =
+            launcherApps?.profiles.orEmpty().any { it != android.os.Process.myUserHandle() }
+
         override fun appLabel(packageName: String): String? = runCatching {
             val appInfo = packageManager.getApplicationInfo(packageName, 0)
             packageManager.getApplicationLabel(appInfo).toString()
@@ -135,14 +161,18 @@ open class WorkProfileAppInstallCapabilityChecker(
     private class AndroidFallbackLauncher(context: Context) : FallbackLauncher {
         private val packageManager = context.packageManager
         private val appContext = context.applicationContext
+        private val launcherApps = context.getSystemService(LauncherApps::class.java)
 
         override fun canLaunchStoreIntent(packageName: String): Boolean {
+            if (canLaunchStoreInOtherProfile()) return true
             val primary = WorkProfileInstallGuide.playStoreDetailsIntent(packageName)
             val fallback = WorkProfileInstallGuide.playStoreHttpsIntent(packageName)
             return resolvable(primary) || resolvable(fallback)
         }
 
         override fun launchStoreIntent(packageName: String): Boolean {
+            if (launchStoreInOtherProfile()) return true
+
             val intents = listOf(
                 WorkProfileInstallGuide.playStoreDetailsIntent(packageName),
                 WorkProfileInstallGuide.playStoreHttpsIntent(packageName),
@@ -155,6 +185,32 @@ open class WorkProfileAppInstallCapabilityChecker(
             }.getOrDefault(false)
         }
 
+        private fun canLaunchStoreInOtherProfile(): Boolean =
+            otherProfiles().any { handle ->
+                runCatching { launcherApps?.getActivityList(PLAY_STORE_PACKAGE, handle).orEmpty().isNotEmpty() }
+                    .getOrDefault(false)
+            }
+
+        private fun launchStoreInOtherProfile(): Boolean {
+            val candidate = otherProfiles().firstNotNullOfOrNull { handle ->
+                val activity = runCatching {
+                    launcherApps?.getActivityList(PLAY_STORE_PACKAGE, handle).orEmpty().firstOrNull()
+                }.getOrNull() ?: return@firstNotNullOfOrNull null
+                handle to activity.componentName
+            } ?: return false
+
+            return runCatching {
+                launcherApps?.startMainActivity(candidate.second, candidate.first, null, null)
+                true
+            }.getOrDefault(false)
+        }
+
+        private fun otherProfiles() = launcherApps?.profiles.orEmpty().filterNot { it == Process.myUserHandle() }
+
         private fun resolvable(intent: Intent): Boolean = intent.resolveActivity(packageManager) != null
+
+        private companion object {
+            const val PLAY_STORE_PACKAGE = "com.android.vending"
+        }
     }
 }
