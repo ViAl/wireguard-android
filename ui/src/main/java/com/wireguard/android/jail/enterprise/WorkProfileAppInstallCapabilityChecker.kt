@@ -10,6 +10,7 @@ import android.content.Intent
 import android.content.IntentSender
 import android.content.pm.LauncherApps
 import android.os.Build
+import android.os.Bundle
 import android.os.Process
 import android.os.UserHandle
 import com.wireguard.android.jail.domain.WorkProfileInstallGuide
@@ -201,7 +202,9 @@ open class WorkProfileAppInstallCapabilityChecker(
                 val sender = appMarketActivityIntentSender(svc, packageName, profile) ?: continue
                 val launched = runCatching {
                     val fillIn = Intent().addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    appContext.startIntentSender(sender, fillIn, 0, 0, null)
+                    // Disambiguate Context.startIntentSender(..., Bundle) vs (..., int extraFlags): a bare
+                    // `null` matches neither uniquely on some Kotlin/JVM overload resolutions.
+                    appContext.startIntentSender(sender, fillIn, 0, 0, null as Bundle?)
                     true
                 }.getOrDefault(false)
                 if (launched) return true
