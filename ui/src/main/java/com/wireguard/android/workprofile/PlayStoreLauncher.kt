@@ -47,12 +47,10 @@ open class PlayStoreLauncher(private val context: Context) {
     }
 
     companion object {
+        private const val TAG = "WG-WorkProfile"
         const val PLAY_STORE_PACKAGE = "com.android.vending"
+
         fun playStoreUrl(packageName: String): String =
             "https://play.google.com/store/apps/details?id=$packageName"
-    }
-
-    private companion object {
-        const val TAG = "WG-WorkProfile"
     }
 }

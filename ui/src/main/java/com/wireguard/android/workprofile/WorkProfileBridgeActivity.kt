@@ -40,12 +40,9 @@ class WorkProfileBridgeActivity : AppCompatActivity() {
     }
 
     companion object {
+        private const val TAG = "WG-WorkProfile"
         const val ACTION_OPEN_PLAY_STORE_IN_WORK = "com.wireguard.android.action.OPEN_PLAY_STORE_IN_WORK"
         const val ACTION_INSTALL_COMMIT_CALLBACK = "com.wireguard.android.action.WORK_INSTALL_COMMIT_CALLBACK"
         const val EXTRA_PACKAGE_NAME = "extra_package_name"
-    }
-
-    private companion object {
-        const val TAG = "WG-WorkProfile"
     }
 }
