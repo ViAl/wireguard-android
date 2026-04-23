@@ -23,6 +23,11 @@ import com.wireguard.android.backend.WgQuickBackend
 import com.wireguard.android.configStore.FileConfigStore
 import com.wireguard.android.jail.JailComponent
 import com.wireguard.android.model.TunnelManager
+import com.wireguard.android.workprofile.PlayStoreLauncher
+import com.wireguard.android.workprofile.ProfileAdminReceiver
+import com.wireguard.android.workprofile.WorkProfileCapabilityChecker
+import com.wireguard.android.workprofile.WorkProfileInstallCoordinator
+import com.wireguard.android.workprofile.WorkProfileInstaller
 import com.wireguard.android.updater.Updater
 import com.wireguard.android.util.RootShell
 import com.wireguard.android.util.ToolsInstaller
@@ -50,6 +55,7 @@ class Application : android.app.Application() {
     private lateinit var toolsInstaller: ToolsInstaller
     private lateinit var tunnelManager: TunnelManager
     private lateinit var jailComponent: JailComponent
+    private lateinit var workProfileInstallCoordinator: WorkProfileInstallCoordinator
 
     override fun attachBaseContext(context: Context) {
         super.attachBaseContext(context)
@@ -111,6 +117,14 @@ class Application : android.app.Application() {
         tunnelManager = TunnelManager(FileConfigStore(applicationContext))
         tunnelManager.onCreate()
         jailComponent = JailComponent(applicationContext, coroutineScope, tunnelManager)
+        val profileAdmin = android.content.ComponentName(applicationContext, ProfileAdminReceiver::class.java)
+        val capabilityChecker = WorkProfileCapabilityChecker(applicationContext, profileAdmin)
+        workProfileInstallCoordinator = WorkProfileInstallCoordinator(
+            context = applicationContext,
+            capabilityChecker = capabilityChecker,
+            installer = WorkProfileInstaller(applicationContext, capabilityChecker),
+            playStoreLauncher = PlayStoreLauncher(applicationContext),
+        )
         coroutineScope.launch(Dispatchers.IO) {
             try {
                 backend = determineBackend()
@@ -154,6 +168,8 @@ class Application : android.app.Application() {
         fun getCoroutineScope() = get().coroutineScope
 
         fun getJailComponent() = get().jailComponent
+
+        fun getWorkProfileInstallCoordinator() = get().workProfileInstallCoordinator
     }
 
     init {

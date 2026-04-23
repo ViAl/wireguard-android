@@ -15,11 +15,14 @@ import androidx.appcompat.app.ActionBar
 import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.FragmentTransaction
 import androidx.fragment.app.commit
+import com.wireguard.android.Application
 import com.wireguard.android.R
+import com.wireguard.android.workprofile.PackageCloneResult
 import com.wireguard.android.fragment.MainTabsFragment
 import com.wireguard.android.fragment.TunnelDetailFragment
 import com.wireguard.android.fragment.TunnelEditorFragment
 import com.wireguard.android.model.ObservableTunnel
+import com.wireguard.android.workprofile.WorkProfileBridgeActivity
 
 /**
  * CRUD interface for WireGuard tunnels. This activity serves as the main entry point to the
@@ -68,8 +71,14 @@ class MainActivity : BaseActivity(), FragmentManager.OnBackStackChangedListener,
         supportFragmentManager.addOnBackStackChangedListener(this)
         backPressedCallback = onBackPressedDispatcher.addCallback(this) { handleBackPressed() }
         onBackStackChanged()
+        handleWorkProfileInstallIntent(intent)
     }
 
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleWorkProfileInstallIntent(intent)
+    }
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.main_activity, menu)
         menu.findItem(R.id.menu_action_edit)?.isVisible = selectedMainTab == MainTabsFragment.MainTab.VPN
@@ -156,7 +165,31 @@ class MainActivity : BaseActivity(), FragmentManager.OnBackStackChangedListener,
         super.onSaveInstanceState(outState)
     }
 
+
+    private fun handleWorkProfileInstallIntent(intent: Intent?) {
+        if (intent?.action != ACTION_INSTALL_IN_WORK_PROFILE) return
+        val packageName = intent.getStringExtra(EXTRA_PACKAGE_NAME).orEmpty()
+        val result = Application.getWorkProfileInstallCoordinator().installInWorkProfile(packageName, this)
+        val message = when (result) {
+            PackageCloneResult.SuccessInstalledExisting -> "Installed in work profile (existing package)."
+            PackageCloneResult.SuccessEnabledSystemApp -> "Installed in work profile (enabled system app)."
+            PackageCloneResult.SuccessInstalledFromApkSession -> "Installed in work profile (APK session)."
+            PackageCloneResult.RedirectedToPlayStore -> "Открыт Play Store в work profile"
+            PackageCloneResult.ErrorNoWorkProfileHelper ->
+                "Установите экземпляр приложения в work profile для продолжения"
+            PackageCloneResult.ErrorNotProfileOwner -> "Work profile owner permissions are unavailable."
+            PackageCloneResult.ErrorPackageNotFound -> "Package not found in primary profile."
+            PackageCloneResult.ErrorPlayStoreUnavailable -> "Play Store is unavailable in work profile."
+            PackageCloneResult.ErrorInstallSessionFailed -> "Install session failed or was cancelled."
+            PackageCloneResult.ErrorUnsupportedAndroidVersion -> "Android version does not support this flow."
+            PackageCloneResult.ErrorPermissionDenied -> "Permission denied by enterprise policy."
+            is PackageCloneResult.ErrorUnknown -> "Unknown error: ${result.message}"
+        }
+        android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_LONG).show()
+    }
     companion object {
+        const val ACTION_INSTALL_IN_WORK_PROFILE = "com.wireguard.android.action.INSTALL_IN_WORK_PROFILE"
+        const val EXTRA_PACKAGE_NAME = WorkProfileBridgeActivity.EXTRA_PACKAGE_NAME
         private const val KEY_SELECTED_MAIN_TAB = "selected_main_tab"
     }
 }
