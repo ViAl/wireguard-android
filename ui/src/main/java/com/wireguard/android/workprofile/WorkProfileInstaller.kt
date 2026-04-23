@@ -34,11 +34,9 @@ open class WorkProfileInstaller(
 
         if (packageSourceResolver.isSystemPackage(packageName)) {
             try {
-                val enabled = manager.enableSystemApp(admin, packageName)
-                if (enabled != 0) {
-                    Log.i(TAG, "enableSystemApp success: $packageName")
-                    return PackageCloneResult.SuccessEnabledSystemApp
-                }
+                manager.enableSystemApp(admin, packageName)
+                Log.i(TAG, "enableSystemApp invoked: $packageName")
+                return PackageCloneResult.SuccessEnabledSystemApp
             } catch (securityException: SecurityException) {
                 Log.w(TAG, "enableSystemApp denied for $packageName", securityException)
                 return PackageCloneResult.ErrorPermissionDenied
