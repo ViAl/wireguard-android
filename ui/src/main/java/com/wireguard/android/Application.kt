@@ -50,6 +50,7 @@ class Application : android.app.Application() {
     private lateinit var toolsInstaller: ToolsInstaller
     private lateinit var tunnelManager: TunnelManager
     private lateinit var jailComponent: JailComponent
+    private lateinit var workProfileInstallCoordinator: com.wireguard.android.workprofile.WorkProfileInstallCoordinator
 
     override fun attachBaseContext(context: Context) {
         super.attachBaseContext(context)
@@ -111,6 +112,28 @@ class Application : android.app.Application() {
         tunnelManager = TunnelManager(FileConfigStore(applicationContext))
         tunnelManager.onCreate()
         jailComponent = JailComponent(applicationContext, coroutineScope, tunnelManager)
+        
+        val checker = com.wireguard.android.workprofile.WorkProfileCapabilityChecker(applicationContext)
+        val resolver = com.wireguard.android.workprofile.PackageSourceResolver(applicationContext)
+        val writer = com.wireguard.android.workprofile.ApkSessionWriter()
+        val installer = com.wireguard.android.workprofile.WorkProfileInstaller(applicationContext, writer)
+        val launcher = com.wireguard.android.workprofile.PlayStoreLauncher(applicationContext)
+        workProfileInstallCoordinator = com.wireguard.android.workprofile.WorkProfileInstallCoordinator(applicationContext, checker, resolver, installer, launcher)
+        
+        if (checker.isProfileOwner()) {
+            val dpm = getSystemService(android.content.Context.DEVICE_POLICY_SERVICE) as? android.app.admin.DevicePolicyManager
+            if (dpm != null) {
+                val admin = android.content.ComponentName(this, com.wireguard.android.jail.enterprise.JailDeviceAdminReceiver::class.java)
+                val filter = android.content.IntentFilter("com.wireguard.android.workprofile.action.BRIDGE_EXECUTE")
+                filter.addCategory(android.content.Intent.CATEGORY_DEFAULT)
+                try {
+                    dpm.addCrossProfileIntentFilter(admin, filter, android.app.admin.DevicePolicyManager.FLAG_PARENT_CAN_ACCESS_MANAGED)
+                } catch (e: Exception) {
+                    // Ignore
+                }
+            }
+        }
+        
         coroutineScope.launch(Dispatchers.IO) {
             try {
                 backend = determineBackend()
@@ -154,6 +177,8 @@ class Application : android.app.Application() {
         fun getCoroutineScope() = get().coroutineScope
 
         fun getJailComponent() = get().jailComponent
+
+        fun getWorkProfileInstallCoordinator() = get().workProfileInstallCoordinator
     }
 
     init {

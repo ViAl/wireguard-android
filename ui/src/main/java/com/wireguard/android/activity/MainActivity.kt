@@ -32,6 +32,92 @@ class MainActivity : BaseActivity(), FragmentManager.OnBackStackChangedListener,
     private var backPressedCallback: OnBackPressedCallback? = null
     private var selectedMainTab = MainTabsFragment.MainTab.VPN
 
+    private val installToWorkProfileLauncher = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val cloneResult = result.data?.getSerializableExtra(com.wireguard.android.workprofile.WorkProfileInstallCoordinator.RESULT_EXTRA_CLONE_RESULT) as? com.wireguard.android.workprofile.PackageCloneResult
+            handleCloneResult(cloneResult)
+        }
+    }
+
+    private val installResultReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context, intent: Intent) {
+            val cloneResult = intent.getSerializableExtra(com.wireguard.android.workprofile.WorkProfileInstallCoordinator.RESULT_EXTRA_CLONE_RESULT) as? com.wireguard.android.workprofile.PackageCloneResult
+            handleCloneResult(cloneResult)
+        }
+    }
+
+    private fun handleCloneResult(result: com.wireguard.android.workprofile.PackageCloneResult?) {
+        val message = when (result) {
+            is com.wireguard.android.workprofile.PackageCloneResult.SuccessInstalledExisting -> "Установлено (installExistingPackage)"
+            is com.wireguard.android.workprofile.PackageCloneResult.SuccessEnabledSystemApp -> "Включено системное приложение"
+            is com.wireguard.android.workprofile.PackageCloneResult.SuccessInstalledFromApkSession -> "Установлено (ApkSession)"
+            is com.wireguard.android.workprofile.PackageCloneResult.RedirectedToPlayStore -> "Открыт Play Store в work profile"
+            is com.wireguard.android.workprofile.PackageCloneResult.ErrorNoWorkProfileHelper -> "Установите экземпляр приложения в work profile для продолжения"
+            is com.wireguard.android.workprofile.PackageCloneResult.ErrorNotProfileOwner -> "Приложение не является profile owner"
+            is com.wireguard.android.workprofile.PackageCloneResult.ErrorPackageNotFound -> "Пакет не найден"
+            is com.wireguard.android.workprofile.PackageCloneResult.ErrorPlayStoreUnavailable -> "Play Store недоступен"
+            is com.wireguard.android.workprofile.PackageCloneResult.ErrorInstallSessionFailed -> "Ошибка сессии установки"
+            is com.wireguard.android.workprofile.PackageCloneResult.ErrorUnsupportedAndroidVersion -> "Неподдерживаемая версия Android"
+            is com.wireguard.android.workprofile.PackageCloneResult.ErrorPermissionDenied -> "В доступе отказано"
+            is com.wireguard.android.workprofile.PackageCloneResult.ErrorUnknown -> "Неизвестная ошибка: ${result.message}"
+            null -> "Отменено или неизвестный результат"
+        }
+        com.google.android.material.snackbar.Snackbar.make(findViewById(android.R.id.content), message, com.google.android.material.snackbar.Snackbar.LENGTH_LONG).show()
+    }
+
+    private fun showInstallToWorkProfileDialog() {
+        val input = android.widget.EditText(this)
+        input.hint = "Введите packageName (напр. com.whatsapp)"
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Установить в work profile")
+            .setView(input)
+            .setPositiveButton("Установить") { _, _ ->
+                val packageName = input.text.toString().trim()
+                if (packageName.isNotEmpty()) {
+                    initiateWorkProfileInstall(packageName)
+                }
+            }
+            .setNegativeButton("Отмена", null)
+            .show()
+    }
+
+    private fun initiateWorkProfileInstall(packageName: String) {
+        val coordinator = com.wireguard.android.Application.getWorkProfileInstallCoordinator()
+        val intent = coordinator.getBridgeIntentForInstall(packageName)
+        if (intent != null) {
+            val resultIntent = Intent("com.wireguard.android.action.INSTALL_RESULT")
+            resultIntent.setPackage(this.packageName)
+            val pendingIntent = android.app.PendingIntent.getBroadcast(this, 0, resultIntent, android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_MUTABLE)
+            intent.putExtra(com.wireguard.android.workprofile.WorkProfileInstallCoordinator.EXTRA_RESULT_RECEIVER, pendingIntent)
+            
+            try {
+                // Try to launch implicitly. If the DPC added the filter, the system will forward it to work profile.
+                installToWorkProfileLauncher.launch(intent)
+            } catch (e: android.content.ActivityNotFoundException) {
+                // The intent filter isn't active yet. We need to force the work profile app to start
+                // so Application.onCreate can run and add the filter.
+                if (android.os.Build.VERSION.SDK_INT >= 28) {
+                    val crossProfileApps = getSystemService(android.content.Context.CROSS_PROFILE_APPS_SERVICE) as? android.content.pm.CrossProfileApps
+                    val targetUser = crossProfileApps?.targetUserProfiles?.firstOrNull()
+                    if (crossProfileApps != null && targetUser != null) {
+                        try {
+                            crossProfileApps.startMainActivity(android.content.ComponentName(this, MainActivity::class.java), targetUser)
+                            handleCloneResult(com.wireguard.android.workprofile.PackageCloneResult.ErrorUnknown("Инициализация... Пожалуйста, вернитесь сюда и попробуйте еще раз."))
+                        } catch (ex: Exception) {
+                            handleCloneResult(com.wireguard.android.workprofile.PackageCloneResult.ErrorUnknown("Ошибка CrossProfileApps.startMainActivity: ${ex.message}"))
+                        }
+                    } else {
+                        handleCloneResult(com.wireguard.android.workprofile.PackageCloneResult.ErrorNoWorkProfileHelper)
+                    }
+                } else {
+                    handleCloneResult(com.wireguard.android.workprofile.PackageCloneResult.ErrorUnsupportedAndroidVersion)
+                }
+            }
+        } else {
+            handleCloneResult(com.wireguard.android.workprofile.PackageCloneResult.ErrorNoWorkProfileHelper)
+        }
+    }
+
     private fun handleBackPressed() {
         val backStackEntries = supportFragmentManager.backStackEntryCount
         // If the two-pane layout does not have an editor open, going back should exit the app.
@@ -68,11 +154,23 @@ class MainActivity : BaseActivity(), FragmentManager.OnBackStackChangedListener,
         supportFragmentManager.addOnBackStackChangedListener(this)
         backPressedCallback = onBackPressedDispatcher.addCallback(this) { handleBackPressed() }
         onBackStackChanged()
+
+        androidx.core.content.ContextCompat.registerReceiver(
+            this, installResultReceiver, 
+            android.content.IntentFilter("com.wireguard.android.action.INSTALL_RESULT"),
+            androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+    }
+
+    override fun onDestroy() {
+        unregisterReceiver(installResultReceiver)
+        super.onDestroy()
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.main_activity, menu)
         menu.findItem(R.id.menu_action_edit)?.isVisible = selectedMainTab == MainTabsFragment.MainTab.VPN
+        menu.add(Menu.NONE, 1001, Menu.NONE, "Install to Work Profile")
         return true
     }
 
@@ -101,6 +199,10 @@ class MainActivity : BaseActivity(), FragmentManager.OnBackStackChangedListener,
             R.id.menu_action_save -> false
             R.id.menu_settings -> {
                 startActivity(Intent(this, SettingsActivity::class.java))
+                true
+            }
+            1001 -> {
+                showInstallToWorkProfileDialog()
                 true
             }
 
