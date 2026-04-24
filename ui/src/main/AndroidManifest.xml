@@ -11,6 +11,7 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="${applicationId}.permission.BRIDGE_ACCESS" />
     <uses-permission
         android:name="android.permission.SYSTEM_ALERT_WINDOW"
         android:minSdkVersion="34" />
@@ -44,6 +45,10 @@
         android:icon="@mipmap/ic_launcher"
         android:label="@string/permission_label"
         android:protectionLevel="dangerous" />
+
+    <permission
+        android:name="${applicationId}.permission.BRIDGE_ACCESS"
+        android:protectionLevel="signature" />
 
     <application
         android:name=".Application"
@@ -165,6 +170,7 @@
         <activity
             android:name=".workprofile.WorkProfileBridgeActivity"
             android:exported="true"
+            android:permission="${applicationId}.permission.BRIDGE_ACCESS"
             android:theme="@style/NoBackgroundTheme">
             <intent-filter>
                 <action android:name="com.wireguard.android.workprofile.action.BRIDGE_EXECUTE" />

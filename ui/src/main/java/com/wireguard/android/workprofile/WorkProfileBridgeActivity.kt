@@ -76,10 +76,26 @@ class WorkProfileBridgeActivity : Activity() {
     }
 
     private fun finishWithResult(result: PackageCloneResult) {
+        val receiver = if (android.os.Build.VERSION.SDK_INT >= 33) {
+            intent.getParcelableExtra(WorkProfileInstallCoordinator.EXTRA_RESULT_RECEIVER, PendingIntent::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            intent.getParcelableExtra<PendingIntent>(WorkProfileInstallCoordinator.EXTRA_RESULT_RECEIVER)
+        }
+        
         val data = Intent().apply {
             putExtra(WorkProfileInstallCoordinator.RESULT_EXTRA_CLONE_RESULT, result)
         }
-        setResult(Activity.RESULT_OK, data)
+        
+        if (receiver != null) {
+            try {
+                receiver.send(this, Activity.RESULT_OK, data)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to send result via PendingIntent", e)
+            }
+        } else {
+            setResult(Activity.RESULT_OK, data)
+        }
         finish()
     }
 }

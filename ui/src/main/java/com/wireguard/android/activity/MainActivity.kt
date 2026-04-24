@@ -39,6 +39,13 @@ class MainActivity : BaseActivity(), FragmentManager.OnBackStackChangedListener,
         }
     }
 
+    private val installResultReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context, intent: Intent) {
+            val cloneResult = intent.getSerializableExtra(com.wireguard.android.workprofile.WorkProfileInstallCoordinator.RESULT_EXTRA_CLONE_RESULT) as? com.wireguard.android.workprofile.PackageCloneResult
+            handleCloneResult(cloneResult)
+        }
+    }
+
     private fun handleCloneResult(result: com.wireguard.android.workprofile.PackageCloneResult?) {
         val message = when (result) {
             is com.wireguard.android.workprofile.PackageCloneResult.SuccessInstalledExisting -> "Установлено (installExistingPackage)"
@@ -78,6 +85,25 @@ class MainActivity : BaseActivity(), FragmentManager.OnBackStackChangedListener,
         val coordinator = com.wireguard.android.Application.getWorkProfileInstallCoordinator()
         val intent = coordinator.getBridgeIntentForInstall(packageName)
         if (intent != null) {
+            if (android.os.Build.VERSION.SDK_INT >= 30) {
+                val crossProfileApps = getSystemService(android.content.Context.CROSS_PROFILE_APPS_SERVICE) as? android.content.pm.CrossProfileApps
+                val targetUser = crossProfileApps?.targetUserProfiles?.firstOrNull()
+                
+                if (crossProfileApps != null && targetUser != null) {
+                    val resultIntent = Intent("com.wireguard.android.action.INSTALL_RESULT")
+                    resultIntent.setPackage(this.packageName)
+                    val pendingIntent = android.app.PendingIntent.getBroadcast(this, 0, resultIntent, android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_MUTABLE)
+                    intent.putExtra(com.wireguard.android.workprofile.WorkProfileInstallCoordinator.EXTRA_RESULT_RECEIVER, pendingIntent)
+                    
+                    try {
+                        crossProfileApps.startActivity(intent, targetUser, this)
+                        return
+                    } catch (e: Exception) {
+                        // Fallback
+                    }
+                }
+            }
+            // Fallback for API < 30 or if cross profile apps failed
             installToWorkProfileLauncher.launch(intent)
         } else {
             handleCloneResult(com.wireguard.android.workprofile.PackageCloneResult.ErrorNoWorkProfileHelper)
@@ -120,6 +146,17 @@ class MainActivity : BaseActivity(), FragmentManager.OnBackStackChangedListener,
         supportFragmentManager.addOnBackStackChangedListener(this)
         backPressedCallback = onBackPressedDispatcher.addCallback(this) { handleBackPressed() }
         onBackStackChanged()
+
+        androidx.core.content.ContextCompat.registerReceiver(
+            this, installResultReceiver, 
+            android.content.IntentFilter("com.wireguard.android.action.INSTALL_RESULT"),
+            androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+    }
+
+    override fun onDestroy() {
+        unregisterReceiver(installResultReceiver)
+        super.onDestroy()
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {

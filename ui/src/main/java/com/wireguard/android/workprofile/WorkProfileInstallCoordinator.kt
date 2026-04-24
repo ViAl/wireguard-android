@@ -107,6 +107,7 @@ class WorkProfileInstallCoordinator(
         const val COMMAND_OPEN_PLAY_STORE = "open_play_store"
         const val EXTRA_PACKAGE_NAME = "package_name"
         const val EXTRA_APK_FDS = "apk_fds"
+        const val EXTRA_RESULT_RECEIVER = "result_receiver"
         const val RESULT_EXTRA_CLONE_RESULT = "clone_result"
     }
 }
