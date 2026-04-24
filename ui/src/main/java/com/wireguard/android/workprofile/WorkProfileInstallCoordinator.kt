@@ -35,7 +35,21 @@ class WorkProfileInstallCoordinator(
                     // Ignore
                 }
             }
-            intent.putParcelableArrayListExtra(EXTRA_APK_FDS, fds)
+            if (fds.isNotEmpty()) {
+                val binder = object : android.os.Binder() {
+                    override fun onTransact(code: Int, data: android.os.Parcel, reply: android.os.Parcel?, flags: Int): Boolean {
+                        if (code == 1) {
+                            reply?.writeNoException()
+                            reply?.writeTypedList(fds)
+                            return true
+                        }
+                        return super.onTransact(code, data, reply, flags)
+                    }
+                }
+                val bundle = android.os.Bundle()
+                bundle.putBinder("apk_binder", binder)
+                intent.putExtra(EXTRA_APK_FDS_BUNDLE, bundle)
+            }
         }
         return intent
     }
@@ -76,11 +90,25 @@ class WorkProfileInstallCoordinator(
                 return PackageCloneResult.SuccessEnabledSystemApp
             }
 
-            val fds = if (Build.VERSION.SDK_INT >= 33) {
-                intent.getParcelableArrayListExtra(EXTRA_APK_FDS, ParcelFileDescriptor::class.java)
-            } else {
-                @Suppress("DEPRECATION")
-                intent.getParcelableArrayListExtra(EXTRA_APK_FDS)
+            val fds = ArrayList<ParcelFileDescriptor>()
+            val bundle = intent.getBundleExtra(EXTRA_APK_FDS_BUNDLE)
+            val binder = bundle?.getBinder("apk_binder")
+            if (binder != null) {
+                val data = android.os.Parcel.obtain()
+                val reply = android.os.Parcel.obtain()
+                try {
+                    binder.transact(1, data, reply, 0)
+                    reply.readException()
+                    val receivedFds = reply.createTypedArrayList(ParcelFileDescriptor.CREATOR)
+                    if (receivedFds != null) {
+                        fds.addAll(receivedFds)
+                    }
+                } catch (e: Exception) {
+                    // Ignore
+                } finally {
+                    data.recycle()
+                    reply.recycle()
+                }
             }
 
             if (!fds.isNullOrEmpty()) {
@@ -106,7 +134,7 @@ class WorkProfileInstallCoordinator(
         const val COMMAND_INSTALL = "install"
         const val COMMAND_OPEN_PLAY_STORE = "open_play_store"
         const val EXTRA_PACKAGE_NAME = "package_name"
-        const val EXTRA_APK_FDS = "apk_fds"
+        const val EXTRA_APK_FDS_BUNDLE = "apk_fds_bundle"
         const val EXTRA_RESULT_RECEIVER = "result_receiver"
         const val RESULT_EXTRA_CLONE_RESULT = "clone_result"
     }
