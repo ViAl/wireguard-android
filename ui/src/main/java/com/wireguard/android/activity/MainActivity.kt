@@ -99,12 +99,17 @@ class MainActivity : BaseActivity(), FragmentManager.OnBackStackChangedListener,
                         crossProfileApps.startActivity(intent, targetUser, this)
                         return
                     } catch (e: Exception) {
-                        // Fallback
+                        handleCloneResult(com.wireguard.android.workprofile.PackageCloneResult.ErrorUnknown("CrossProfileApps failed: ${e.message}"))
+                        return
                     }
+                } else {
+                    handleCloneResult(com.wireguard.android.workprofile.PackageCloneResult.ErrorUnknown("No work profile found"))
+                    return
                 }
+            } else {
+                handleCloneResult(com.wireguard.android.workprofile.PackageCloneResult.ErrorUnsupportedAndroidVersion)
+                return
             }
-            // Fallback for API < 30 or if cross profile apps failed
-            installToWorkProfileLauncher.launch(intent)
         } else {
             handleCloneResult(com.wireguard.android.workprofile.PackageCloneResult.ErrorNoWorkProfileHelper)
         }
