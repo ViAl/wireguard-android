@@ -8,11 +8,13 @@ class PackageSourceResolver(private val context: Context) {
         val paths = mutableListOf<String>()
         try {
             val appInfo = context.packageManager.getApplicationInfo(packageName, 0)
-            if (appInfo.sourceDir != null) {
-                paths.add(appInfo.sourceDir)
+            val sourceDir = appInfo.sourceDir
+            if (sourceDir != null) {
+                paths.add(sourceDir)
             }
-            if (appInfo.splitSourceDirs != null) {
-                paths.addAll(appInfo.splitSourceDirs)
+            val splitDirs = appInfo.splitSourceDirs
+            if (splitDirs != null) {
+                paths.addAll(splitDirs)
             }
         } catch (e: PackageManager.NameNotFoundException) {
             // Ignore, handled by returning empty list
