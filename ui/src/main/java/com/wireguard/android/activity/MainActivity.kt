@@ -85,30 +85,33 @@ class MainActivity : BaseActivity(), FragmentManager.OnBackStackChangedListener,
         val coordinator = com.wireguard.android.Application.getWorkProfileInstallCoordinator()
         val intent = coordinator.getBridgeIntentForInstall(packageName)
         if (intent != null) {
-            if (android.os.Build.VERSION.SDK_INT >= 30) {
-                val crossProfileApps = getSystemService(android.content.Context.CROSS_PROFILE_APPS_SERVICE) as? android.content.pm.CrossProfileApps
-                val targetUser = crossProfileApps?.targetUserProfiles?.firstOrNull()
-                
-                if (crossProfileApps != null && targetUser != null) {
-                    val resultIntent = Intent("com.wireguard.android.action.INSTALL_RESULT")
-                    resultIntent.setPackage(this.packageName)
-                    val pendingIntent = android.app.PendingIntent.getBroadcast(this, 0, resultIntent, android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_MUTABLE)
-                    intent.putExtra(com.wireguard.android.workprofile.WorkProfileInstallCoordinator.EXTRA_RESULT_RECEIVER, pendingIntent)
-                    
-                    try {
-                        crossProfileApps.startActivity(intent, targetUser, this)
-                        return
-                    } catch (e: Exception) {
-                        handleCloneResult(com.wireguard.android.workprofile.PackageCloneResult.ErrorUnknown("CrossProfileApps failed: ${e.message}"))
-                        return
+            val resultIntent = Intent("com.wireguard.android.action.INSTALL_RESULT")
+            resultIntent.setPackage(this.packageName)
+            val pendingIntent = android.app.PendingIntent.getBroadcast(this, 0, resultIntent, android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_MUTABLE)
+            intent.putExtra(com.wireguard.android.workprofile.WorkProfileInstallCoordinator.EXTRA_RESULT_RECEIVER, pendingIntent)
+            
+            try {
+                // Try to launch implicitly. If the DPC added the filter, the system will forward it to work profile.
+                installToWorkProfileLauncher.launch(intent)
+            } catch (e: android.content.ActivityNotFoundException) {
+                // The intent filter isn't active yet. We need to force the work profile app to start
+                // so Application.onCreate can run and add the filter.
+                if (android.os.Build.VERSION.SDK_INT >= 28) {
+                    val crossProfileApps = getSystemService(android.content.Context.CROSS_PROFILE_APPS_SERVICE) as? android.content.pm.CrossProfileApps
+                    val targetUser = crossProfileApps?.targetUserProfiles?.firstOrNull()
+                    if (crossProfileApps != null && targetUser != null) {
+                        try {
+                            crossProfileApps.startMainActivity(android.content.ComponentName(this, MainActivity::class.java), targetUser)
+                            handleCloneResult(com.wireguard.android.workprofile.PackageCloneResult.ErrorUnknown("Инициализация... Пожалуйста, вернитесь сюда и попробуйте еще раз."))
+                        } catch (ex: Exception) {
+                            handleCloneResult(com.wireguard.android.workprofile.PackageCloneResult.ErrorUnknown("Ошибка CrossProfileApps.startMainActivity: ${ex.message}"))
+                        }
+                    } else {
+                        handleCloneResult(com.wireguard.android.workprofile.PackageCloneResult.ErrorNoWorkProfileHelper)
                     }
                 } else {
-                    handleCloneResult(com.wireguard.android.workprofile.PackageCloneResult.ErrorUnknown("No work profile found"))
-                    return
+                    handleCloneResult(com.wireguard.android.workprofile.PackageCloneResult.ErrorUnsupportedAndroidVersion)
                 }
-            } else {
-                handleCloneResult(com.wireguard.android.workprofile.PackageCloneResult.ErrorUnsupportedAndroidVersion)
-                return
             }
         } else {
             handleCloneResult(com.wireguard.android.workprofile.PackageCloneResult.ErrorNoWorkProfileHelper)

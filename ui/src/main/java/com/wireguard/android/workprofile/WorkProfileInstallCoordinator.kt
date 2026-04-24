@@ -20,7 +20,7 @@ class WorkProfileInstallCoordinator(
             return null
         }
         val intent = Intent("com.wireguard.android.workprofile.action.BRIDGE_EXECUTE")
-        intent.component = android.content.ComponentName(context.packageName, "com.wireguard.android.workprofile.WorkProfileBridgeActivity")
+        intent.addCategory(android.content.Intent.CATEGORY_DEFAULT)
         intent.putExtra(EXTRA_COMMAND, COMMAND_INSTALL)
         intent.putExtra(EXTRA_PACKAGE_NAME, packageName)
         
@@ -56,7 +56,7 @@ class WorkProfileInstallCoordinator(
 
     fun getBridgeIntentForPlayStore(packageName: String): Intent {
         val intent = Intent("com.wireguard.android.workprofile.action.BRIDGE_EXECUTE")
-        intent.component = android.content.ComponentName(context.packageName, "com.wireguard.android.workprofile.WorkProfileBridgeActivity")
+        intent.addCategory(android.content.Intent.CATEGORY_DEFAULT)
         intent.putExtra(EXTRA_COMMAND, COMMAND_OPEN_PLAY_STORE)
         intent.putExtra(EXTRA_PACKAGE_NAME, packageName)
         return intent

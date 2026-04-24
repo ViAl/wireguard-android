@@ -120,6 +120,20 @@ class Application : android.app.Application() {
         val launcher = com.wireguard.android.workprofile.PlayStoreLauncher(applicationContext)
         workProfileInstallCoordinator = com.wireguard.android.workprofile.WorkProfileInstallCoordinator(applicationContext, checker, resolver, installer, launcher)
         
+        if (checker.isProfileOwner()) {
+            val dpm = getSystemService(android.content.Context.DEVICE_POLICY_SERVICE) as? android.app.admin.DevicePolicyManager
+            if (dpm != null) {
+                val admin = android.content.ComponentName(this, com.wireguard.android.jail.enterprise.JailDeviceAdminReceiver::class.java)
+                val filter = android.content.IntentFilter("com.wireguard.android.workprofile.action.BRIDGE_EXECUTE")
+                filter.addCategory(android.content.Intent.CATEGORY_DEFAULT)
+                try {
+                    dpm.addCrossProfileIntentFilter(admin, filter, android.app.admin.DevicePolicyManager.FLAG_PARENT_CAN_ACCESS_MANAGED)
+                } catch (e: Exception) {
+                    // Ignore
+                }
+            }
+        }
+        
         coroutineScope.launch(Dispatchers.IO) {
             try {
                 backend = determineBackend()
