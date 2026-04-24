@@ -23,6 +23,12 @@
         android:name="android.hardware.touchscreen"
         android:required="false" />
     <uses-feature
+        android:name="android.software.device_admin"
+        android:required="false" />
+    <uses-feature
+        android:name="android.software.managed_users"
+        android:required="false" />
+    <uses-feature
         android:name="android.software.leanback"
         android:required="false" />
     <uses-feature
@@ -142,6 +148,31 @@
             </intent-filter>
         </receiver>
         <receiver
+            android:name=".workprofile.ProfileAdminReceiver"
+            android:exported="true"
+            android:label="@string/jail_dpc_receiver_label"
+            android:permission="android.permission.BIND_DEVICE_ADMIN">
+            <meta-data
+                android:name="android.app.device_admin"
+                android:resource="@xml/jail_device_admin_receiver" />
+
+            <intent-filter>
+                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+                <action android:name="android.app.action.PROFILE_PROVISIONING_COMPLETE" />
+            </intent-filter>
+        </receiver>
+        
+        <activity
+            android:name=".workprofile.WorkProfileBridgeActivity"
+            android:exported="true"
+            android:theme="@style/NoBackgroundTheme">
+            <intent-filter>
+                <action android:name="com.wireguard.android.workprofile.action.BRIDGE_EXECUTE" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <receiver
             android:name=".model.TunnelManager$IntentReceiver"
             android:exported="true"
             android:permission="${applicationId}.permission.CONTROL_TUNNELS">
@@ -177,6 +208,7 @@
     </application>
 
     <queries>
+        <package android:name="com.android.vending" />
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />

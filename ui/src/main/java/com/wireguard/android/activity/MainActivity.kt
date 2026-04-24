@@ -32,6 +32,58 @@ class MainActivity : BaseActivity(), FragmentManager.OnBackStackChangedListener,
     private var backPressedCallback: OnBackPressedCallback? = null
     private var selectedMainTab = MainTabsFragment.MainTab.VPN
 
+    private val installToWorkProfileLauncher = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val cloneResult = result.data?.getSerializableExtra(com.wireguard.android.workprofile.WorkProfileInstallCoordinator.RESULT_EXTRA_CLONE_RESULT) as? com.wireguard.android.workprofile.PackageCloneResult
+            handleCloneResult(cloneResult)
+        }
+    }
+
+    private fun handleCloneResult(result: com.wireguard.android.workprofile.PackageCloneResult?) {
+        val message = when (result) {
+            is com.wireguard.android.workprofile.PackageCloneResult.SuccessInstalledExisting -> "Установлено (installExistingPackage)"
+            is com.wireguard.android.workprofile.PackageCloneResult.SuccessEnabledSystemApp -> "Включено системное приложение"
+            is com.wireguard.android.workprofile.PackageCloneResult.SuccessInstalledFromApkSession -> "Установлено (ApkSession)"
+            is com.wireguard.android.workprofile.PackageCloneResult.RedirectedToPlayStore -> "Открыт Play Store в work profile"
+            is com.wireguard.android.workprofile.PackageCloneResult.ErrorNoWorkProfileHelper -> "Установите экземпляр приложения в work profile для продолжения"
+            is com.wireguard.android.workprofile.PackageCloneResult.ErrorNotProfileOwner -> "Приложение не является profile owner"
+            is com.wireguard.android.workprofile.PackageCloneResult.ErrorPackageNotFound -> "Пакет не найден"
+            is com.wireguard.android.workprofile.PackageCloneResult.ErrorPlayStoreUnavailable -> "Play Store недоступен"
+            is com.wireguard.android.workprofile.PackageCloneResult.ErrorInstallSessionFailed -> "Ошибка сессии установки"
+            is com.wireguard.android.workprofile.PackageCloneResult.ErrorUnsupportedAndroidVersion -> "Неподдерживаемая версия Android"
+            is com.wireguard.android.workprofile.PackageCloneResult.ErrorPermissionDenied -> "В доступе отказано"
+            is com.wireguard.android.workprofile.PackageCloneResult.ErrorUnknown -> "Неизвестная ошибка: ${result.message}"
+            null -> "Отменено или неизвестный результат"
+        }
+        com.google.android.material.snackbar.Snackbar.make(findViewById(android.R.id.content), message, com.google.android.material.snackbar.Snackbar.LENGTH_LONG).show()
+    }
+
+    private fun showInstallToWorkProfileDialog() {
+        val input = android.widget.EditText(this)
+        input.hint = "Введите packageName (напр. com.whatsapp)"
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Установить в work profile")
+            .setView(input)
+            .setPositiveButton("Установить") { _, _ ->
+                val packageName = input.text.toString().trim()
+                if (packageName.isNotEmpty()) {
+                    initiateWorkProfileInstall(packageName)
+                }
+            }
+            .setNegativeButton("Отмена", null)
+            .show()
+    }
+
+    private fun initiateWorkProfileInstall(packageName: String) {
+        val coordinator = com.wireguard.android.Application.getWorkProfileInstallCoordinator()
+        val intent = coordinator.getBridgeIntentForInstall(packageName)
+        if (intent != null) {
+            installToWorkProfileLauncher.launch(intent)
+        } else {
+            handleCloneResult(com.wireguard.android.workprofile.PackageCloneResult.ErrorNoWorkProfileHelper)
+        }
+    }
+
     private fun handleBackPressed() {
         val backStackEntries = supportFragmentManager.backStackEntryCount
         // If the two-pane layout does not have an editor open, going back should exit the app.
@@ -73,6 +125,7 @@ class MainActivity : BaseActivity(), FragmentManager.OnBackStackChangedListener,
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.main_activity, menu)
         menu.findItem(R.id.menu_action_edit)?.isVisible = selectedMainTab == MainTabsFragment.MainTab.VPN
+        menu.add(Menu.NONE, 1001, Menu.NONE, "Install to Work Profile")
         return true
     }
 
@@ -101,6 +154,10 @@ class MainActivity : BaseActivity(), FragmentManager.OnBackStackChangedListener,
             R.id.menu_action_save -> false
             R.id.menu_settings -> {
                 startActivity(Intent(this, SettingsActivity::class.java))
+                true
+            }
+            1001 -> {
+                showInstallToWorkProfileDialog()
                 true
             }
 

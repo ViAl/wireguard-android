@@ -50,6 +50,7 @@ class Application : android.app.Application() {
     private lateinit var toolsInstaller: ToolsInstaller
     private lateinit var tunnelManager: TunnelManager
     private lateinit var jailComponent: JailComponent
+    private lateinit var workProfileInstallCoordinator: com.wireguard.android.workprofile.WorkProfileInstallCoordinator
 
     override fun attachBaseContext(context: Context) {
         super.attachBaseContext(context)
@@ -111,6 +112,14 @@ class Application : android.app.Application() {
         tunnelManager = TunnelManager(FileConfigStore(applicationContext))
         tunnelManager.onCreate()
         jailComponent = JailComponent(applicationContext, coroutineScope, tunnelManager)
+        
+        val checker = com.wireguard.android.workprofile.WorkProfileCapabilityChecker(applicationContext)
+        val resolver = com.wireguard.android.workprofile.PackageSourceResolver(applicationContext)
+        val writer = com.wireguard.android.workprofile.ApkSessionWriter()
+        val installer = com.wireguard.android.workprofile.WorkProfileInstaller(applicationContext, writer)
+        val launcher = com.wireguard.android.workprofile.PlayStoreLauncher(applicationContext)
+        workProfileInstallCoordinator = com.wireguard.android.workprofile.WorkProfileInstallCoordinator(applicationContext, checker, resolver, installer, launcher)
+        
         coroutineScope.launch(Dispatchers.IO) {
             try {
                 backend = determineBackend()
@@ -154,6 +163,8 @@ class Application : android.app.Application() {
         fun getCoroutineScope() = get().coroutineScope
 
         fun getJailComponent() = get().jailComponent
+
+        fun getWorkProfileInstallCoordinator() = get().workProfileInstallCoordinator
     }
 
     init {
