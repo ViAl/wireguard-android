@@ -209,6 +209,20 @@ open class WorkProfileAppInstallCapabilityChecker(
                 setPackage(PLAY_STORE_PACKAGE)
             }
 
+            // Prefer createContextAsUser (API 29+, public) — starting an
+            // Intent from a context scoped to the work profile ensures the
+            // launcher resolves it within that user space.
+            val contextAsUser = try {
+                appContext.createContextAsUser(handle, 0)
+            } catch (_: Exception) { null }
+
+            if (contextAsUser != null) {
+                return runCatching {
+                    contextAsUser.startActivity(detailsIntent)
+                    true
+                }.getOrDefault(false)
+            }
+
             // Use ActivityOptions.makeOpenInUser (API 30) to direct the
             // deep-link Intent into the work profile user space.
             val bundle = try {
