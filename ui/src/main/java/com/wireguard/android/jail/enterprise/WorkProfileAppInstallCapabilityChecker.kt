@@ -208,59 +208,17 @@ open class WorkProfileAppInstallCapabilityChecker(
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
 
-            // Resolve the deep-link activity within the work profile using
-            // PackageManager.resolveActivityAsUser via reflection. This returns
-            // the ResolveInfo for the Play Store's details activity as seen
-            // from the work profile's user ID.
-            val userId = try {
-                // UserHandle.getIdentifier() and .identifier may be hidden under
-                // the compileSdk. Access the internal userId via reflection.
-                val getIdentifierMethod = handle.javaClass.getMethod("getIdentifier")
-                getIdentifierMethod.invoke(handle) as Int
-            } catch (_: Exception) {
-                // Last resort: read the private mUserId field
-                try {
-                    val field = handle.javaClass.getDeclaredField("mUserId")
-                    field.isAccessible = true
-                    field.getInt(handle)
-                } catch (_: Exception) { -1 }
-            }
-
-            val resolvedActivity = if (userId >= 0) {
-                try {
-                    val pm = packageManager
-                    val resolveMethod = pm.javaClass.getMethod(
-                        "resolveActivityAsUser",
-                        Intent::class.java, Int::class.javaPrimitiveType, Int::class.javaPrimitiveType
-                    )
-                    val ri = resolveMethod.invoke(
-                        pm, detailsIntent, /* flags */ 0, /* userId */ userId
-                    )
-                    if (ri != null) {
-                        val activityInfoField = ri.javaClass.getField("activityInfo")
-                        activityInfoField.get(ri)
-                    } else null
-                } catch (_: Exception) { null }
-            } else null
-
-            val componentName = if (resolvedActivity != null) {
-                try {
-                    val cl = resolvedActivity.javaClass
-                    ComponentName(
-                        cl.getField("packageName").get(resolvedActivity) as String,
-                        cl.getField("name").get(resolvedActivity) as String
-                    )
-                } catch (_: Exception) { null }
-            } else null
+            // Use PackageManager.resolveActivityAsUser (public API since API 17)
+            // to resolve the deep-link activity within the work profile.
+            val componentName = try {
+                val pm = packageManager
+                val ri = pm.resolveActivityAsUser(detailsIntent, 0, handle.identifier)
+                ComponentName(ri.activityInfo.packageName, ri.activityInfo.name)
+            } catch (_: Exception) { null }
 
             if (componentName != null) {
-                // Build an explicit Intent with the work-profile-resolved
-                // ComponentName and try starting it. Starting a ComponentName
-                // belonging to a user profile routes to that profile.
-                val explicitIntent = Intent(Intent.ACTION_VIEW).apply {
+                val explicitIntent = Intent(detailsIntent).apply {
                     component = componentName
-                    data = detailsIntent.data
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
                 return runCatching {
                     appContext.startActivity(explicitIntent)
@@ -270,14 +228,12 @@ open class WorkProfileAppInstallCapabilityChecker(
 
             // Fallback: open store home in work profile via LauncherApps,
             // then attempt the deep link from parent context.
-            val storeComponent = runCatching {
+            runCatching {
                 launcherApps?.getActivityList(PLAY_STORE_PACKAGE, handle)
                     .orEmpty()
                     .firstOrNull()
                     ?.componentName
-            }.getOrNull()
-
-            if (storeComponent != null) {
+            }.getOrNull()?.let { storeComponent ->
                 runCatching {
                     launcherApps?.startMainActivity(storeComponent, handle, null, null)
                 }
