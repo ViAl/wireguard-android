@@ -204,10 +204,54 @@ open class WorkProfileAppInstallCapabilityChecker(
 
         @Suppress("DEPRECATION")
         private fun launchStoreInProfile(handle: UserHandle, packageName: String): Boolean {
-            val detailsIntent = WorkProfileInstallGuide.playStoreHttpsIntent(packageName)
+            val detailsIntent = WorkProfileInstallGuide.playStoreHttpsIntent(packageName).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
 
-            // Step 1: Launch Play Store home in the work profile via LauncherApps.
-            // This starts the store process within the work profile's user space.
+            // Resolve the deep-link activity within the work profile using
+            // PackageManager.resolveActivityAsUser via reflection. This returns
+            // the ResolveInfo for the Play Store's details activity as seen
+            // from the work profile's user ID.
+            val resolvedActivity = try {
+                val pm = packageManager
+                val resolveMethod = pm.javaClass.getMethod(
+                    "resolveActivityAsUser",
+                    Intent::class.java, Int::class.javaPrimitiveType, Int::class.javaPrimitiveType
+                )
+                val ri = resolveMethod.invoke(pm, detailsIntent, 0, handle.identifier)
+                if (ri != null) {
+                    val activityInfoField = ri.javaClass.getField("activityInfo")
+                    activityInfoField.get(ri)
+                } else null
+            } catch (_: Exception) { null }
+
+            val componentName = if (resolvedActivity != null) {
+                try {
+                    val cl = resolvedActivity.javaClass
+                    ComponentName(
+                        cl.getField("packageName").get(resolvedActivity) as String,
+                        cl.getField("name").get(resolvedActivity) as String
+                    )
+                } catch (_: Exception) { null }
+            } else null
+
+            if (componentName != null) {
+                // Build an explicit Intent with the work-profile-resolved
+                // ComponentName and try starting it. Starting a ComponentName
+                // belonging to a user profile routes to that profile.
+                val explicitIntent = Intent(Intent.ACTION_VIEW).apply {
+                    component = componentName
+                    data = detailsIntent.data
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                return runCatching {
+                    appContext.startActivity(explicitIntent)
+                    true
+                }.getOrDefault(false)
+            }
+
+            // Fallback: open store home in work profile via LauncherApps,
+            // then attempt the deep link from parent context.
             val storeComponent = runCatching {
                 launcherApps?.getActivityList(PLAY_STORE_PACKAGE, handle)
                     .orEmpty()
@@ -221,17 +265,10 @@ open class WorkProfileAppInstallCapabilityChecker(
                 }
             }
 
-            // Step 2: Launch the deep-link intent scoped to the store package.
-            // Intent.setPackage ensures only the Play Store can handle it.
-            // The system resolves the activity in the context where the store
-            // package is active — since step 1 started it in the work profile,
-            // the deep link lands in the same profile.
-            val launchIntent = detailsIntent.apply {
-                setPackage(PLAY_STORE_PACKAGE)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
             return runCatching {
-                appContext.startActivity(launchIntent)
+                appContext.startActivity(detailsIntent.apply {
+                    setPackage(PLAY_STORE_PACKAGE)
+                })
                 true
             }.getOrDefault(false)
         }
