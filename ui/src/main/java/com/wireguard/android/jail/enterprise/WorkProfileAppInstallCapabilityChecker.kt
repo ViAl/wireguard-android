@@ -7,7 +7,11 @@ package com.wireguard.android.jail.enterprise
 import android.content.Context
 import android.content.Intent
 import android.content.pm.LauncherApps
+import android.content.pm.PackageManager
+import android.os.Build
+import android.os.Bundle
 import android.os.Process
+import android.os.UserHandle
 import com.wireguard.android.jail.domain.WorkProfileInstallGuide
 import com.wireguard.android.jail.model.WorkProfileAppAction
 import com.wireguard.android.jail.model.WorkProfileAppAvailability
@@ -171,7 +175,7 @@ open class WorkProfileAppInstallCapabilityChecker(
         }
 
         override fun launchStoreIntent(packageName: String): Boolean {
-            if (launchStoreInOtherProfile()) return true
+            if (launchStoreInOtherProfile(packageName)) return true
 
             val intents = listOf(
                 WorkProfileInstallGuide.playStoreDetailsIntent(packageName),
@@ -191,16 +195,61 @@ open class WorkProfileAppInstallCapabilityChecker(
                     .getOrDefault(false)
             }
 
-        private fun launchStoreInOtherProfile(): Boolean {
-            val candidate = otherProfiles().firstNotNullOfOrNull { handle ->
-                val activity = runCatching {
-                    launcherApps?.getActivityList(PLAY_STORE_PACKAGE, handle).orEmpty().firstOrNull()
-                }.getOrNull() ?: return@firstNotNullOfOrNull null
-                handle to activity.componentName
-            } ?: return false
+        private fun launchStoreInOtherProfile(packageName: String): Boolean {
+            return otherProfiles().any { handle ->
+                launchStoreInProfile(handle, packageName)
+            }
+        }
+
+        private fun launchStoreInProfile(handle: UserHandle, packageName: String): Boolean {
+            val detailsIntent = WorkProfileInstallGuide.playStoreHttpsIntent(packageName)
+
+            // Resolve the deep-link intent specifically within the work profile's package
+            // management context using queryIntentActivitiesAsUser (API 24+, matching our
+            // minSdk). This returns the ActivityInfo as registered in the work profile's
+            // Play Store, not the parent's.
+            val resolvedInProfile = runCatching {
+                packageManager.queryIntentActivitiesAsUser(detailsIntent, 0, handle)
+                    .firstOrNull()
+                    ?.activityInfo
+            }.getOrNull()
+
+            if (resolvedInProfile != null) {
+                val cn = resolvedInProfile.componentName
+                // Build an explicit intent with the work-profile-resolved ComponentName
+                // and the original data URI. Starting it from the parent context still
+                // routes to the work profile because the ComponentName is tied to the
+                // package installed in that user.
+                val explicitIntent = Intent(Intent.ACTION_VIEW).apply {
+                    component = cn
+                    data = detailsIntent.data
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                return runCatching {
+                    appContext.startActivity(explicitIntent)
+                    true
+                }.getOrDefault(false)
+            }
+
+            // Fallback: open Play Store home in the work profile via LauncherApps,
+            // then try the deep link from parent context as a best-effort attempt.
+            val storeHome = runCatching {
+                launcherApps?.getActivityList(PLAY_STORE_PACKAGE, handle)
+                    .orEmpty()
+                    .firstOrNull()
+                    ?.componentName
+            }.getOrNull()
+
+            if (storeHome != null) {
+                runCatching {
+                    launcherApps?.startActivity(storeHome, handle, null, null)
+                }
+            }
 
             return runCatching {
-                launcherApps?.startMainActivity(candidate.second, candidate.first, null, null)
+                appContext.startActivity(detailsIntent.apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                })
                 true
             }.getOrDefault(false)
         }
