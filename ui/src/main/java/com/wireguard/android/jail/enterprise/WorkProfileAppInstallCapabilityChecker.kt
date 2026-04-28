@@ -212,18 +212,36 @@ open class WorkProfileAppInstallCapabilityChecker(
             // PackageManager.resolveActivityAsUser via reflection. This returns
             // the ResolveInfo for the Play Store's details activity as seen
             // from the work profile's user ID.
-            val resolvedActivity = try {
-                val pm = packageManager
-                val resolveMethod = pm.javaClass.getMethod(
-                    "resolveActivityAsUser",
-                    Intent::class.java, Int::class.javaPrimitiveType, Int::class.javaPrimitiveType
-                )
-                val ri = resolveMethod.invoke(pm, detailsIntent, 0, handle.getIdentifier())
-                if (ri != null) {
-                    val activityInfoField = ri.javaClass.getField("activityInfo")
-                    activityInfoField.get(ri)
-                } else null
-            } catch (_: Exception) { null }
+            val userId = try {
+                // UserHandle.getIdentifier() and .identifier may be hidden under
+                // the compileSdk. Access the internal userId via reflection.
+                val getIdentifierMethod = handle.javaClass.getMethod("getIdentifier")
+                getIdentifierMethod.invoke(handle) as Int
+            } catch (_: Exception) {
+                // Last resort: read the private mUserId field
+                try {
+                    val field = handle.javaClass.getDeclaredField("mUserId")
+                    field.isAccessible = true
+                    field.getInt(handle)
+                } catch (_: Exception) { -1 }
+            }
+
+            val resolvedActivity = if (userId >= 0) {
+                try {
+                    val pm = packageManager
+                    val resolveMethod = pm.javaClass.getMethod(
+                        "resolveActivityAsUser",
+                        Intent::class.java, Int::class.javaPrimitiveType, Int::class.javaPrimitiveType
+                    )
+                    val ri = resolveMethod.invoke(
+                        pm, detailsIntent, /* flags */ 0, /* userId */ userId
+                    )
+                    if (ri != null) {
+                        val activityInfoField = ri.javaClass.getField("activityInfo")
+                        activityInfoField.get(ri)
+                    } else null
+                } catch (_: Exception) { null }
+            } else null
 
             val componentName = if (resolvedActivity != null) {
                 try {
