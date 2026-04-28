@@ -7,10 +7,8 @@ package com.wireguard.android.jail.enterprise
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.pm.ActivityInfo
 import android.content.pm.LauncherApps
 import android.content.pm.PackageManager
-import android.content.pm.ResolveInfo
 import android.os.Build
 import android.os.Bundle
 import android.os.Process
@@ -204,55 +202,36 @@ open class WorkProfileAppInstallCapabilityChecker(
             }
         }
 
+        @Suppress("DEPRECATION")
         private fun launchStoreInProfile(handle: UserHandle, packageName: String): Boolean {
             val detailsIntent = WorkProfileInstallGuide.playStoreHttpsIntent(packageName)
 
-            // Resolve the deep-link intent specifically within the work profile's package
-            // management context using queryIntentActivitiesAsUser (API 24+, matching our
-            // minSdk). This returns the ActivityInfo as registered in the work profile's
-            // Play Store, not the parent's.
-            val resolvedInProfile: ActivityInfo? = runCatching {
-                packageManager.queryIntentActivitiesAsUser(detailsIntent, 0, handle)
-                    .firstOrNull()
-                    ?.activityInfo
-            }.getOrNull()
-
-            if (resolvedInProfile != null) {
-                val cn = ComponentName(resolvedInProfile.packageName, resolvedInProfile.name)
-                // Build an explicit intent with the work-profile-resolved ComponentName
-                // and the original data URI. Starting it from the parent context still
-                // routes to the work profile because the ComponentName is tied to the
-                // package installed in that user.
-                val explicitIntent = Intent(Intent.ACTION_VIEW).apply {
-                    component = cn
-                    data = detailsIntent.data
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                return runCatching {
-                    appContext.startActivity(explicitIntent)
-                    true
-                }.getOrDefault(false)
-            }
-
-            // Fallback: open Play Store home in the work profile via LauncherApps,
-            // then try the deep link from parent context as a best-effort attempt.
-            val storeHome = runCatching {
+            // Step 1: Launch Play Store home in the work profile via LauncherApps.
+            // This starts the store process within the work profile's user space.
+            val storeComponent = runCatching {
                 launcherApps?.getActivityList(PLAY_STORE_PACKAGE, handle)
                     .orEmpty()
                     .firstOrNull()
                     ?.componentName
             }.getOrNull()
 
-            if (storeHome != null) {
+            if (storeComponent != null) {
                 runCatching {
-                    launcherApps?.startMainActivity(storeHome, handle, null, null)
+                    launcherApps?.startMainActivity(storeComponent, handle, null, null)
                 }
             }
 
+            // Step 2: Launch the deep-link intent scoped to the store package.
+            // Intent.setPackage ensures only the Play Store can handle it.
+            // The system resolves the activity in the context where the store
+            // package is active — since step 1 started it in the work profile,
+            // the deep link lands in the same profile.
+            val launchIntent = detailsIntent.apply {
+                setPackage(PLAY_STORE_PACKAGE)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
             return runCatching {
-                appContext.startActivity(detailsIntent.apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                })
+                appContext.startActivity(launchIntent)
                 true
             }.getOrDefault(false)
         }
