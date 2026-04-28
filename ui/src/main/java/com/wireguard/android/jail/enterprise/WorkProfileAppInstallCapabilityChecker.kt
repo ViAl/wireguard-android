@@ -237,7 +237,7 @@ open class WorkProfileAppInstallCapabilityChecker(
                     val marketIntent = WorkProfileInstallGuide
                         .playStoreDetailsIntent(packageName)
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    cpa?.startActivity(marketIntent, handle)
+                    cpa?.startActivity(marketIntent, handle, null)
                     true
                 } catch (_: Exception) { false }
                 if (ok) return true

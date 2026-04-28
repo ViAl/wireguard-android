@@ -35,7 +35,7 @@ class PlayStoreProxyActivity : AppCompatActivity() {
         val action = intent?.action
         val data = intent?.data
 
-        Log.d(TAG, "onCreate: action=$action, data=$data, profile=${user?.serialNumber}")
+        Log.d(TAG, "onCreate: action=$action, data=$data, profile=${android.os.Process.myUserHandle()}")
 
         when {
             // Mode 1: direct deep-link URIs (ACTION_VIEW with market:// or https://)
