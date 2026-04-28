@@ -206,22 +206,22 @@ open class WorkProfileAppInstallCapabilityChecker(
         private fun launchStoreInProfile(handle: UserHandle, packageName: String): Boolean {
             val detailsIntent = WorkProfileInstallGuide.playStoreHttpsIntent(packageName).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                setPackage(PLAY_STORE_PACKAGE)
             }
 
-            // Use PackageManager.resolveActivityAsUser (public API since API 17)
-            // to resolve the deep-link activity within the work profile.
-            val componentName = try {
-                val pm = packageManager
-                val ri = pm.resolveActivityAsUser(detailsIntent, 0, handle.identifier)
-                ComponentName(ri.activityInfo.packageName, ri.activityInfo.name)
+            // Use ActivityOptions.makeOpenInUser (API 30) to direct the
+            // deep-link Intent into the work profile user space.
+            val bundle = try {
+                val optsClass = Class.forName("android.app.ActivityOptions")
+                val makeOpenInUser =
+                    optsClass.getMethod("makeOpenInUser", UserHandle::class.java)
+                val opts = makeOpenInUser.invoke(null, handle)
+                optsClass.getMethod("toBundle").invoke(opts) as Bundle
             } catch (_: Exception) { null }
 
-            if (componentName != null) {
-                val explicitIntent = Intent(detailsIntent).apply {
-                    component = componentName
-                }
+            if (bundle != null) {
                 return runCatching {
-                    appContext.startActivity(explicitIntent)
+                    appContext.startActivity(detailsIntent, bundle)
                     true
                 }.getOrDefault(false)
             }
@@ -240,9 +240,7 @@ open class WorkProfileAppInstallCapabilityChecker(
             }
 
             return runCatching {
-                appContext.startActivity(detailsIntent.apply {
-                    setPackage(PLAY_STORE_PACKAGE)
-                })
+                appContext.startActivity(detailsIntent)
                 true
             }.getOrDefault(false)
         }
