@@ -4,7 +4,6 @@
  */
 package com.wireguard.android.jail.enterprise
 
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.LauncherApps
@@ -204,59 +203,6 @@ open class WorkProfileAppInstallCapabilityChecker(
 
         @Suppress("DEPRECATION")
         private fun launchStoreInProfile(handle: UserHandle, packageName: String): Boolean {
-            // Step 1: try to get the launcher ComponentName for Play Store
-            // in the work profile, then build an explicit deep-link Intent
-            // whose component matches the store's package so the system
-            // resolves it within the work profile's task.
-            val storeComponent = runCatching {
-                launcherApps?.getActivityList(PLAY_STORE_PACKAGE, handle)
-                    .orEmpty()
-                    .firstOrNull()
-                    ?.componentName
-            }.getOrNull()
-
-            if (storeComponent != null) {
-                // Build an explicit deep-link Intent using the launcher activity
-                // ComponentName but with the HTTPS play store URI as data.
-                // Many Play Store launcher activities handle ACTION_VIEW with
-                // a market/play URL and route to the details page internally.
-                val explicitIntent = Intent(Intent.ACTION_VIEW).apply {
-                    data = WorkProfileInstallGuide.playStoreHttpsIntent(packageName).data
-                    component = ComponentName(
-                        storeComponent.packageName,
-                        storeComponent.className
-                    )
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                }
-
-                // Try the makeOpenInUser approach to aim this explicit Intent
-                // at the work profile. If that fails, fall through.
-                val bundle = try {
-                    val optsClass = Class.forName("android.app.ActivityOptions")
-                    val makeOpenInUser =
-                        optsClass.getMethod("makeOpenInUser", UserHandle::class.java)
-                    val opts = makeOpenInUser.invoke(null, handle)
-                    optsClass.getMethod("toBundle").invoke(opts) as Bundle
-                } catch (_: Exception) { null }
-
-                if (bundle != null) {
-                    return runCatching {
-                        appContext.startActivity(explicitIntent, bundle)
-                        true
-                    }.getOrDefault(false)
-                }
-
-                return runCatching {
-                    appContext.startActivity(explicitIntent)
-                    true
-                }.getOrDefault(false)
-            }
-
-            // Fallback: use makeOpenInUser with a setPackage intent.
-            val detailsIntent = WorkProfileInstallGuide.playStoreHttpsIntent(packageName).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                setPackage(PLAY_STORE_PACKAGE)
-            }
             val bundle = try {
                 val optsClass = Class.forName("android.app.ActivityOptions")
                 val makeOpenInUser =
@@ -265,10 +211,29 @@ open class WorkProfileAppInstallCapabilityChecker(
                 optsClass.getMethod("toBundle").invoke(opts) as Bundle
             } catch (_: Exception) { null }
 
-            return runCatching {
-                appContext.startActivity(detailsIntent, bundle)
-                true
-            }.getOrDefault(false)
+            if (bundle == null) return false
+
+            // Try market:// and https:// deep-links in order. Both have
+            // setPackage so the work-profile resolver matches the Play
+            // Store's details activity (not the launcher activity).
+            val candidates = listOf(
+                WorkProfileInstallGuide.playStoreDetailsIntent(packageName),
+                WorkProfileInstallGuide.playStoreHttpsIntent(packageName),
+            ).map { intent ->
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                intent.setPackage(PLAY_STORE_PACKAGE)
+                intent
+            }
+
+            for (intent in candidates) {
+                val ok = runCatching {
+                    appContext.startActivity(intent, bundle)
+                    true
+                }.getOrDefault(false)
+                if (ok) return true
+            }
+
+            return false
         }
 
         private fun otherProfiles() = launcherApps?.profiles.orEmpty().filterNot { it == Process.myUserHandle() }
