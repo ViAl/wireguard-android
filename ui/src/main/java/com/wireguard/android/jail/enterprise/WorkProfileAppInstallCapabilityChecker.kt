@@ -7,7 +7,9 @@ package com.wireguard.android.jail.enterprise
 import android.content.Context
 import android.content.Intent
 import android.content.pm.LauncherApps
+import android.os.Bundle
 import android.os.Process
+import android.os.UserHandle
 import com.wireguard.android.jail.domain.WorkProfileInstallGuide
 import com.wireguard.android.jail.model.WorkProfileAppAction
 import com.wireguard.android.jail.model.WorkProfileAppAvailability
@@ -174,7 +176,13 @@ open class WorkProfileAppInstallCapabilityChecker(
             val intents = listOf(
                 WorkProfileInstallGuide.playStoreDetailsIntent(packageName),
                 WorkProfileInstallGuide.playStoreHttpsIntent(packageName),
-            ).map { it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+            ).map { baseIntent ->
+                baseIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                Intent(baseIntent).setPackage(PLAY_STORE_PACKAGE)
+            }
+
+            if (intents.any { launchStoreIntentInOtherProfile(it) }) return true
+            if (launchStoreInOtherProfile()) return true
 
             intents.firstOrNull { resolvable(it) }?.let { candidate ->
                 val launched = runCatching {
@@ -184,7 +192,7 @@ open class WorkProfileAppInstallCapabilityChecker(
                 if (launched) return true
             }
 
-            return launchStoreInOtherProfile()
+            return false
         }
 
         private fun canLaunchStoreInOtherProfile(): Boolean =
@@ -206,6 +214,40 @@ open class WorkProfileAppInstallCapabilityChecker(
                 true
             }.getOrDefault(false)
         }
+
+        /**
+         * Best-effort deep link launch into a secondary profile.
+         *
+         * Uses hidden framework APIs via reflection and falls back safely when unavailable.
+         */
+        private fun launchStoreIntentInOtherProfile(intent: Intent): Boolean {
+            val handles = otherProfiles()
+            if (handles.isEmpty()) return false
+            return handles.any { handle ->
+                launchWithTwoArgSignature(intent, handle) || launchWithThreeArgSignature(intent, handle)
+            }
+        }
+
+        private fun launchWithTwoArgSignature(intent: Intent, handle: UserHandle): Boolean = runCatching {
+            val method = Context::class.java.getMethod(
+                "startActivityAsUser",
+                Intent::class.java,
+                UserHandle::class.java,
+            )
+            method.invoke(appContext, intent, handle)
+            true
+        }.getOrDefault(false)
+
+        private fun launchWithThreeArgSignature(intent: Intent, handle: UserHandle): Boolean = runCatching {
+            val method = Context::class.java.getMethod(
+                "startActivityAsUser",
+                Intent::class.java,
+                Bundle::class.java,
+                UserHandle::class.java,
+            )
+            method.invoke(appContext, intent, null, handle)
+            true
+        }.getOrDefault(false)
 
         private fun otherProfiles() = launcherApps?.profiles.orEmpty().filterNot { it == Process.myUserHandle() }
 
