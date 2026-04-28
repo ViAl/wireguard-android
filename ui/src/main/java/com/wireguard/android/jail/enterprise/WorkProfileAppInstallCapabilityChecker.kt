@@ -4,10 +4,13 @@
  */
 package com.wireguard.android.jail.enterprise
 
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.content.pm.LauncherApps
 import android.content.pm.PackageManager
+import android.content.pm.ResolveInfo
 import android.os.Build
 import android.os.Bundle
 import android.os.Process
@@ -208,14 +211,14 @@ open class WorkProfileAppInstallCapabilityChecker(
             // management context using queryIntentActivitiesAsUser (API 24+, matching our
             // minSdk). This returns the ActivityInfo as registered in the work profile's
             // Play Store, not the parent's.
-            val resolvedInProfile = runCatching {
+            val resolvedInProfile: ActivityInfo? = runCatching {
                 packageManager.queryIntentActivitiesAsUser(detailsIntent, 0, handle)
                     .firstOrNull()
                     ?.activityInfo
             }.getOrNull()
 
             if (resolvedInProfile != null) {
-                val cn = resolvedInProfile.componentName
+                val cn = ComponentName(resolvedInProfile.packageName, resolvedInProfile.name)
                 // Build an explicit intent with the work-profile-resolved ComponentName
                 // and the original data URI. Starting it from the parent context still
                 // routes to the work profile because the ComponentName is tied to the
@@ -242,7 +245,7 @@ open class WorkProfileAppInstallCapabilityChecker(
 
             if (storeHome != null) {
                 runCatching {
-                    launcherApps?.startActivity(storeHome, handle, null, null)
+                    launcherApps?.startMainActivity(storeHome, handle, null, null)
                 }
             }
 
