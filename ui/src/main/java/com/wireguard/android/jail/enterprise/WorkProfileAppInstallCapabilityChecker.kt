@@ -218,7 +218,7 @@ open class WorkProfileAppInstallCapabilityChecker(
                     "resolveActivityAsUser",
                     Intent::class.java, Int::class.javaPrimitiveType, Int::class.javaPrimitiveType
                 )
-                val ri = resolveMethod.invoke(pm, detailsIntent, 0, handle.identifier)
+                val ri = resolveMethod.invoke(pm, detailsIntent, 0, handle.getIdentifier())
                 if (ri != null) {
                     val activityInfoField = ri.javaClass.getField("activityInfo")
                     activityInfoField.get(ri)
