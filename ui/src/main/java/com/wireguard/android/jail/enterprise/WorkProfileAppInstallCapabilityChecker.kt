@@ -6,8 +6,10 @@ package com.wireguard.android.jail.enterprise
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.CrossProfileApps
 import android.content.pm.LauncherApps
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Process
@@ -203,6 +205,45 @@ open class WorkProfileAppInstallCapabilityChecker(
 
         @Suppress("DEPRECATION")
         private fun launchStoreInProfile(handle: UserHandle, packageName: String): Boolean {
+            // Strategy 0: Proxy through our own app copy inside the work profile.
+            // Our app (WireGuard) is already installed in the work profile via
+            // the Create Workspace / provisioning flow. Instead of launching Play
+            // Store directly from the parent profile (which causes it to ignore
+            // deep-link URIs), we launch our own PlayStoreProxyActivity inside
+            // the work profile. That activity runs IN the same profile as Play
+            // Store, so its intent carries no cross-profile baggage and the
+            // deep link works.
+            //
+            // We try this BEFORE the CrossProfileApps path because the proxy
+            // approach is the only strategy that guarantees same-profile origin.
+            try {
+                val proxyIntent = PlayStoreProxyActivity.buildProxyIntent(packageName)
+                // Use makeOpenInUser to route the intent to our copy in the work profile
+                val optsClass = Class.forName("android.app.ActivityOptions")
+                val makeOpenInUser =
+                    optsClass.getMethod("makeOpenInUser", UserHandle::class.java)
+                val opts = makeOpenInUser.invoke(null, handle)
+                val bundle = optsClass.getMethod("toBundle").invoke(opts) as Bundle
+                appContext.startActivity(proxyIntent, bundle)
+                return true
+            } catch (_: Exception) {
+                // Proxy strategy failed; fall through to alternatives
+            }
+
+            // Strategy 1: CrossProfileApps.startActivity() directly to Play Store.
+            if (Build.VERSION.SDK_INT >= 34) {
+                val ok = try {
+                    val cpa = appContext.getSystemService(CrossProfileApps::class.java)
+                    val marketIntent = WorkProfileInstallGuide
+                        .playStoreDetailsIntent(packageName)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    cpa?.startActivity(marketIntent, handle)
+                    true
+                } catch (_: Exception) { false }
+                if (ok) return true
+            }
+
+            // Build the makeOpenInUser bundle for cross-user routing.
             val bundle = try {
                 val optsClass = Class.forName("android.app.ActivityOptions")
                 val makeOpenInUser =
@@ -213,19 +254,60 @@ open class WorkProfileAppInstallCapabilityChecker(
 
             if (bundle == null) return false
 
-            // Try market:// and https:// deep-links in order. Both have
-            // setPackage so the work-profile resolver matches the Play
-            // Store's details activity (not the launcher activity).
-            val candidates = listOf(
+            // Strategy 2: open the Play Store URL in a browser running
+            // inside the work profile.
+            val browserPackage = listOf(
+                "com.android.chrome",
+                "com.chrome.beta",
+                "com.chrome.dev",
+                "com.brave.browser",
+                "org.mozilla.firefox",
+                "org.mozilla.firefox.beta",
+                "com.microsoft.emmx",
+                "com.sec.android.app.sbrowser",
+                "com.opera.browser",
+                "com.opera.mini.native",
+                "com.duckduckgo.mobile.android",
+                "com.vivaldi.browser",
+            ).firstOrNull { pkg ->
+                runCatching {
+                    launcherApps?.getActivityList(pkg, handle).orEmpty().isNotEmpty()
+                }.getOrDefault(false)
+            }
+
+            if (browserPackage != null) {
+                val url = "https://play.google.com/store/apps/details?id=$packageName"
+                val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                    .setPackage(browserPackage)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                val ok = runCatching {
+                    appContext.startActivity(browserIntent, bundle)
+                    true
+                }.getOrDefault(false)
+                if (ok) return true
+            }
+
+            // Strategy 3: https:// URL without setPackage.
+            val httpsOk = runCatching {
+                val url = "https://play.google.com/store/apps/details?id=$packageName"
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                appContext.startActivity(intent, bundle)
+                true
+            }.getOrDefault(false)
+            if (httpsOk) return true
+
+            // Strategy 4 (fallback): direct Play Store deep-link.
+            val directCandidates = listOf(
                 WorkProfileInstallGuide.playStoreDetailsIntent(packageName),
                 WorkProfileInstallGuide.playStoreHttpsIntent(packageName),
             ).map { intent ->
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 intent.setPackage(PLAY_STORE_PACKAGE)
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 intent
             }
 
-            for (intent in candidates) {
+            for (intent in directCandidates) {
                 val ok = runCatching {
                     appContext.startActivity(intent, bundle)
                     true
