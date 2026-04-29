@@ -107,12 +107,15 @@ class PlayStoreProxyActivity : AppCompatActivity() {
 
         /**
          * Builds an explicit Intent to our [PlayStoreProxyActivity] that can
-         * be launched in the target profile using makeOpenInUser or
-         * CrossProfileApps.
+         * be launched in the target profile using LauncherApps.startActivity
+         * or makeOpenInUser / CrossProfileApps.
+         *
+         * @param context Application context used to resolve the package name.
+         * @param packageName The package to open in Play Store.
          */
-        fun buildProxyIntent(packageName: String): Intent =
+        fun buildProxyIntent(context: android.content.Context, packageName: String): Intent =
             Intent(ACTION_PROXY_PLAY_STORE).apply {
-                `package` = targetPackage
+                `package` = context.packageName
                 putExtra(EXTRA_PACKAGE_NAME, packageName)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
@@ -123,18 +126,7 @@ class PlayStoreProxyActivity : AppCompatActivity() {
          */
         fun buildViewProxyIntent(uri: Uri): Intent =
             Intent(Intent.ACTION_VIEW, uri).apply {
-                `package` = targetPackage
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
-
-        // This is set once at first call; requires Application context to resolve.
-        private var targetPackage: String = ""
-            set(value) { field = value }
-
-        fun init(context: android.content.Context) {
-            if (targetPackage.isEmpty()) {
-                targetPackage = context.packageName
-            }
-        }
     }
 }

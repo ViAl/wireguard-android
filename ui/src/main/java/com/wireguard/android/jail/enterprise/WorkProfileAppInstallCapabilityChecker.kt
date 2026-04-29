@@ -214,11 +214,25 @@ open class WorkProfileAppInstallCapabilityChecker(
             // Store, so its intent carries no cross-profile baggage and the
             // deep link works.
             //
-            // We try this BEFORE the CrossProfileApps path because the proxy
+            // We use CrossProfileApps.startActivity() to route the intent to
+            // our app copy in the work profile. CrossProfileApps is the
+            // official API for launching activities across profiles (API 34+).
+            // For API < 34, we try makeOpenInUser.
+            //
+            // We try this BEFORE the direct Play Store launch because the proxy
             // approach is the only strategy that guarantees same-profile origin.
+            if (Build.VERSION.SDK_INT >= 34) {
+                try {
+                    val cpa = appContext.getSystemService(CrossProfileApps::class.java)
+                    val proxyIntent = PlayStoreProxyActivity.buildProxyIntent(appContext, packageName)
+                    cpa?.startActivity(proxyIntent, handle, null, null)
+                    return true
+                } catch (_: Exception) {
+                    // CrossProfileApps proxy failed; try makeOpenInUser
+                }
+            }
             try {
-                val proxyIntent = PlayStoreProxyActivity.buildProxyIntent(packageName)
-                // Use makeOpenInUser to route the intent to our copy in the work profile
+                val proxyIntent = PlayStoreProxyActivity.buildProxyIntent(appContext, packageName)
                 val optsClass = Class.forName("android.app.ActivityOptions")
                 val makeOpenInUser =
                     optsClass.getMethod("makeOpenInUser", UserHandle::class.java)
@@ -237,7 +251,7 @@ open class WorkProfileAppInstallCapabilityChecker(
                     val marketIntent = WorkProfileInstallGuide
                         .playStoreDetailsIntent(packageName)
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    cpa?.startActivity(marketIntent, handle, null)
+                    cpa?.startActivity(marketIntent, handle, null, null)
                     true
                 } catch (_: Exception) { false }
                 if (ok) return true
