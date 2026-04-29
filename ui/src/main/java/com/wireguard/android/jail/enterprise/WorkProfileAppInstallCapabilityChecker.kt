@@ -14,11 +14,14 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Process
 import android.os.UserHandle
+import android.util.Log
 import com.wireguard.android.jail.domain.WorkProfileInstallGuide
 import com.wireguard.android.jail.model.WorkProfileAppAction
 import com.wireguard.android.jail.model.WorkProfileAppAvailability
 import com.wireguard.android.jail.model.WorkProfileAppInstallCapability
 import com.wireguard.android.jail.model.WorkProfileInstallEnvironmentReason
+
+private const val LOG_TAG = "WireGuard/WP"
 
 open class WorkProfileAppInstallCapabilityChecker(
     context: Context,
@@ -170,14 +173,24 @@ open class WorkProfileAppInstallCapabilityChecker(
         private val launcherApps = context.getSystemService(LauncherApps::class.java)
 
         override fun canLaunchStoreIntent(packageName: String): Boolean {
-            if (canLaunchStoreInOtherProfile()) return true
+            Log.d(LOG_TAG, "canLaunchStoreIntent($packageName)")
+            if (canLaunchStoreInOtherProfile()) {
+                Log.d(LOG_TAG, "canLaunchStoreInOtherProfile = true")
+                return true
+            }
             val primary = WorkProfileInstallGuide.playStoreDetailsIntent(packageName)
             val fallback = WorkProfileInstallGuide.playStoreHttpsIntent(packageName)
-            return resolvable(primary) || resolvable(fallback)
+            val result = resolvable(primary) || resolvable(fallback)
+            Log.d(LOG_TAG, "resolvable primary=$primary = ${resolvable(primary)}, fallback=$fallback = ${resolvable(fallback)}")
+            return result
         }
 
         override fun launchStoreIntent(packageName: String): Boolean {
-            if (launchStoreInOtherProfile(packageName)) return true
+            Log.d(LOG_TAG, "launchStoreIntent($packageName)")
+            if (launchStoreInOtherProfile(packageName)) {
+                Log.d(LOG_TAG, "launchStoreInOtherProfile returned true")
+                return true
+            }
 
             val intents = listOf(
                 WorkProfileInstallGuide.playStoreDetailsIntent(packageName),
@@ -185,50 +198,46 @@ open class WorkProfileAppInstallCapabilityChecker(
             ).map { it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
 
             val candidate = intents.firstOrNull { resolvable(it) } ?: return false
+            Log.d(LOG_TAG, "launchStoreIntent: primary fallback candidate=$candidate")
             return runCatching {
                 appContext.startActivity(candidate)
                 true
             }.getOrDefault(false)
         }
 
-        private fun canLaunchStoreInOtherProfile(): Boolean =
-            otherProfiles().any { handle ->
-                runCatching { launcherApps?.getActivityList(PLAY_STORE_PACKAGE, handle).orEmpty().isNotEmpty() }
-                    .getOrDefault(false)
+        private fun canLaunchStoreInOtherProfile(): Boolean {
+            val profiles = otherProfiles()
+            Log.d(LOG_TAG, "canLaunchStoreInOtherProfile: profiles=$profiles (${profiles.size})")
+            return profiles.any { handle ->
+                val activities = runCatching { launcherApps?.getActivityList(PLAY_STORE_PACKAGE, handle).orEmpty() }.getOrDefault(emptyList())
+                Log.d(LOG_TAG, "  profile $handle: Play Store activities=${activities.size}")
+                activities.isNotEmpty()
             }
+        }
 
         private fun launchStoreInOtherProfile(packageName: String): Boolean {
-            return otherProfiles().any { handle ->
+            val profiles = otherProfiles()
+            Log.d(LOG_TAG, "launchStoreInOtherProfile($packageName): profiles=$profiles (${profiles.size})")
+            return profiles.any { handle ->
                 launchStoreInProfile(handle, packageName)
             }
         }
 
         @Suppress("DEPRECATION")
         private fun launchStoreInProfile(handle: UserHandle, packageName: String): Boolean {
+            Log.d(LOG_TAG, "launchStoreInProfile: handle=$handle package=$packageName")
+
             // Strategy 0: Proxy through our own app copy inside the work profile.
-            // Our app (WireGuard) is already installed in the work profile via
-            // the Create Workspace / provisioning flow. Instead of launching Play
-            // Store directly from the parent profile (which causes it to ignore
-            // deep-link URIs), we launch our own PlayStoreProxyActivity inside
-            // the work profile. That activity runs IN the same profile as Play
-            // Store, so its intent carries no cross-profile baggage and the
-            // deep link works.
-            //
-            // We use CrossProfileApps.startActivity() to route the intent to
-            // our app copy in the work profile. CrossProfileApps is the
-            // official API for launching activities across profiles (API 34+).
-            // For API < 34, we try makeOpenInUser.
-            //
-            // We try this BEFORE the direct Play Store launch because the proxy
-            // approach is the only strategy that guarantees same-profile origin.
             if (Build.VERSION.SDK_INT >= 34) {
                 try {
                     val cpa = appContext.getSystemService(CrossProfileApps::class.java)
                     val proxyIntent = PlayStoreProxyActivity.buildProxyIntent(appContext, packageName)
+                    Log.d(LOG_TAG, "Strategy 0a: CrossProfileApps proxy intent=$proxyIntent")
                     cpa?.startActivity(proxyIntent, handle, null, null)
+                    Log.d(LOG_TAG, "Strategy 0a: succeeded (no exception)")
                     return true
-                } catch (_: Exception) {
-                    // CrossProfileApps proxy failed; try makeOpenInUser
+                } catch (e: Exception) {
+                    Log.e(LOG_TAG, "Strategy 0a failed: ${e.message}", e)
                 }
             }
             try {
@@ -238,10 +247,12 @@ open class WorkProfileAppInstallCapabilityChecker(
                     optsClass.getMethod("makeOpenInUser", UserHandle::class.java)
                 val opts = makeOpenInUser.invoke(null, handle)
                 val bundle = optsClass.getMethod("toBundle").invoke(opts) as Bundle
+                Log.d(LOG_TAG, "Strategy 0b: makeOpenInUser proxy intent=$proxyIntent")
                 appContext.startActivity(proxyIntent, bundle)
+                Log.d(LOG_TAG, "Strategy 0b: succeeded")
                 return true
-            } catch (_: Exception) {
-                // Proxy strategy failed; fall through to alternatives
+            } catch (e: Exception) {
+                Log.e(LOG_TAG, "Strategy 0b failed: ${e.message}", e)
             }
 
             // Strategy 1: CrossProfileApps.startActivity() directly to Play Store.
@@ -251,9 +262,14 @@ open class WorkProfileAppInstallCapabilityChecker(
                     val marketIntent = WorkProfileInstallGuide
                         .playStoreDetailsIntent(packageName)
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    Log.d(LOG_TAG, "Strategy 1: CrossProfileApps direct to Play Store intent=$marketIntent")
                     cpa?.startActivity(marketIntent, handle, null, null)
+                    Log.d(LOG_TAG, "Strategy 1: succeeded")
                     true
-                } catch (_: Exception) { false }
+                } catch (e: Exception) {
+                    Log.e(LOG_TAG, "Strategy 1 failed: ${e.message}", e)
+                    false
+                }
                 if (ok) return true
             }
 
@@ -264,12 +280,17 @@ open class WorkProfileAppInstallCapabilityChecker(
                     optsClass.getMethod("makeOpenInUser", UserHandle::class.java)
                 val opts = makeOpenInUser.invoke(null, handle)
                 optsClass.getMethod("toBundle").invoke(opts) as Bundle
-            } catch (_: Exception) { null }
+            } catch (e: Exception) {
+                Log.e(LOG_TAG, "makeOpenInUser bundle build failed", e)
+                null
+            }
 
-            if (bundle == null) return false
+            if (bundle == null) {
+                Log.e(LOG_TAG, "Bundle is null, all makeOpenInUser strategies skipped")
+                return false
+            }
 
-            // Strategy 2: open the Play Store URL in a browser running
-            // inside the work profile.
+            // Strategy 2: open the Play Store URL in a browser running inside the work profile.
             val browserPackage = listOf(
                 "com.android.chrome",
                 "com.chrome.beta",
@@ -284,9 +305,11 @@ open class WorkProfileAppInstallCapabilityChecker(
                 "com.duckduckgo.mobile.android",
                 "com.vivaldi.browser",
             ).firstOrNull { pkg ->
-                runCatching {
+                val found = runCatching {
                     launcherApps?.getActivityList(pkg, handle).orEmpty().isNotEmpty()
                 }.getOrDefault(false)
+                if (found) Log.d(LOG_TAG, "Strategy 2: found browser $pkg in profile")
+                found
             }
 
             if (browserPackage != null) {
@@ -294,11 +317,13 @@ open class WorkProfileAppInstallCapabilityChecker(
                 val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
                     .setPackage(browserPackage)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                Log.d(LOG_TAG, "Strategy 2: launching browser=$browserPackage url=$url")
                 val ok = runCatching {
                     appContext.startActivity(browserIntent, bundle)
                     true
                 }.getOrDefault(false)
-                if (ok) return true
+                if (ok) { Log.d(LOG_TAG, "Strategy 2: succeeded"); return true }
+                else { Log.e(LOG_TAG, "Strategy 2 failed") }
             }
 
             // Strategy 3: https:// URL without setPackage.
@@ -306,10 +331,12 @@ open class WorkProfileAppInstallCapabilityChecker(
                 val url = "https://play.google.com/store/apps/details?id=$packageName"
                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                Log.d(LOG_TAG, "Strategy 3: https intent=$intent")
                 appContext.startActivity(intent, bundle)
                 true
             }.getOrDefault(false)
-            if (httpsOk) return true
+            if (httpsOk) { Log.d(LOG_TAG, "Strategy 3: succeeded"); return true }
+            else { Log.e(LOG_TAG, "Strategy 3 failed") }
 
             // Strategy 4 (fallback): direct Play Store deep-link.
             val directCandidates = listOf(
@@ -322,13 +349,16 @@ open class WorkProfileAppInstallCapabilityChecker(
             }
 
             for (intent in directCandidates) {
+                Log.d(LOG_TAG, "Strategy 4: direct Play Store intent=$intent")
                 val ok = runCatching {
                     appContext.startActivity(intent, bundle)
                     true
                 }.getOrDefault(false)
-                if (ok) return true
+                if (ok) { Log.d(LOG_TAG, "Strategy 4: succeeded"); return true }
+                else { Log.e(LOG_TAG, "Strategy 4 failed") }
             }
 
+            Log.e(LOG_TAG, "All strategies exhausted for handle=$handle package=$packageName")
             return false
         }
 
