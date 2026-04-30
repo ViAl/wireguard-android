@@ -7,7 +7,6 @@ package com.wireguard.android.jail.enterprise
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
 
 /**
@@ -35,7 +34,7 @@ class PlayStoreProxyActivity : AppCompatActivity() {
         val action = intent?.action
         val data = intent?.data
 
-        Log.d(TAG, "onCreate: action=$action, data=$data, profile=${android.os.Process.myUserHandle()}")
+        WorkProfileLogger.d("ProxyActivity onCreate: action=$action, data=$data, profile=${android.os.Process.myUserHandle()}")
 
         when {
             // Mode 1: direct deep-link URIs (ACTION_VIEW with market:// or https://)
@@ -48,12 +47,12 @@ class PlayStoreProxyActivity : AppCompatActivity() {
                 if (packageName != null) {
                     relayToPlayStore(packageName)
                 } else {
-                    Log.w(TAG, "Proxy intent received but $EXTRA_PACKAGE_NAME is missing")
+                    WorkProfileLogger.w("Proxy intent received but $EXTRA_PACKAGE_NAME is missing")
                     finish()
                 }
             }
             else -> {
-                Log.w(TAG, "Unknown intent action=$action, data=$data")
+                WorkProfileLogger.w("Unknown intent action=$action, data=$data")
                 finish()
             }
         }
@@ -69,9 +68,9 @@ class PlayStoreProxyActivity : AppCompatActivity() {
         }
         try {
             startActivity(intent)
-            Log.d(TAG, "Play Store intent dispatched successfully")
+            WorkProfileLogger.d("ProxyActivity: Play Store intent dispatched successfully")
         } catch (e: Throwable) {
-            Log.e(TAG, "Failed to launch Play Store with uri=$uri", e)
+            WorkProfileLogger.e("ProxyActivity: Failed to launch Play Store with uri=$uri", e)
             // Fallback to https
             try {
                 val httpsUri = if (uri.scheme == "market") {
@@ -82,7 +81,7 @@ class PlayStoreProxyActivity : AppCompatActivity() {
                 }
                 startActivity(Intent(Intent.ACTION_VIEW, httpsUri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             } catch (e2: Throwable) {
-                Log.e(TAG, "Fallback https also failed", e2)
+                WorkProfileLogger.e("ProxyActivity: Fallback https also failed", e2)
             }
         } finally {
             // This activity has done its job — finish immediately so the user
@@ -97,6 +96,7 @@ class PlayStoreProxyActivity : AppCompatActivity() {
      * profile) will relay the deep link to Play Store.
      */
     companion object {
+        @Suppress("unused")
         private const val TAG = "PlayStoreProxy"
 
         /** Custom action for explicit cross-profile proxy invocation. */

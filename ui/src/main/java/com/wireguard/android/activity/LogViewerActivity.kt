@@ -39,6 +39,7 @@ import com.google.android.material.textview.MaterialTextView
 import com.wireguard.android.BuildConfig
 import com.wireguard.android.R
 import com.wireguard.android.databinding.LogViewerActivityBinding
+import com.wireguard.android.jail.enterprise.WorkProfileLogger
 import com.wireguard.android.util.DownloadsFileSaver
 import com.wireguard.android.util.ErrorMessages
 import com.wireguard.android.util.resolveAttribute
@@ -161,6 +162,16 @@ class LogViewerActivity : AppCompatActivity() {
             for (i in 0 until rawLogLines.size()) {
                 builder.append(rawLogLines[i])
                 builder.append('\n')
+            }
+            // Append WorkProfileLogger in-memory buffer — these entries survive
+            // logcat buffer eviction and are never lost.
+            val wpLog = WorkProfileLogger.snapshot()
+            if (wpLog.isNotEmpty()) {
+                builder.append("\n--- WireGuard/WP in-memory log ---\n")
+                wpLog.forEach { line ->
+                    builder.append(line)
+                    builder.append('\n')
+                }
             }
         }
         return builder.toString().toByteArray(Charsets.UTF_8)
