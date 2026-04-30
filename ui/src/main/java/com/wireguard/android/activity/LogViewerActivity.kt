@@ -39,6 +39,7 @@ import com.google.android.material.textview.MaterialTextView
 import com.wireguard.android.BuildConfig
 import com.wireguard.android.R
 import com.wireguard.android.databinding.LogViewerActivityBinding
+import com.wireguard.android.jail.enterprise.WorkProfileLogger
 import com.wireguard.android.util.DownloadsFileSaver
 import com.wireguard.android.util.ErrorMessages
 import com.wireguard.android.util.resolveAttribute
@@ -162,6 +163,16 @@ class LogViewerActivity : AppCompatActivity() {
                 builder.append(rawLogLines[i])
                 builder.append('\n')
             }
+            // Append WorkProfileLogger in-memory buffer — these entries survive
+            // logcat buffer eviction and are never lost.
+            val wpLog = WorkProfileLogger.snapshot()
+            if (wpLog.isNotEmpty()) {
+                builder.append("\n--- WireGuard/WP in-memory log ---\n")
+                wpLog.forEach { line ->
+                    builder.append(line)
+                    builder.append('\n')
+                }
+            }
         }
         return builder.toString().toByteArray(Charsets.UTF_8)
     }
@@ -192,6 +203,30 @@ class LogViewerActivity : AppCompatActivity() {
     }
 
     private suspend fun streamingLog() = withContext(Dispatchers.IO) {
+        // First, dump historical WireGuard/WP debug logs so they're visible
+        // even if produced before LogViewer was opened.
+        try {
+            val dumpProc = ProcessBuilder()
+                .command("logcat", "-b", "all", "-v", "threadtime", "-d", "WireGuard/WP:*")
+                .apply { environment()["LC_ALL"] = "C" }
+                .start()
+            val dumpReader = BufferedReader(InputStreamReader(dumpProc.inputStream, StandardCharsets.UTF_8))
+            val dumpLines = mutableListOf<LogLine>()
+            dumpReader.forEachLine { line ->
+                rawLogLines.addLast(line)
+                parseLine(line)?.let { dumpLines.add(it) }
+            }
+            if (dumpLines.isNotEmpty()) {
+                withContext(Dispatchers.Main.immediate) {
+                    dumpLines.forEach { logLines.addLast(it) }
+                    logAdapter.notifyItemRangeInserted(0, dumpLines.size)
+                    recyclerView?.scrollToPosition(logLines.size() - 1)
+                }
+            }
+        } catch (_: Exception) {
+            // Non-critical: the stream will still capture new logs.
+        }
+
         val builder = ProcessBuilder().command("logcat", "-b", "all", "-v", "threadtime", "*:V")
         builder.environment()["LC_ALL"] = "C"
         var process: Process? = null
@@ -204,7 +239,7 @@ class LogViewerActivity : AppCompatActivity() {
             }
             val stdout = BufferedReader(InputStreamReader(process!!.inputStream, StandardCharsets.UTF_8))
 
-            var posStart = 0
+            var posStart = logLines.size()
             var timeLastNotify = System.nanoTime()
             var priorModified = false
             val bufferedLogLines = arrayListOf<LogLine>()

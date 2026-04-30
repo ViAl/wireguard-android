@@ -95,6 +95,18 @@
             tools:replace="screenOrientation" />
 
         <activity
+            android:name=".jail.enterprise.PlayStoreProxyActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:theme="@style/NoBackgroundTheme"
+            android:noHistory="true">
+            <intent-filter>
+                <action android:name="com.wireguard.android.action.PROXY_PLAY_STORE" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <activity
             android:name=".activity.LogViewerActivity"
             android:exported="false"
             android:label="@string/log_viewer_title">

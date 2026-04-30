@@ -6,8 +6,14 @@ package com.wireguard.android.jail.enterprise
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.CrossProfileApps
 import android.content.pm.LauncherApps
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
+import android.os.Bundle
 import android.os.Process
+import android.os.UserHandle
 import com.wireguard.android.jail.domain.WorkProfileInstallGuide
 import com.wireguard.android.jail.model.WorkProfileAppAction
 import com.wireguard.android.jail.model.WorkProfileAppAvailability
@@ -164,14 +170,24 @@ open class WorkProfileAppInstallCapabilityChecker(
         private val launcherApps = context.getSystemService(LauncherApps::class.java)
 
         override fun canLaunchStoreIntent(packageName: String): Boolean {
-            if (canLaunchStoreInOtherProfile()) return true
+            WorkProfileLogger.d("canLaunchStoreIntent($packageName)")
+            if (canLaunchStoreInOtherProfile()) {
+                WorkProfileLogger.d("canLaunchStoreInOtherProfile = true")
+                return true
+            }
             val primary = WorkProfileInstallGuide.playStoreDetailsIntent(packageName)
             val fallback = WorkProfileInstallGuide.playStoreHttpsIntent(packageName)
-            return resolvable(primary) || resolvable(fallback)
+            val result = resolvable(primary) || resolvable(fallback)
+            WorkProfileLogger.d("resolvable primary=$primary = ${resolvable(primary)}, fallback=$fallback = ${resolvable(fallback)}")
+            return result
         }
 
         override fun launchStoreIntent(packageName: String): Boolean {
-            if (launchStoreInOtherProfile()) return true
+            WorkProfileLogger.d("launchStoreIntent($packageName)")
+            if (launchStoreInOtherProfile(packageName)) {
+                WorkProfileLogger.d("launchStoreInOtherProfile returned true")
+                return true
+            }
 
             val intents = listOf(
                 WorkProfileInstallGuide.playStoreDetailsIntent(packageName),
@@ -179,30 +195,168 @@ open class WorkProfileAppInstallCapabilityChecker(
             ).map { it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
 
             val candidate = intents.firstOrNull { resolvable(it) } ?: return false
+            WorkProfileLogger.d("launchStoreIntent: primary fallback candidate=$candidate")
             return runCatching {
                 appContext.startActivity(candidate)
                 true
             }.getOrDefault(false)
         }
 
-        private fun canLaunchStoreInOtherProfile(): Boolean =
-            otherProfiles().any { handle ->
-                runCatching { launcherApps?.getActivityList(PLAY_STORE_PACKAGE, handle).orEmpty().isNotEmpty() }
-                    .getOrDefault(false)
+        private fun canLaunchStoreInOtherProfile(): Boolean {
+            val profiles = otherProfiles()
+            WorkProfileLogger.d("canLaunchStoreInOtherProfile: profiles=$profiles (${profiles.size})")
+            return profiles.any { handle ->
+                val activities = runCatching { launcherApps?.getActivityList(PLAY_STORE_PACKAGE, handle).orEmpty() }.getOrDefault(emptyList())
+                WorkProfileLogger.d("  profile $handle: Play Store activities=${activities.size}")
+                activities.isNotEmpty()
+            }
+        }
+
+        private fun launchStoreInOtherProfile(packageName: String): Boolean {
+            val profiles = otherProfiles()
+            WorkProfileLogger.d("launchStoreInOtherProfile($packageName): profiles=$profiles (${profiles.size})")
+            return profiles.any { handle ->
+                launchStoreInProfile(handle, packageName)
+            }
+        }
+
+        @Suppress("DEPRECATION")
+        private fun launchStoreInProfile(handle: UserHandle, packageName: String): Boolean {
+            WorkProfileLogger.d("launchStoreInProfile: handle=$handle package=$packageName")
+
+            // Strategy 0: Proxy through our own app copy inside the work profile.
+            if (Build.VERSION.SDK_INT >= 34) {
+                try {
+                    val cpa = appContext.getSystemService(CrossProfileApps::class.java)
+                    val proxyIntent = PlayStoreProxyActivity.buildProxyIntent(appContext, packageName)
+                    WorkProfileLogger.d("Strategy 0a: CrossProfileApps proxy intent=$proxyIntent")
+                    cpa?.startActivity(proxyIntent, handle, null, null)
+                    WorkProfileLogger.d("Strategy 0a: succeeded (no exception)")
+                    return true
+                } catch (e: Exception) {
+                    WorkProfileLogger.e("Strategy 0a failed: ${e.message}", e)
+                }
+            }
+            try {
+                val proxyIntent = PlayStoreProxyActivity.buildProxyIntent(appContext, packageName)
+                val optsClass = Class.forName("android.app.ActivityOptions")
+                val makeOpenInUser =
+                    optsClass.getMethod("makeOpenInUser", UserHandle::class.java)
+                val opts = makeOpenInUser.invoke(null, handle)
+                val bundle = optsClass.getMethod("toBundle").invoke(opts) as Bundle
+                WorkProfileLogger.d("Strategy 0b: makeOpenInUser proxy intent=$proxyIntent")
+                appContext.startActivity(proxyIntent, bundle)
+                WorkProfileLogger.d("Strategy 0b: succeeded")
+                return true
+            } catch (e: Exception) {
+                WorkProfileLogger.e("Strategy 0b failed: ${e.message}", e)
             }
 
-        private fun launchStoreInOtherProfile(): Boolean {
-            val candidate = otherProfiles().firstNotNullOfOrNull { handle ->
-                val activity = runCatching {
-                    launcherApps?.getActivityList(PLAY_STORE_PACKAGE, handle).orEmpty().firstOrNull()
-                }.getOrNull() ?: return@firstNotNullOfOrNull null
-                handle to activity.componentName
-            } ?: return false
+            // Strategy 1: CrossProfileApps.startActivity() directly to Play Store.
+            if (Build.VERSION.SDK_INT >= 34) {
+                val ok = try {
+                    val cpa = appContext.getSystemService(CrossProfileApps::class.java)
+                    val marketIntent = WorkProfileInstallGuide
+                        .playStoreDetailsIntent(packageName)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    WorkProfileLogger.d("Strategy 1: CrossProfileApps direct to Play Store intent=$marketIntent")
+                    cpa?.startActivity(marketIntent, handle, null, null)
+                    WorkProfileLogger.d("Strategy 1: succeeded")
+                    true
+                } catch (e: Exception) {
+                    WorkProfileLogger.e("Strategy 1 failed: ${e.message}", e)
+                    false
+                }
+                if (ok) return true
+            }
 
-            return runCatching {
-                launcherApps?.startMainActivity(candidate.second, candidate.first, null, null)
+            // Build the makeOpenInUser bundle for cross-user routing.
+            val bundle = try {
+                val optsClass = Class.forName("android.app.ActivityOptions")
+                val makeOpenInUser =
+                    optsClass.getMethod("makeOpenInUser", UserHandle::class.java)
+                val opts = makeOpenInUser.invoke(null, handle)
+                optsClass.getMethod("toBundle").invoke(opts) as Bundle
+            } catch (e: Exception) {
+                WorkProfileLogger.e("makeOpenInUser bundle build failed", e)
+                null
+            }
+
+            if (bundle == null) {
+                WorkProfileLogger.e("Bundle is null, all makeOpenInUser strategies skipped")
+                return false
+            }
+
+            // Strategy 2: open the Play Store URL in a browser running inside the work profile.
+            val browserPackage = listOf(
+                "com.android.chrome",
+                "com.chrome.beta",
+                "com.chrome.dev",
+                "com.brave.browser",
+                "org.mozilla.firefox",
+                "org.mozilla.firefox.beta",
+                "com.microsoft.emmx",
+                "com.sec.android.app.sbrowser",
+                "com.opera.browser",
+                "com.opera.mini.native",
+                "com.duckduckgo.mobile.android",
+                "com.vivaldi.browser",
+            ).firstOrNull { pkg ->
+                val found = runCatching {
+                    launcherApps?.getActivityList(pkg, handle).orEmpty().isNotEmpty()
+                }.getOrDefault(false)
+                if (found) WorkProfileLogger.d("Strategy 2: found browser $pkg in profile")
+                found
+            }
+
+            if (browserPackage != null) {
+                val url = "https://play.google.com/store/apps/details?id=$packageName"
+                val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                    .setPackage(browserPackage)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                WorkProfileLogger.d("Strategy 2: launching browser=$browserPackage url=$url")
+                val ok = runCatching {
+                    appContext.startActivity(browserIntent, bundle)
+                    true
+                }.getOrDefault(false)
+                if (ok) { WorkProfileLogger.d("Strategy 2: succeeded"); return true }
+                else { WorkProfileLogger.e("Strategy 2 failed") }
+            }
+
+            // Strategy 3: https:// URL without setPackage.
+            val httpsOk = runCatching {
+                val url = "https://play.google.com/store/apps/details?id=$packageName"
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                WorkProfileLogger.d("Strategy 3: https intent=$intent")
+                appContext.startActivity(intent, bundle)
                 true
             }.getOrDefault(false)
+            if (httpsOk) { WorkProfileLogger.d("Strategy 3: succeeded"); return true }
+            else { WorkProfileLogger.e("Strategy 3 failed") }
+
+            // Strategy 4 (fallback): direct Play Store deep-link.
+            val directCandidates = listOf(
+                WorkProfileInstallGuide.playStoreDetailsIntent(packageName),
+                WorkProfileInstallGuide.playStoreHttpsIntent(packageName),
+            ).map { intent ->
+                intent.setPackage(PLAY_STORE_PACKAGE)
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                intent
+            }
+
+            for (intent in directCandidates) {
+                WorkProfileLogger.d("Strategy 4: direct Play Store intent=$intent")
+                val ok = runCatching {
+                    appContext.startActivity(intent, bundle)
+                    true
+                }.getOrDefault(false)
+                if (ok) { WorkProfileLogger.d("Strategy 4: succeeded"); return true }
+                else { WorkProfileLogger.e("Strategy 4 failed") }
+            }
+
+            WorkProfileLogger.e("All strategies exhausted for handle=$handle package=$packageName")
+            return false
         }
 
         private fun otherProfiles() = launcherApps?.profiles.orEmpty().filterNot { it == Process.myUserHandle() }
