@@ -60,6 +60,7 @@ import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import java.util.regex.Matcher
 import java.util.regex.Pattern
+import kotlinx.coroutines.delay
 
 class LogViewerActivity : AppCompatActivity() {
     private lateinit var binding: LogViewerActivityBinding
@@ -107,6 +108,7 @@ class LogViewerActivity : AppCompatActivity() {
         }
 
         lifecycleScope.launch(Dispatchers.IO) { streamingLog() }
+        lifecycleScope.launch(Dispatchers.IO) { wpFilePoller() }
 
         val revokeLastActivityResultLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
             revokeLastUri()
@@ -203,8 +205,11 @@ class LogViewerActivity : AppCompatActivity() {
     }
 
     private suspend fun streamingLog() = withContext(Dispatchers.IO) {
-        // First, dump historical WireGuard/WP debug logs so they're visible
-        // even if produced before LogViewer was opened.
+        // First, load historical WireGuard/WP logs from the file-based
+        // WorkProfileLogger — these survive logcat eviction.
+        loadWorkProfileFileLogs(historical = true)
+
+        // Also try a logcat dump of WireGuard/WP in case the lines are still in the ring buffer.
         try {
             val dumpProc = ProcessBuilder()
                 .command("logcat", "-b", "all", "-v", "threadtime", "-d", "WireGuard/WP:*")
@@ -307,6 +312,88 @@ class LogViewerActivity : AppCompatActivity() {
         } catch (e: ParseException) {
             null
         }
+    }
+
+    private var wpFileLen = 0L
+    private var wpLastModified = 0L
+
+    /**
+     * Load all current WorkProfileLogger file entries and add them
+     * to the RecyclerView as fake logcat LogLine entries (pid=0, tid=0).
+     */
+    private suspend fun loadWorkProfileFileLogs(historical: Boolean = false) {
+        val filePath = WorkProfileLogger.logFilePath() ?: return
+        val file = java.io.File(filePath)
+        if (!file.exists()) return
+
+        wpFileLen = file.length()
+        wpLastModified = file.lastModified()
+
+        val lines = WorkProfileLogger.snapshot()
+        if (lines.isEmpty()) return
+
+        // Build a set of messages already shown (from the logLines CircularArray)
+        // so we don't duplicate.
+        val existingKeys = mutableSetOf<String>()
+        for (i in 0 until logLines.size()) {
+            val ll = logLines[i]
+            existingKeys.add("${ll.time?.time ?: 0}:${ll.msg}")
+        }
+
+        val parsed = mutableListOf<LogLine>()
+        for (timestampedLine in lines) {
+            val logLine = parseWorkProfileLine(timestampedLine) ?: continue
+            val key = "${logLine.time?.time ?: 0}:${logLine.msg}"
+            if (!existingKeys.add(key)) continue
+            parsed.add(logLine)
+            rawLogLines.addLast("[WorkProfile] $timestampedLine")
+        }
+
+        if (parsed.isNotEmpty()) {
+            withContext(Dispatchers.Main.immediate) {
+                parsed.forEach { logLines.addLast(it) }
+                logAdapter.notifyItemRangeInserted(logLines.size() - parsed.size, parsed.size)
+                if (historical) {
+                    recyclerView?.scrollToPosition(logLines.size() - 1)
+                }
+            }
+        }
+    }
+
+    private suspend fun wpFilePoller() {
+        while (true) {
+            delay(2500L)
+            val filePath = WorkProfileLogger.logFilePath() ?: continue
+            val file = java.io.File(filePath)
+            if (!file.exists()) continue
+
+            val newModified = file.lastModified()
+            val newLen = file.length()
+            if (newModified <= wpLastModified && newLen <= wpFileLen) continue
+
+            loadWorkProfileFileLogs()
+        }
+    }
+
+    /**
+     * Parse a single line from WorkProfileLogger's file format:
+     *   "MM-dd HH:mm:ss.SSS D WireGuard/WP: message"
+     * into a LogLine with pid=0, tid=0.
+     */
+    private fun parseWorkProfileLine(line: String): LogLine? {
+        // Pattern: MM-dd HH:mm:ss.SSS (D|E|W) Tag: msg
+        val m = Pattern.compile("^(\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\.\\d{3}) (\\w) (.+?): (.*)$")
+            .matcher(line)
+        return if (m.matches()) {
+            val timeStr = m.group(1)
+            val level = m.group(2)
+            val tag = m.group(3)
+            val msg = m.group(4)
+            val fullTimeStr = "${year}-$timeStr"
+            val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
+            val time = try { dateFormat.parse(fullTimeStr) } catch (_: Exception) { null }
+            LogLine(0, 0, time, level, tag, msg)
+        } else null
     }
 
     private fun parseLine(line: String): LogLine? {
