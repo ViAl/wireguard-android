@@ -4,48 +4,117 @@
  */
 package com.wireguard.android.jail.enterprise
 
+import android.content.Context
 import android.util.Log
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * Logger for Work-Profile (WireGuard/WP) operations.
  *
- * Writes directly to logcat under the single tag "WireGuard/WP" so that
- * LogViewerActivity's streaming logcat reader picks it up in real time
- * alongside all other system logs.
+ * Writes to BOTH logcat and a dedicated file inside the app's private
+ * files directory. The file-based log is necessary because runtime
+ * logcat reading is restricted on Android 11+; LogViewerActivity reads
+ * our log file directly instead of relying on logcat.
  *
- * This object does NOT maintain an in-memory ring buffer. For the canonical
- * log file (e.g. when exporting via the Share button), LogViewerActivity
- * already runs `logcat -d WireGuard/WP:*` at startup to capture historical
- * entries that were produced before the viewer opened.
+ * The log file is rotated when it exceeds 256 KiB, keeping at most
+ * one backup copy (wireguard_wp.log.1).
  */
 object WorkProfileLogger {
 
-    /** Single well-known tag consumed by LogViewerActivity. */
     private const val TAG = "WireGuard/WP"
+    private const val MAX_FILE_SIZE = 256 * 1024 // 256 KiB
+    private const val FILE_NAME = "wireguard_wp.log"
 
-    // ── Public API ──────────────────────────────────────────────────────
+    /** Must be set once, typically from Application.onCreate(). */
+    private var filesDir: File? = null
 
-    /** Write a debug entry to logcat. */
+    private val dateFormat = SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.US)
+
+    // ── Init ───────────────────────────────────────────────────────────
+
+    /** Initialise the logger with the app's files directory. */
+    fun init(context: Context) {
+        filesDir = context.filesDir
+        // Create or truncate the file to a fresh start.
+        val logFile = logFile() ?: return
+        if (logFile.exists()) {
+            logFile.delete()
+        }
+        d("WorkProfileLogger initialised, file=${logFile.absolutePath}")
+    }
+
+    // ── Public API ─────────────────────────────────────────────────────
+
     fun d(message: String) {
         Log.d(TAG, message)
+        appendToFile("D", message)
     }
 
-    /** Write an error entry to logcat. */
     fun e(message: String, throwable: Throwable? = null) {
-        if (throwable != null) Log.e(TAG, message, throwable) else Log.e(TAG, message)
+        if (throwable != null) {
+            Log.e(TAG, message, throwable)
+            appendToFile("E", "$message — ${throwable.message}")
+        } else {
+            Log.e(TAG, message)
+            appendToFile("E", message)
+        }
     }
 
-    /** Write a warning entry to logcat. */
     fun w(message: String) {
         Log.w(TAG, message)
+        appendToFile("W", message)
     }
 
     /**
-     * Return all buffered lines in order (oldest first).
+     * Returns the full content of the log file as a list of lines
+     * (oldest first), or an empty list if the file doesn't exist.
      *
-     * Note: this implementation returns an empty list because we no longer
-     * keep an in-memory buffer. Historical entries are retrieved from
-     * logcat by LogViewerActivity via `logcat -d WireGuard/WP:*`.
+     * LogViewerActivity calls this to embed WP logs into
+     * the exported log file (see rawLogBytes).
      */
-    fun snapshot(): List<String> = emptyList()
+    fun snapshot(): List<String> {
+        val file = logFile() ?: return emptyList()
+        return try {
+            file.readLines()
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    /**
+     * Returns the absolute path of the current log file, so that
+     * LogViewerActivity can read it directly.
+     */
+    fun logFilePath(): String? = logFile()?.absolutePath
+
+    // ── Internal ───────────────────────────────────────────────────────
+
+    private fun logFile(): File? {
+        val dir = filesDir ?: return null
+        return File(dir, FILE_NAME)
+    }
+
+    @Synchronized
+    private fun appendToFile(level: String, message: String) {
+        val file = logFile() ?: return
+        try {
+            // Rotate if too large.
+            if (file.exists() && file.length() > MAX_FILE_SIZE) {
+                val backup = File(file.parentFile, "$FILE_NAME.1")
+                file.renameTo(backup)
+                file.createNewFile()
+            } else if (!file.exists()) {
+                file.createNewFile()
+            }
+
+            val timestamp = dateFormat.format(Date())
+            val line = "$timestamp $level $TAG: $message\n"
+            file.appendText(line)
+        } catch (_: Exception) {
+            // Best-effort; logcat entries are still written above.
+        }
+    }
 }

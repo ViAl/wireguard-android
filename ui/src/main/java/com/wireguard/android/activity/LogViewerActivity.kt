@@ -163,11 +163,11 @@ class LogViewerActivity : AppCompatActivity() {
                 builder.append(rawLogLines[i])
                 builder.append('\n')
             }
-            // Append WorkProfileLogger in-memory buffer — these entries survive
-            // logcat buffer eviction and are never lost.
+            // Append WorkProfileLogger file-based log — this survives logcat
+            // eviction and is NOT subject to READ_LOGS permission restrictions.
             val wpLog = WorkProfileLogger.snapshot()
             if (wpLog.isNotEmpty()) {
-                builder.append("\n--- WireGuard/WP in-memory log ---\n")
+                builder.append("\n--- WireGuard/WP file log ---\n")
                 wpLog.forEach { line ->
                     builder.append(line)
                     builder.append('\n')

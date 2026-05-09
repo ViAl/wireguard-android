@@ -22,6 +22,7 @@ import com.wireguard.android.backend.GoBackend
 import com.wireguard.android.backend.WgQuickBackend
 import com.wireguard.android.configStore.FileConfigStore
 import com.wireguard.android.jail.JailComponent
+import com.wireguard.android.jail.enterprise.WorkProfileLogger
 import com.wireguard.android.model.TunnelManager
 import com.wireguard.android.updater.Updater
 import com.wireguard.android.util.RootShell
@@ -87,6 +88,7 @@ class Application : android.app.Application() {
     override fun onCreate() {
         Log.i(TAG, USER_AGENT)
         super.onCreate()
+        WorkProfileLogger.init(this)
         DynamicColors.applyToActivitiesIfAvailable(this)
         rootShell = RootShell(applicationContext)
         toolsInstaller = ToolsInstaller(applicationContext, rootShell)
