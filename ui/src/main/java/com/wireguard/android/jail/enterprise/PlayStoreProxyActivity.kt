@@ -64,6 +64,7 @@ class PlayStoreProxyActivity : AppCompatActivity() {
 
     private fun relayToPlayStore(uri: Uri) {
         val intent = Intent(Intent.ACTION_VIEW, uri).apply {
+            setPackage(PLAY_STORE_PACKAGE)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         try {
@@ -71,7 +72,7 @@ class PlayStoreProxyActivity : AppCompatActivity() {
             WorkProfileLogger.d("ProxyActivity: Play Store intent dispatched successfully")
         } catch (e: Throwable) {
             WorkProfileLogger.e("ProxyActivity: Failed to launch Play Store with uri=$uri", e)
-            // Fallback to https
+            // Fallback to https — also with setPackage so system doesn't pick a browser
             try {
                 val httpsUri = if (uri.scheme == "market") {
                     val packageName = uri.getQueryParameter("id") ?: return
@@ -79,7 +80,11 @@ class PlayStoreProxyActivity : AppCompatActivity() {
                 } else {
                     uri
                 }
-                startActivity(Intent(Intent.ACTION_VIEW, httpsUri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                val fallbackIntent = Intent(Intent.ACTION_VIEW, httpsUri).apply {
+                    setPackage(PLAY_STORE_PACKAGE)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                startActivity(fallbackIntent)
             } catch (e2: Throwable) {
                 WorkProfileLogger.e("ProxyActivity: Fallback https also failed", e2)
             }
@@ -98,6 +103,9 @@ class PlayStoreProxyActivity : AppCompatActivity() {
     companion object {
         @Suppress("unused")
         private const val TAG = "PlayStoreProxy"
+
+        /** Play Store package name constant. */
+        private const val PLAY_STORE_PACKAGE = "com.android.vending"
 
         /** Custom action for explicit cross-profile proxy invocation. */
         const val ACTION_PROXY_PLAY_STORE = "com.wireguard.android.action.PROXY_PLAY_STORE"
