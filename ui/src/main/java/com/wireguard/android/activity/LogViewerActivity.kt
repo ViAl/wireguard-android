@@ -382,7 +382,7 @@ class LogViewerActivity : AppCompatActivity() {
      */
     private fun parseWorkProfileLine(line: String): LogLine? {
         // Pattern: MM-dd HH:mm:ss.SSS (D|E|W) Tag: msg
-        val m = Pattern.compile("^(\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\.\\d{3}) (\\w) (.+?): (.*)$")
+        val m = Pattern.compile("""^(\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}) (\w) (.+?): (.*)$""")
             .matcher(line)
         return if (m.matches()) {
             val timeStr = m.group(1)
