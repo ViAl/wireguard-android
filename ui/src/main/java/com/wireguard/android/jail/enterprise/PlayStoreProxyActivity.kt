@@ -64,7 +64,10 @@ class PlayStoreProxyActivity : AppCompatActivity() {
 
     private fun relayToPlayStore(uri: Uri) {
         val intent = Intent(Intent.ACTION_VIEW, uri).apply {
-            setPackage(PLAY_STORE_PACKAGE)
+            // Do NOT setPackage here — this proxy runs inside the work profile,
+            // and the system resolver inside that profile will pick up Play Store
+            // naturally. Setting the package would tie the intent to a specific
+            // user's Play Store instance, breaking cross-profile routing.
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         try {
@@ -72,7 +75,7 @@ class PlayStoreProxyActivity : AppCompatActivity() {
             WorkProfileLogger.d("ProxyActivity: Play Store intent dispatched successfully")
         } catch (e: Throwable) {
             WorkProfileLogger.e("ProxyActivity: Failed to launch Play Store with uri=$uri", e)
-            // Fallback to https — also with setPackage so system doesn't pick a browser
+            // Fallback to https (without setPackage — same logic as above)
             try {
                 val httpsUri = if (uri.scheme == "market") {
                     val packageName = uri.getQueryParameter("id") ?: return
@@ -81,7 +84,6 @@ class PlayStoreProxyActivity : AppCompatActivity() {
                     uri
                 }
                 val fallbackIntent = Intent(Intent.ACTION_VIEW, httpsUri).apply {
-                    setPackage(PLAY_STORE_PACKAGE)
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
                 startActivity(fallbackIntent)
@@ -89,8 +91,6 @@ class PlayStoreProxyActivity : AppCompatActivity() {
                 WorkProfileLogger.e("ProxyActivity: Fallback https also failed", e2)
             }
         } finally {
-            // This activity has done its job — finish immediately so the user
-            // sees only the Play Store, not this transparent window.
             finish()
         }
     }
