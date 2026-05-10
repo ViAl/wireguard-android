@@ -200,6 +200,19 @@ open class WorkProfileAppInstallCapabilityChecker(
                 }
             }
 
+            // Strategy 0.5: WorkProfileCloner via Shuttle — runs code inside
+            // the work profile which opens Play Store directly there.
+            val profiles = otherProfiles()
+            if (profiles.isNotEmpty()) {
+                val cloner = com.wireguard.android.jail.shuttle.WorkProfileCloner(appContext)
+                val cloned = cloner.cloneViaShuttle(profiles.first(), packageName)
+                WorkProfileLogger.d("launchStoreIntent: WorkProfileCloner result=$cloned")
+                if (cloned) {
+                    WorkProfileLogger.d("launchStoreIntent: Shuttle clone succeeded")
+                    return true
+                }
+            }
+
             if (launchStoreInOtherProfile(packageName)) {
                 WorkProfileLogger.d("launchStoreInOtherProfile returned true")
                 return true
