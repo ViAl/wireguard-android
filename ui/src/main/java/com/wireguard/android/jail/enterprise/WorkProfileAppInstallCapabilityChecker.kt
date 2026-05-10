@@ -254,17 +254,29 @@ open class WorkProfileAppInstallCapabilityChecker(
             WorkProfileLogger.d("launchStoreInProfile: handle=$handle package=$packageName")
 
             // Strategy 0: Proxy through our own app copy inside the work profile.
-            // Use LauncherApps.startActivity — it can start our ProxyActivity in the
-            // target profile, which will then open Play Store locally inside that profile.
+            // Use LauncherApps.startActivity via reflection — direct Kotlin call
+            // fails with kapt/AGP 9.1.0 (Unresolved reference 'startActivity').
             try {
-                val proxyComponent = android.content.ComponentName(
-                    appContext.packageName,
-                    PlayStoreProxyActivity::class.java.name
-                )
-                WorkProfileLogger.d("Strategy 0a: LauncherApps proxy component=$proxyComponent")
-                launcherApps?.startActivity(proxyComponent, handle, null)
-                WorkProfileLogger.d("Strategy 0a: succeeded")
-                return true
+                val launcherAppsObj = appContext.getSystemService(Context.LAUNCHER_APPS_SERVICE)
+                if (launcherAppsObj != null) {
+                    val launcherClass = launcherAppsObj.javaClass
+                    val proxyComponent = android.content.ComponentName(
+                        appContext.packageName,
+                        PlayStoreProxyActivity::class.java.name
+                    )
+                    val startMethod = launcherClass.getMethod(
+                        "startActivity",
+                        android.content.ComponentName::class.java,
+                        android.os.UserHandle::class.java,
+                        android.graphics.Rect::class.java,
+                        android.os.Bundle::class.java
+                    )
+                    WorkProfileLogger.d(
+                        "Strategy 0a: LauncherApps ref proxy component=$proxyComponent handle=$handle")
+                    startMethod.invoke(launcherAppsObj, proxyComponent, handle, null, null)
+                    WorkProfileLogger.d("Strategy 0a: succeeded")
+                    return true
+                }
             } catch (e: Exception) {
                 WorkProfileLogger.e("Strategy 0a failed: ${e.message}", e)
             }
