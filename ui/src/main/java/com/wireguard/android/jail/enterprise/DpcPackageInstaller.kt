@@ -85,9 +85,12 @@ class DpcPackageInstaller(
         val ownershipService = ManagedProfileOwnershipService(context)
         val ownershipState = ownershipService.state()
 
+        // Check via JailDeviceAdminReceiver (provisioning prefs)
+        val provisioned = JailDeviceAdminReceiver().isProvisioned(context)
+
         WorkProfileLogger.d(
             "DpcPackageInstaller: isProfileOwner=$isProfileOwner, isDeviceOwner=$isDeviceOwner, " +
-            "isAdminActive=$isAdminActive, ownershipState=$ownershipState"
+            "isAdminActive=$isAdminActive, ownershipState=$ownershipState, provisioned=$provisioned"
         )
 
         if (!isProfileOwner) {

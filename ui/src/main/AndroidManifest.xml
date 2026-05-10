@@ -152,7 +152,22 @@
                 <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
                 <action android:name="android.app.action.PROFILE_PROVISIONING_COMPLETE" />
             </intent-filter>
+
+            <!-- Required for DPCCreatePackageInstall notifications -->
+            <meta-data
+                android:name="android.app.extra.PROFILE_PROVISIONING_SKIP_ENCRYPTION"
+                android:value="true" />
         </receiver>
+
+        <!-- DPC provisioning content provider — required for managed profile setup -->
+        <provider
+            android:name=".jail.enterprise.JailDpcContentProvider"
+            android:authorities="${applicationId}.dpc"
+            android:exported="true"
+            android:grantUriPermissions="true"
+            android:permission="android.permission.INTERACT_ACROSS_PROFILES"
+            tools:ignore="ExportedContentProvider" />
+
         <receiver
             android:name=".model.TunnelManager$IntentReceiver"
             android:exported="true"
