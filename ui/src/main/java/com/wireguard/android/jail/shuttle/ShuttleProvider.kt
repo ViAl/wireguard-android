@@ -1,0 +1,170 @@
+/*
+ * Copyright © 2017-2026 WireGuard LLC. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ */
+package com.wireguard.android.jail.shuttle
+
+import android.app.Activity
+import android.content.*
+import android.content.ContentResolver.SCHEME_CONTENT
+import android.content.pm.PackageManager.PERMISSION_GRANTED
+import android.database.Cursor
+import android.net.Uri
+import android.os.*
+import android.util.Log
+import android.util.Size
+import android.util.SizeF
+import android.util.SparseArray
+import java.io.Serializable
+
+class ShuttleProvider : ContentProvider() {
+
+    companion object {
+        private const val TAG = "WG.ShuttleProvider"
+
+        /** Authority derived from applicationId. */
+        private const val AUTHORITY_SUFFIX = ".shuttle"
+        private fun authority(context: Context) = context.packageName + AUTHORITY_SUFFIX
+        @Suppress("UNUSED_PRIVATE_PROPERTY")
+        private fun contentUri(context: Context) = "content://${authority(context)}"
+
+        /** Build cross-profile URI: `content://<profileId>@<authority>` */
+        private fun buildCrossProfileUri(context: Context, profileId: Int) =
+            Uri.Builder()
+                .scheme(SCHEME_CONTENT)
+                .encodedAuthority("$profileId@${authority(context)}")
+                .build()
+
+        /**
+         * Send a lambda to a specific user profile via ContentProvider.call().
+         *
+         * @param context caller context
+         * @param profile target UserHandle (use UserHandle of work profile)
+         * @param function lambda to execute in target profile
+         * @return ShuttleResult wrapping the return value
+         */
+        fun <R> call(context: Context, profile: UserHandle,
+                     function: Context.() -> R): ShuttleResult<R> {
+            val bundle = Bundle(1).apply { putParcelable(null, Closure(function)) }
+            val uri = buildCrossProfileUri(context, profile.hashCode())
+            return try {
+                ShuttleResult(
+                    context.contentResolver.call(uri, function.javaClass.name, null, bundle)
+                )
+            } catch (e: SecurityException) {
+                @Suppress("UNCHECKED_CAST")
+                if (isReady(context, profile)) throw e
+                else ShuttleResult.NOT_READY as ShuttleResult<R>
+            }
+        }
+
+        /** Check if the cross-profile URI permission has been granted. */
+        fun isReady(context: Context, profile: UserHandle): Boolean {
+            val uri = buildCrossProfileUri(context, profile.hashCode())
+            return context.checkUriPermission(
+                uri, 0, Process.myUid(),
+                Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            ) == PERMISSION_GRANTED
+        }
+
+        /**
+         * Collect URI permission grants from an intent (data or clipData).
+         * Called by ShuttleCarrierActivity on receipt of a reverse shuttle.
+         */
+        fun collect(context: Context, intent: Intent) {
+            (intent.data ?: intent.clipData
+                ?.takeIf { it.itemCount > 0 }
+                ?.getItemAt(0)
+                ?.uri)?.also { uri ->
+                Log.d(TAG, "[collect] Received: $uri")
+                context.contentResolver.takePersistableUriPermission(
+                    uri, Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            }
+        }
+    }
+
+    // ── ContentProvider call() ────────────────────────────────────────
+
+    override fun call(method: String, arg: String?, extras: Bundle?): Bundle? {
+        val cl = Closure::class.java.classLoader
+        extras?.classLoader = cl
+        val closure = requireNotNull(extras?.getParcelable<Closure>(null)) { "Missing extra" }
+        val result = closure.invoke(context!!).also {
+            Log.i(TAG, "Call: $method()=$it")
+        }
+        return if (result == null || result == Unit) null
+        else Bundle().apply { putBundleValue(null, result) }
+    }
+
+    // ── Initialize permission grants ──────────────────────────────────
+
+    override fun onCreate(): Boolean {
+        initialize()
+        return true
+    }
+
+    private fun initialize() {
+        Log.d(TAG, "ShuttleProvider initializing (user=${Process.myUserHandle()})")
+    }
+
+    // ── Stub ContentProvider methods ──────────────────────────────────
+
+    override fun query(uri: Uri, projection: Array<out String>?,
+                       selection: String?, selectionArgs: Array<out String>?,
+                       sortOrder: String?): Cursor? = null
+    override fun getType(uri: Uri): String? = null
+    override fun insert(uri: Uri, values: ContentValues?): Uri? = null
+    override fun delete(uri: Uri, selection: String?,
+                        selectionArgs: Array<out String>?) = 0
+    override fun update(uri: Uri, values: ContentValues?,
+                        selection: String?, selectionArgs: Array<out String>?) = 0
+
+    // ── Helper: put any supported type into Bundle ────────────────────
+
+    private fun Bundle.putBundleValue(key: String?, value: Any?) {
+        when (value) {
+            null -> putString(key, null)
+            is Boolean -> putBoolean(key, value)
+            is Int -> putInt(key, value)
+            is Long -> putLong(key, value)
+            is String -> putString(key, value)
+            is CharSequence -> putCharSequence(key, value)
+            is Parcelable -> putParcelable(key, value)
+            is Array<*> -> when {
+                value.isArrayOf<Parcelable>() -> @Suppress("UNCHECKED_CAST")
+                    putParcelableArray(key, value as Array<Parcelable?>)
+                value.isArrayOf<CharSequence>() -> @Suppress("UNCHECKED_CAST")
+                    putCharSequenceArray(key, value as Array<CharSequence?>)
+                value.isArrayOf<String>() -> @Suppress("UNCHECKED_CAST")
+                    putStringArray(key, value as Array<String?>)
+                else -> throw IllegalArgumentException("Unsupported array: ${value.javaClass}")
+            }
+            is List<*> -> @Suppress("UNCHECKED_CAST") putParcelableArrayList(key,
+                if (value is ArrayList<*>) value as ArrayList<Parcelable>
+                else ArrayList(value as List<Parcelable>))
+            is SparseArray<*> -> @Suppress("UNCHECKED_CAST")
+                putSparseParcelableArray(key, value as SparseArray<Parcelable>)
+            is Bundle -> putBundle(key, value)
+            is Serializable -> putSerializable(key, value)
+            is Byte -> putByte(key, value)
+            is Char -> putChar(key, value)
+            is Short -> putShort(key, value)
+            is Float -> putFloat(key, value)
+            is Double -> putDouble(key, value)
+            is Size -> putSize(key, value)
+            is SizeF -> putSizeF(key, value)
+            is BooleanArray -> putBooleanArray(key, value)
+            is IntArray -> putIntArray(key, value)
+            is LongArray -> putLongArray(key, value)
+            is ByteArray -> putByteArray(key, value)
+            is CharArray -> putCharArray(key, value)
+            is ShortArray -> putShortArray(key, value)
+            is FloatArray -> putFloatArray(key, value)
+            is DoubleArray -> putDoubleArray(key, value)
+            is IBinder -> putBinder(key, value)
+            else -> throw IllegalArgumentException("Unsupported type: ${value.javaClass}")
+        }
+    }
+
+}

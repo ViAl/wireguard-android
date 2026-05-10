@@ -168,6 +168,25 @@
             android:permission="android.permission.INTERACT_ACROSS_PROFILES"
             tools:ignore="ExportedContentProvider" />
 
+        <!-- ShuttleProvider — cross-profile lambda execution -->
+        <provider
+            android:name=".jail.shuttle.ShuttleProvider"
+            android:authorities="${applicationId}.shuttle"
+            android:exported="true"
+            android:grantUriPermissions="true" />
+
+        <!-- ShuttleCarrierActivity — URI permission trampoline -->
+        <activity
+            android:name=".jail.shuttle.ShuttleCarrierActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:theme="@style/NoBackgroundTheme">
+            <intent-filter>
+                <action android:name="com.wireguard.android.action.SHUTTLE_ESTABLISH" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
         <receiver
             android:name=".model.TunnelManager$IntentReceiver"
             android:exported="true"
