@@ -180,23 +180,33 @@ class ShuttleCarrierActivity : Activity() {
         } else {
             // Second hop (or fallback): this activity is in the parent profile
             // (or received directly). Collect URI permission.
-            Log.d(TAG, "Collect hop: intent data=${intent.data} clipData=${intent.clipData}")
+            Log.d(TAG, "Collect hop: intent data=${intent.data} clipData=${intent.clipData} flags=${intent.flags}")
 
-            // Collect from intent.data (cross-profile URI) first,
-            // fall back to clipData (bare URI)
-            val uriToPersist = intent.data ?: intent.clipData
-                ?.takeIf { it.itemCount > 0 }
-                ?.getItemAt(0)
-                ?.uri
+            // Check if this is a grant from initialize() — data has bare URI with GRANT flags
+            val isInitGrant = intent.data != null &&
+                    (intent.flags and Intent.FLAG_GRANT_WRITE_URI_PERMISSION) != 0
 
-            if (uriToPersist != null) {
-                try {
-                    contentResolver.takePersistableUriPermission(
-                        uriToPersist, Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-                    )
-                    Log.d(TAG, "Collected persistable URI permission: $uriToPersist")
-                } catch (e: SecurityException) {
-                    Log.e(TAG, "Failed to take persistable URI permission", e)
+            if (isInitGrant) {
+                // Grant from initialize(): work profile sent bare URI directly via data
+                Log.d(TAG, "Collect hop from initialize: data=${intent.data}")
+                ShuttleProvider.collect(this, intent)
+            } else {
+                // Collect from intent.data (cross-profile URI) first,
+                // fall back to clipData (bare URI)
+                val uriToPersist = intent.data ?: intent.clipData
+                    ?.takeIf { it.itemCount > 0 }
+                    ?.getItemAt(0)
+                    ?.uri
+
+                if (uriToPersist != null) {
+                    try {
+                        contentResolver.takePersistableUriPermission(
+                            uriToPersist, Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                        )
+                        Log.d(TAG, "Collected persistable URI permission: $uriToPersist")
+                    } catch (e: SecurityException) {
+                        Log.e(TAG, "Failed to take persistable URI permission", e)
+                    }
                 }
             }
         }

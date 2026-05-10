@@ -43,7 +43,18 @@ class Shuttle(val context: Context, val to: UserHandle) {
             // Retry after establishment
             val retry = ShuttleProvider.call(context, to, function)
             if (retry.isNotReady()) {
-                throw IllegalStateException("Shuttle not ready after establish permission")
+                // Give some time for async initialize() to complete
+                Log.d(TAG, "Shuttle still not ready — waiting for async initialize...")
+                try {
+                    Thread.sleep(500)
+                } catch (e: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                }
+                val retry2 = ShuttleProvider.call(context, to, function)
+                if (retry2.isNotReady()) {
+                    throw IllegalStateException("Shuttle not ready after establish permission (retried)")
+                }
+                return retry2.get()
             }
             return retry.get()
         }

@@ -145,6 +145,69 @@ class ShuttleProvider : ContentProvider() {
 
     private fun initialize() {
         Log.d(TAG, "ShuttleProvider initializing (user=${Process.myUserHandle()})")
+
+        val ctx = context ?: return
+        val myHandle = Process.myUserHandle()
+
+        // Try to find parent profile (any profile != current)
+        val parentHandle: UserHandle? = try {
+            val launcherAppsService = ctx.getSystemService(Context.LAUNCHER_APPS_SERVICE)
+            if (launcherAppsService != null) {
+                val launcherClass = launcherAppsService.javaClass
+                val profilesMethod = launcherClass.getMethod("getProfiles")
+                @Suppress("UNCHECKED_CAST")
+                val profiles = profilesMethod.invoke(launcherAppsService) as? List<*> ?: emptyList<Any>()
+                profiles.firstOrNull { it != myHandle } as? UserHandle
+            } else null
+        } catch (e: Exception) {
+            Log.w(TAG, "initialize: could not query profiles", e)
+            null
+        }
+
+        if (parentHandle == null) {
+            // Single profile (not work profile), nothing to do
+            Log.d(TAG, "initialize: no other profile found, nothing to establish")
+            return
+        }
+
+        // We are in a secondary profile (work) with a parent.
+        // Build the bare shuttle URI and check if permission is already granted.
+        val bareUri = Uri.parse("content://${ctx.packageName}.shuttle")
+        if (ctx.checkUriPermission(bareUri, 0, Process.myUid(),
+                Intent.FLAG_GRANT_WRITE_URI_PERMISSION) == PackageManager.PERMISSION_GRANTED) {
+            Log.d(TAG, "initialize: already ready")
+            return
+        }
+
+        // Permission not granted — send a URI grant intent to the parent profile.
+        // The parent will receive the bare URI and take persistable permission on it,
+        // allowing cross-profile ContentProvider calls.
+        Log.d(TAG, "initialize: establishing permission with parent=$parentHandle")
+        try {
+            val intent = Intent(ctx, ShuttleCarrierActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                // Send bare URI as data so parent can take persistable permission
+                data = bareUri
+                addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                        Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION or
+                        Intent.FLAG_ACTIVITY_NO_USER_ACTION or
+                        Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or
+                        Intent.FLAG_ACTIVITY_NO_HISTORY)
+            }
+
+            val launcherAppsService = ctx.getSystemService(Context.LAUNCHER_APPS_SERVICE)!!
+            val launcherClass = launcherAppsService.javaClass
+            val startMethod = launcherClass.getMethod(
+                "startActivity",
+                Intent::class.java, UserHandle::class.java,
+                android.graphics.Rect::class.java, Bundle::class.java
+            )
+            startMethod.invoke(launcherAppsService, intent, parentHandle, null, null)
+            Log.d(TAG, "initialize: sent permission grant request to parent=$parentHandle")
+        } catch (e: Exception) {
+            Log.e(TAG, "initialize: failed to send permission grant", e)
+        }
     }
 
     // ── Stub ContentProvider methods ──────────────────────────────────
