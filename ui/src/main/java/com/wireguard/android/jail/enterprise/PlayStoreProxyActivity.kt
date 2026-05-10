@@ -80,13 +80,18 @@ class PlayStoreProxyActivity : AppCompatActivity() {
                 setPackage(PLAY_STORE_PACKAGE)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
-            try {
-                launcherApps?.startActivity(playIntent, parentHandle, null, null)
-                WorkProfileLogger.d("ProxyActivity: LauncherApps startActivity succeeded")
-                finish()
-                return
-            } catch (e: Exception) {
-                WorkProfileLogger.e("ProxyActivity: LauncherApps startActivity failed: ${e.message}", e)
+            val playComponent = playIntent.resolveActivity(packageManager)
+            if (playComponent != null) {
+                try {
+                    launcherApps?.startActivity(playComponent, parentHandle, null)
+                    WorkProfileLogger.d("ProxyActivity: LauncherApps startActivity succeeded")
+                    finish()
+                    return
+                } catch (e: Exception) {
+                    WorkProfileLogger.e("ProxyActivity: LauncherApps startActivity failed: ${e.message}", e)
+                }
+            } else {
+                WorkProfileLogger.e("ProxyActivity: cannot resolve Play Store activity")
             }
         } else {
             WorkProfileLogger.w("ProxyActivity: no parent profile found, launching locally")
