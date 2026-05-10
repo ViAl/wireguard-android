@@ -83,11 +83,11 @@ jobs:
           echo "CI_VERSION_CODE=${CI_VERSION_CODE}" >> "$GITHUB_ENV"
           echo "Building version: ${CI_VERSION_NAME} (${CI_VERSION_CODE})"
 
-      - name: Build release APK (unsigned by default)
+      - name: Build debug APK
         shell: bash
         run: |
           set -euxo pipefail
-          ./gradlew --no-daemon :ui:assembleRelease \
+          ./gradlew --no-daemon :ui:assembleDebug \
             -PwireguardVersionCode="${CI_VERSION_CODE}" \
             -PwireguardVersionName="${CI_VERSION_NAME}"
 
@@ -96,12 +96,12 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          unsigned_apk="$(find ui/build/outputs/apk/release -type f -name '*-release-unsigned.apk' | head -n 1)"
-          if [ -z "${unsigned_apk}" ]; then
-            echo "No unsigned release APK found" >&2
+          debug_apk="$(find ui/build/outputs/apk/debug -type f -name '*.apk' | head -n 1)"
+          if [ -z "${debug_apk}" ]; then
+            echo "No debug APK found" >&2
             exit 1
           fi
-          echo "unsigned_apk=${unsigned_apk}" >> "$GITHUB_OUTPUT"
+          echo "unsigned_apk=${debug_apk}" >> "$GITHUB_OUTPUT"
 
       - name: Decode keystore (optional)
         id: keystore
@@ -133,9 +133,8 @@ jobs:
           "$ANDROID_HOME/build-tools/${ANDROID_BUILD_TOOLS}/apksigner" verify "$signed_apk"
           echo "final_apk=$signed_apk" >> "$GITHUB_OUTPUT"
 
-      - name: Use unsigned APK when signing is not configured
+      - name: Final APK (debug APK is already signed with debug key)
         id: final
-        if: ${{ steps.sign.outputs.final_apk == '' }}
         shell: bash
         run: |
           set -euxo pipefail
