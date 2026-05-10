@@ -83,11 +83,11 @@ jobs:
           echo "CI_VERSION_CODE=${CI_VERSION_CODE}" >> "$GITHUB_ENV"
           echo "Building version: ${CI_VERSION_NAME} (${CI_VERSION_CODE})"
 
-      - name: Build debug APK
+      - name: Build release APK
         shell: bash
         run: |
           set -euxo pipefail
-          ./gradlew --no-daemon :ui:assembleDebug \
+          ./gradlew --no-daemon :ui:assembleRelease \
             -PwireguardVersionCode="${CI_VERSION_CODE}" \
             -PwireguardVersionName="${CI_VERSION_NAME}"
 
@@ -96,12 +96,12 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          debug_apk="$(find ui/build/outputs/apk/debug -type f -name '*.apk' | head -n 1)"
-          if [ -z "${debug_apk}" ]; then
-            echo "No debug APK found" >&2
+          unsigned_apk="$(find ui/build/outputs/apk/release -type f -name '*-release-unsigned.apk' | head -n 1)"
+          if [ -z "${unsigned_apk}" ]; then
+            echo "No unsigned release APK found" >&2
             exit 1
           fi
-          echo "unsigned_apk=${debug_apk}" >> "$GITHUB_OUTPUT"
+          echo "unsigned_apk=${unsigned_apk}" >> "$GITHUB_OUTPUT"
 
       - name: Decode keystore (optional)
         id: keystore
@@ -112,10 +112,9 @@ jobs:
           echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > release.keystore
           echo "keystore_path=release.keystore" >> "$GITHUB_OUTPUT"
 
-      - name: Sign APK (optional)
+      - name: Sign APK
         id: sign
         if: ${{ steps.keystore.outputs.keystore_path != '' }}
-        continue-on-error: true
         shell: bash
         env:
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
