@@ -10,6 +10,7 @@ on:
   pull_request:
     branches:
       - master
+      - fix/store-open-in-work-profile
     types:
       - opened
       - synchronize
@@ -83,7 +84,7 @@ jobs:
           echo "CI_VERSION_CODE=${CI_VERSION_CODE}" >> "$GITHUB_ENV"
           echo "Building version: ${CI_VERSION_NAME} (${CI_VERSION_CODE})"
 
-      - name: Build release APK
+      - name: Build release APK (unsigned by default)
         shell: bash
         run: |
           set -euxo pipefail
@@ -112,7 +113,7 @@ jobs:
           echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > release.keystore
           echo "keystore_path=release.keystore" >> "$GITHUB_OUTPUT"
 
-      - name: Sign APK
+      - name: Sign APK (optional)
         id: sign
         if: ${{ steps.keystore.outputs.keystore_path != '' }}
         shell: bash
@@ -133,16 +134,13 @@ jobs:
           "$ANDROID_HOME/build-tools/${ANDROID_BUILD_TOOLS}/apksigner" verify "$signed_apk"
           echo "final_apk=$signed_apk" >> "$GITHUB_OUTPUT"
 
-      - name: Determine final APK path
+      - name: Use unsigned APK when signing is not configured
         id: final
+        if: ${{ steps.sign.outputs.final_apk == '' }}
         shell: bash
         run: |
           set -euxo pipefail
-          if [ -n "${{ steps.sign.outputs.final_apk }}" ]; then
-            echo "final_apk=${{ steps.sign.outputs.final_apk }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "final_apk=${{ steps.apk.outputs.unsigned_apk }}" >> "$GITHUB_OUTPUT"
-          fi
+          echo "final_apk=${{ steps.apk.outputs.unsigned_apk }}" >> "$GITHUB_OUTPUT"
 
       - name: Build artifact name
         id: artifact_name
@@ -158,14 +156,14 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: wireguard-android-apk-${{ github.run_id }}
-          path: ${{ steps.final.outputs.final_apk }}
+          path: ${{ steps.sign.outputs.final_apk || steps.final.outputs.final_apk }}
           if-no-files-found: error
 
-      - name: Push APK to artifacts branch
-        if: ${{ github.event_name != 'pull_request' && github.ref_name != 'master' }}
+      - name: Optionally push APK to artifacts branch
+        if: ${{ github.event_name != 'pull_request' && ((github.event_name == 'workflow_dispatch' && inputs.push_to_artifacts_branch) || vars.PUSH_ARTIFACTS_BRANCH == 'true') }}
         shell: bash
         env:
-          FINAL_APK: ${{ steps.final.outputs.final_apk }}
+          FINAL_APK: ${{ steps.sign.outputs.final_apk || steps.final.outputs.final_apk }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euxo pipefail
@@ -180,14 +178,13 @@ jobs:
             git rm -rf . || true
           fi
 
-          safe_ref="${GITHUB_REF_NAME//\//-}"
-          out_dir="apks/${safe_ref}"
+          out_dir="apks/${GITHUB_REF_NAME}"
           mkdir -p "$out_dir"
           cp "$FINAL_APK" "$out_dir/"
 
           git add "$out_dir"
           if ! git diff --cached --quiet; then
-            git commit -m "Add APK for ${safe_ref}"
+            git commit -m "Add APK for ${GITHUB_REF_NAME}"
             git push origin artifacts
           else
             echo "No changes to push to artifacts branch"
@@ -202,4 +199,3 @@ jobs:
           tag_name: ${{ github.ref_name }}
           generate_release_notes: true
           files: ${{ steps.sign.outputs.final_apk || steps.final.outputs.final_apk }}
-
