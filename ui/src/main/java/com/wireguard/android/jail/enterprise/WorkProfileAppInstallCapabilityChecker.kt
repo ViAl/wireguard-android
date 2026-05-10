@@ -208,7 +208,10 @@ open class WorkProfileAppInstallCapabilityChecker(
             val cloned = WorkProfileCloner.clone(appContext, packageName, null, profiles.first())
                 WorkProfileLogger.d("launchStoreIntent: WorkProfileCloner clone result=$cloned")
                 if (cloned != WorkProfileCloner.RESULT_NO_SYS_MARKET) {
-                    WorkProfileLogger.d("launchStoreIntent: WorkProfileCloner succeeded")
+                    WorkProfileLogger.d("launchStoreIntent: WorkProfileCloner succeeded (result=$cloned)")
+                    if (cloned == WorkProfileCloner.RESULT_OK_GOOGLE_PLAY) {
+                        WorkProfileLogger.d("launchStoreIntent: Shuttle opened Play Store inside work profile")
+                    }
                     return true
                 }
             }
