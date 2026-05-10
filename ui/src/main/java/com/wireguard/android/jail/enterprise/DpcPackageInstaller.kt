@@ -73,14 +73,27 @@ class DpcPackageInstaller(
             dpm.isProfileOwnerApp(context.packageName)
         }.getOrDefault(false)
 
-        if (!isProfileOwner) {
-            WorkProfileLogger.d("DpcPackageInstaller: not profile owner (package=${context.packageName})")
-            return DpcAvailability.Unavailable("Not profile owner")
-        }
+        val isDeviceOwner = runCatching {
+            dpm.isDeviceOwnerApp(context.packageName)
+        }.getOrDefault(false)
 
         val isAdminActive = runCatching {
             dpm.isAdminActive(adminComponent)
         }.getOrDefault(false)
+
+        // Also check via ManagedProfileOwnershipService
+        val ownershipService = ManagedProfileOwnershipService(context)
+        val ownershipState = ownershipService.state()
+
+        WorkProfileLogger.d(
+            "DpcPackageInstaller: isProfileOwner=$isProfileOwner, isDeviceOwner=$isDeviceOwner, " +
+            "isAdminActive=$isAdminActive, ownershipState=$ownershipState"
+        )
+
+        if (!isProfileOwner) {
+            WorkProfileLogger.d("DpcPackageInstaller: not profile owner (package=${context.packageName})")
+            return DpcAvailability.Unavailable("Not profile owner")
+        }
 
         if (!isAdminActive) {
             WorkProfileLogger.d("DpcPackageInstaller: admin component not active ($adminComponent)")
