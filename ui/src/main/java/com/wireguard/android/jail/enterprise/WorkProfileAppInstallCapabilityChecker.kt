@@ -184,6 +184,22 @@ open class WorkProfileAppInstallCapabilityChecker(
 
         override fun launchStoreIntent(packageName: String): Boolean {
             WorkProfileLogger.d("launchStoreIntent($packageName)")
+
+            // Strategy 0: DPC-based install into managed work profile.
+            // This is the most direct path — it clones the APK silently,
+            // without opening any store UI.
+            val dpcInstaller = DpcPackageInstaller(appContext)
+            val dpcAvailable = dpcInstaller.isAvailable()
+            WorkProfileLogger.d("launchStoreIntent: DPC available=${dpcAvailable.isAvailable}")
+            if (dpcAvailable.isAvailable) {
+                val result = dpcInstaller.install(packageName)
+                WorkProfileLogger.d("launchStoreIntent: DPC result=$result")
+                if (result.isSuccess) {
+                    WorkProfileLogger.d("launchStoreIntent: DPC install succeeded, skipping store UI")
+                    return true
+                }
+            }
+
             if (launchStoreInOtherProfile(packageName)) {
                 WorkProfileLogger.d("launchStoreInOtherProfile returned true")
                 return true
