@@ -174,7 +174,7 @@ class ShuttleProvider : ContentProvider() {
         // Build the bare shuttle URI and check if permission is already granted.
         val bareUri = Uri.parse("content://${ctx.packageName}.shuttle")
         if (ctx.checkUriPermission(bareUri, 0, Process.myUid(),
-                Intent.FLAG_GRANT_WRITE_URI_PERMISSION) == PackageManager.PERMISSION_GRANTED) {
+                Intent.FLAG_GRANT_WRITE_URI_PERMISSION) == PERMISSION_GRANTED) {
             Log.d(TAG, "initialize: already ready")
             return
         }
