@@ -19,6 +19,7 @@ import com.wireguard.android.jail.model.WorkProfileAppAction
 import com.wireguard.android.jail.model.WorkProfileAppAvailability
 import com.wireguard.android.jail.model.WorkProfileAppInstallCapability
 import com.wireguard.android.jail.model.WorkProfileInstallEnvironmentReason
+import com.wireguard.android.jail.shuttle.WorkProfileCloner
 
 open class WorkProfileAppInstallCapabilityChecker(
     context: Context,
