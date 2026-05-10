@@ -21,8 +21,9 @@ import androidx.appcompat.app.AppCompatActivity
  * Accepts two invocation modes:
  *
  * Mode 1 — direct ACTION_VIEW (e.g. https:// or market:// URI):
- *   Simply re-dispatches the same intent without setPackage so the system
- *   resolver inside the target profile picks Play Store.
+ *   Re-dispatches with setPackage(PLAY_STORE_PACKAGE) so the intent goes
+ *   directly to Play Store. Falls back to an unqualified https intent if
+ *   the primary dispatch fails.
  *
  * Mode 2 — explicit proxy (ACTION_PROXY_PLAY_STORE with EXTRA_PACKAGE_NAME):
  *   Launches Play Store with market://details?id=<packageName>.
@@ -63,36 +64,43 @@ class PlayStoreProxyActivity : AppCompatActivity() {
     }
 
     private fun relayToPlayStore(uri: Uri) {
-        val intent = Intent(Intent.ACTION_VIEW, uri).apply {
-            // Do NOT setPackage here — this proxy runs inside the work profile,
-            // and the system resolver inside that profile will pick up Play Store
-            // naturally. Setting the package would tie the intent to a specific
-            // user's Play Store instance, breaking cross-profile routing.
+        // Try with setPackage(PLAY_STORE_PACKAGE) first — this ensures the
+        // intent resolves to Play Store specifically, not a browser or other handler.
+        // We're already running inside the work profile (that's the whole point of
+        // the proxy), so setPackage is safe here.
+        val primaryIntent = Intent(Intent.ACTION_VIEW, uri).apply {
+            setPackage(PLAY_STORE_PACKAGE)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         try {
-            startActivity(intent)
+            startActivity(primaryIntent)
             WorkProfileLogger.d("ProxyActivity: Play Store intent dispatched successfully")
+            finish()
+            return
         } catch (e: Throwable) {
             WorkProfileLogger.e("ProxyActivity: Failed to launch Play Store with uri=$uri", e)
-            // Fallback to https (without setPackage — same logic as above)
-            try {
-                val httpsUri = if (uri.scheme == "market") {
-                    val packageName = uri.getQueryParameter("id") ?: return
-                    Uri.parse("https://play.google.com/store/apps/details?id=$packageName")
-                } else {
-                    uri
-                }
-                val fallbackIntent = Intent(Intent.ACTION_VIEW, httpsUri).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                startActivity(fallbackIntent)
-            } catch (e2: Throwable) {
-                WorkProfileLogger.e("ProxyActivity: Fallback https also failed", e2)
-            }
-        } finally {
-            finish()
         }
+
+        // Fallback without setPackage — let the system resolver figure it out.
+        try {
+            val httpsUri = if (uri.scheme == "market") {
+                val packageName = uri.getQueryParameter("id") ?: run {
+                    finish()
+                    return
+                }
+                Uri.parse("https://play.google.com/store/apps/details?id=$packageName")
+            } else {
+                uri
+            }
+            val fallbackIntent = Intent(Intent.ACTION_VIEW, httpsUri).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(fallbackIntent)
+        } catch (e2: Throwable) {
+            WorkProfileLogger.e("ProxyActivity: Fallback https also failed", e2)
+        }
+
+        finish()
     }
 
     /**
