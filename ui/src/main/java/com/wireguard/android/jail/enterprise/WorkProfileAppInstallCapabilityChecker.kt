@@ -227,19 +227,29 @@ open class WorkProfileAppInstallCapabilityChecker(
         private fun launchStoreViaLauncherApps(handle: UserHandle, packageName: String): Boolean {
             WorkProfileLogger.d("launchStoreViaLauncherApps: handle=$handle package=$packageName")
             try {
-                val playActivities = launcherApps?.getActivityList(PLAY_STORE_PACKAGE, handle).orEmpty()
+                val launcherAppsObj = appContext.getSystemService(Context.LAUNCHER_APPS_SERVICE)
+                if (launcherAppsObj == null) return false
+                val launcherClass = launcherAppsObj.javaClass
+                val playActivities = launcherClass.getMethod("getActivityList", String::class.java, UserHandle::class.java)
+                    .invoke(launcherAppsObj, PLAY_STORE_PACKAGE, handle) as? List<*>? ?: emptyList<Any>()
                 if (playActivities.isNotEmpty()) {
                     val activityInfo = playActivities.first()
+                    val activityName = activityInfo?.let {
+                        val m = it.javaClass.getMethod("getName")
+                        m.invoke(it) as String
+                    } ?: return false
                     val componentName = android.content.ComponentName(
                         PLAY_STORE_PACKAGE,
-                        activityInfo.name
+                        activityName
                     )
-                    val intent = Intent(Intent.ACTION_VIEW,
-                        Uri.parse("market://details?id=$packageName"))
-                    // LauncherApps.startActivity is only for launching apps from their
-                    // ComponentName, not for launching intents. But we can resolve
-                    // and launch via the activity's ComponentName.
-                    launcherApps?.startActivity(componentName, handle, null)
+                    val startMethod = launcherClass.getMethod(
+                        "startActivity",
+                        android.content.ComponentName::class.java,
+                        UserHandle::class.java,
+                        android.graphics.Rect::class.java,
+                        android.os.Bundle::class.java
+                    )
+                    startMethod.invoke(launcherAppsObj, componentName, handle, null, null)
                     WorkProfileLogger.d("launchStoreViaLauncherApps: succeeded")
                     return true
                 }
