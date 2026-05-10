@@ -228,7 +228,7 @@ open class WorkProfileAppInstallCapabilityChecker(
             if (Build.VERSION.SDK_INT >= 34) {
                 try {
                     val cpa = appContext.getSystemService(CrossProfileApps::class.java)
-                    val proxyIntent = PlayStoreProxyActivity.buildProxyIntent(appContext, packageName)
+                    val proxyIntent = PlayStoreProxyActivity.buildCrossProfileProxyIntent(appContext, packageName)
                     WorkProfileLogger.d("Strategy 0a: CrossProfileApps proxy intent=$proxyIntent")
                     cpa?.startActivity(proxyIntent, handle, null, null)
                     WorkProfileLogger.d("Strategy 0a: succeeded (no exception)")

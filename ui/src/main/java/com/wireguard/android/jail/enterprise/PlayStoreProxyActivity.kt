@@ -122,17 +122,33 @@ class PlayStoreProxyActivity : AppCompatActivity() {
         const val EXTRA_PACKAGE_NAME = "com.wireguard.android.extra.PLAY_STORE_PACKAGE_NAME"
 
         /**
-         * Builds an explicit Intent to our [PlayStoreProxyActivity] that can
-         * be launched in the target profile using LauncherApps.startActivity
-         * or makeOpenInUser / CrossProfileApps.
+         * Builds an explicit Intent to our [PlayStoreProxyActivity] for use
+         * with LauncherApps.startActivity or makeOpenInUser.
          *
-         * @param context Application context used to resolve the package name.
-         * @param packageName The package to open in Play Store.
+         * Includes a fully-resolved Component so that [LauncherApps] can
+         * find the activity in the target profile's copy of this app.
          */
         fun buildProxyIntent(context: android.content.Context, packageName: String): Intent =
             Intent(ACTION_PROXY_PLAY_STORE).apply {
                 `package` = context.packageName
                 setClass(context, PlayStoreProxyActivity::class.java)
+                putExtra(EXTRA_PACKAGE_NAME, packageName)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+
+        /**
+         * Builds an explicit Intent to our [PlayStoreProxyActivity] for use
+         * with CrossProfileApps.startActivity.
+         *
+         * CrossProfileApps requires the component to be *resolvable* in the
+         * target profile, but if we setComponent explicitly it may run the
+         * intent locally instead of in the target user. Using only
+         * setPackage (without setClass) lets CrossProfileApps resolve the
+         * component on its own in the correct user.
+         */
+        fun buildCrossProfileProxyIntent(context: android.content.Context, packageName: String): Intent =
+            Intent(ACTION_PROXY_PLAY_STORE).apply {
+                `package` = context.packageName
                 putExtra(EXTRA_PACKAGE_NAME, packageName)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
