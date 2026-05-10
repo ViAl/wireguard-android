@@ -132,6 +132,7 @@ class PlayStoreProxyActivity : AppCompatActivity() {
         fun buildProxyIntent(context: android.content.Context, packageName: String): Intent =
             Intent(ACTION_PROXY_PLAY_STORE).apply {
                 `package` = context.packageName
+                setClass(context, PlayStoreProxyActivity::class.java)
                 putExtra(EXTRA_PACKAGE_NAME, packageName)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
