@@ -206,8 +206,8 @@ open class WorkProfileAppInstallCapabilityChecker(
             val profiles = otherProfiles()
             if (profiles.isNotEmpty()) {
                 val cloner = com.wireguard.android.jail.shuttle.WorkProfileCloner(appContext)
-                val cloned = cloner.cloneViaShuttle(profiles.first(), packageName)
-                WorkProfileLogger.d("launchStoreIntent: WorkProfileCloner result=$cloned")
+                val cloned = cloner.clone(packageName, profiles.first())
+                WorkProfileLogger.d("launchStoreIntent: WorkProfileCloner clone result=$cloned")
                 if (cloned) {
                     WorkProfileLogger.d("launchStoreIntent: Shuttle clone succeeded")
                     return true
