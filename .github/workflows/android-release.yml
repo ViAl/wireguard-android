@@ -202,3 +202,4 @@ jobs:
           tag_name: ${{ github.ref_name }}
           generate_release_notes: true
           files: ${{ steps.sign.outputs.final_apk || steps.final.outputs.final_apk }}
+
