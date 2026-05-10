@@ -6,6 +6,7 @@ package com.wireguard.android.jail.shuttle
 
 import android.content.Context
 import android.os.UserHandle
+import android.util.Log
 
 /**
  * High-level Shuttle API: execute lambdas in another user profile.
@@ -17,8 +18,18 @@ import android.os.UserHandle
  *     DevicePolicies(this).enableSystemApp(pkg)
  * }
  * ```
+ *
+ * The shuttle uses ContentProvider.call() with cross-profile URIs
+ * (`content://{profileId}@authority`). URI permission must be established
+ * before the first call — this is handled automatically via
+ * [ShuttleCarrierActivity.establishPermission] on the first `invoke()`
+ * if the permission is not yet granted.
  */
 class Shuttle(val context: Context, val to: UserHandle) {
+
+    companion object {
+        private const val TAG = "WG.Shuttle"
+    }
 
     /**
      * Execute [function] in the target profile and return its result.
@@ -27,9 +38,9 @@ class Shuttle(val context: Context, val to: UserHandle) {
     fun <R> invoke(function: Context.() -> R): R {
         val result = ShuttleProvider.call(context, to, function)
         if (result.isNotReady()) {
-            // Auto-establish
+            Log.d(TAG, "Shuttle not ready — establishing permission")
             ShuttleCarrierActivity.establishPermission(context)
-            // Retry
+            // Retry after establishment
             val retry = ShuttleProvider.call(context, to, function)
             if (retry.isNotReady()) {
                 throw IllegalStateException("Shuttle not ready after establish permission")

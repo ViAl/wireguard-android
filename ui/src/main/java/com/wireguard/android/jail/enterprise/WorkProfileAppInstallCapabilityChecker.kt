@@ -201,14 +201,14 @@ open class WorkProfileAppInstallCapabilityChecker(
                 }
             }
 
-            // Strategy 0.5: WorkProfileCloner via Shuttle — runs code inside
-            // the work profile which opens Play Store directly there.
+            // Strategy 0.5: WorkProfileCloner — try DPC install or
+            // ACTION_INSTALL_PACKAGE directly in parent profile.
             val profiles = otherProfiles()
             if (profiles.isNotEmpty()) {
             val cloned = WorkProfileCloner.clone(appContext, packageName, null, profiles.first())
                 WorkProfileLogger.d("launchStoreIntent: WorkProfileCloner clone result=$cloned")
                 if (cloned != WorkProfileCloner.RESULT_NO_SYS_MARKET) {
-                    WorkProfileLogger.d("launchStoreIntent: Shuttle clone succeeded")
+                    WorkProfileLogger.d("launchStoreIntent: WorkProfileCloner succeeded")
                     return true
                 }
             }

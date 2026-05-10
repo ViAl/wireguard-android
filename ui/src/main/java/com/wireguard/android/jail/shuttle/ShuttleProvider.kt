@@ -25,15 +25,39 @@ class ShuttleProvider : ContentProvider() {
         /** Authority derived from applicationId. */
         private const val AUTHORITY_SUFFIX = ".shuttle"
         private fun authority(context: Context) = context.packageName + AUTHORITY_SUFFIX
-        @Suppress("UNUSED_PRIVATE_PROPERTY")
-        private fun contentUri(context: Context) = "content://${authority(context)}"
+        private fun bareContentUri(context: Context) =
+            Uri.Builder().scheme(SCHEME_CONTENT).authority(authority(context)).build()
 
-        /** Build cross-profile URI: `content://<profileId>@<authority>` */
-        private fun buildCrossProfileUri(context: Context, profileId: Int) =
+        /**
+         * Build cross-profile URI: `content://<profileId>@<authority>`.
+         * The [profileId] is the USER ID of the TARGET profile where the
+         * ContentProvider lives.
+         */
+        private fun buildCrossProfileUri(context: Context, profileUserId: Int) =
             Uri.Builder()
                 .scheme(SCHEME_CONTENT)
-                .encodedAuthority("$profileId@${authority(context)}")
+                .encodedAuthority("$profileUserId@${authority(context)}")
                 .build()
+
+        /**
+         * Get the cross-profile URI for a given target profile.
+         */
+        fun getCrossProfileUri(context: Context, profile: UserHandle): Uri {
+            val userId = getUserId(profile)
+            return buildCrossProfileUri(context, userId)
+        }
+
+        /**
+         * Get the numeric user ID from a UserHandle.
+         */
+        private fun getUserId(handle: UserHandle): Int {
+            return try {
+                val method = UserHandle::class.java.getMethod("hashCode")
+                method.invoke(handle) as? Int ?: 0
+            } catch (e: Exception) {
+                handle.hashCode()
+            }
+        }
 
         /**
          * Send a lambda to a specific user profile via ContentProvider.call().
@@ -46,7 +70,7 @@ class ShuttleProvider : ContentProvider() {
         fun <R> call(context: Context, profile: UserHandle,
                      function: Context.() -> R): ShuttleResult<R> {
             val bundle = Bundle(1).apply { putParcelable(null, Closure(function)) }
-            val uri = buildCrossProfileUri(context, profile.hashCode())
+            val uri = buildCrossProfileUri(context, getUserId(profile))
             return try {
                 ShuttleResult(
                     context.contentResolver.call(uri, function.javaClass.name, null, bundle)
@@ -58,9 +82,12 @@ class ShuttleProvider : ContentProvider() {
             }
         }
 
-        /** Check if the cross-profile URI permission has been granted. */
+        /**
+         * Check if the cross-profile URI permission has been granted for
+         * calling into [profile].
+         */
         fun isReady(context: Context, profile: UserHandle): Boolean {
-            val uri = buildCrossProfileUri(context, profile.hashCode())
+            val uri = buildCrossProfileUri(context, getUserId(profile))
             return context.checkUriPermission(
                 uri, 0, Process.myUid(),
                 Intent.FLAG_GRANT_WRITE_URI_PERMISSION
@@ -69,17 +96,29 @@ class ShuttleProvider : ContentProvider() {
 
         /**
          * Collect URI permission grants from an intent (data or clipData).
-         * Called by ShuttleCarrierActivity on receipt of a reverse shuttle.
+         * Called when the activity receives a URI grant via cross-profile intent.
          */
         fun collect(context: Context, intent: Intent) {
-            (intent.data ?: intent.clipData
-                ?.takeIf { it.itemCount > 0 }
-                ?.getItemAt(0)
-                ?.uri)?.also { uri ->
-                Log.d(TAG, "[collect] Received: $uri")
-                context.contentResolver.takePersistableUriPermission(
-                    uri, Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-                )
+            // Prefer intent.data (cross-profile URI from return hop),
+            // fall back to clipData (bare URI from establish hop)
+            val uris = sequence {
+                intent.data?.let { yield(it) }
+                intent.clipData?.let { cd ->
+                    for (i in 0 until cd.itemCount) {
+                        cd.getItemAt(i).uri?.let { yield(it) }
+                    }
+                }
+            }
+            uris.forEach { uri ->
+                try {
+                    context.contentResolver.takePersistableUriPermission(
+                        uri, Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    )
+                    Log.d(TAG, "[collect] Took persistable permission: $uri")
+                } catch (e: SecurityException) {
+                    // URI may already be granted or not grantable — log but don't crash
+                    Log.d(TAG, "[collect] Could not take persistable permission for $uri: ${e.message}")
+                }
             }
         }
     }

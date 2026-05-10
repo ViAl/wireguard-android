@@ -5,9 +5,9 @@
 package com.wireguard.android.jail.shuttle
 
 import android.app.admin.DevicePolicyManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.Intent.FLAG_ACTIVITY_NEW_TASK
 import android.content.pm.ApplicationInfo
 import android.net.Uri
 import android.os.Build
@@ -16,13 +16,19 @@ import android.util.Log
 
 /**
  * Clones an app from the parent profile into the work profile.
- * Uses multiple strategies, falling back as needed.
+ * Uses DPC-based install if available; otherwise defers to the caller.
+ *
+ * IMPORTANT: This does NOT use Shuttle to execute code in the work profile.
+ * Shuttle is a separate concern for general cross-profile lambda execution.
+ * For app cloning, we use the direct DPC pipeline (installExistingPackage)
+ * when possible, and rely on other strategies in the caller (like
+ * LauncherApps-backed activity proxy) when DPC is unavailable.
  */
 object WorkProfileCloner {
 
     private const val TAG = "WG.WorkProfileCloner"
 
-    // Result codes (mirroring IslandAppClones)
+    // Result codes
     const val RESULT_ALREADY_CLONED = 0
     const val RESULT_OK_INSTALL = 1
     const val RESULT_OK_INSTALL_EXISTING = 2
@@ -32,7 +38,7 @@ object WorkProfileCloner {
 
     /**
      * Clone [packageName] into [targetProfile].
-     * Should be called from the parent profile context.
+     * Called from the parent profile context.
      *
      * @return one of the RESULT_* constants
      */
@@ -41,21 +47,27 @@ object WorkProfileCloner {
               targetProfile: UserHandle): Int {
         Log.i(TAG, "clone: pkg=$packageName target=$targetProfile")
 
-        // Strategy 0: DPC install (same profile owner, same process — no shuttle needed)
+        // Strategy 0: DPC install (profile owner — can install directly)
         val dpm = context.getSystemService(DevicePolicyManager::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && dpm != null) {
-            val adminClass: Class<*>? = try {
-                Class.forName("com.wireguard.android.jail.enterprise.JailDeviceAdminReceiver")
+            val adminComponent = try {
+                ComponentName(
+                    context,
+                    Class.forName("com.wireguard.android.jail.enterprise.JailDeviceAdminReceiver")
+                )
             } catch (e: ClassNotFoundException) {
                 Log.e(TAG, "JailDeviceAdminReceiver class not found", e)
                 null
             }
-            if (adminClass != null) {
-                val adminComponent = android.content.ComponentName(context, adminClass)
+            if (adminComponent != null) {
                 try {
                     if (dpm.installExistingPackage(adminComponent, packageName)) {
                         Log.i(TAG, "DPC installExistingPackage succeeded for $packageName")
                         return RESULT_OK_INSTALL_EXISTING
+                    } else {
+                        // installExistingPackage returned false — package may not
+                        // exist in parent profile to clone, or already exists
+                        Log.d(TAG, "DPC installExistingPackage returned false for $packageName")
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "DPC installExistingPackage failed", e)
@@ -63,67 +75,18 @@ object WorkProfileCloner {
             }
         }
 
-        // Strategy 1: Shuttle to work profile — run install logic there
-        Log.i(TAG, "Strategy 1: Shuttle to work profile")
-        val shuttle = Shuttle(context, targetProfile)
-        return try {
-            shuttle.invoke(with = appInfo) { info ->
-                performCloneInProfile(this, packageName, info)
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Shuttle clone failed", e)
-            RESULT_NO_SYS_MARKET
-        }
-    }
-
-    /**
-     * Runs inside the work profile. Handles installation.
-     */
-    private fun performCloneInProfile(context: Context,
-                                       packageName: String,
-                                       appInfo: ApplicationInfo?): Int {
-        // Strategy 1a: installExistingPackage via DPM (if affiliated)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            val dpm = context.getSystemService(DevicePolicyManager::class.java)
-            if (dpm != null && dpm.isAffiliatedUser) {
-                // Use reflection to call installExistingPackage
-                val adminClass: Class<*>? = try {
-                    Class.forName("com.wireguard.android.jail.enterprise.JailDeviceAdminReceiver")
-                } catch (e: ClassNotFoundException) {
-                    Log.e(TAG, "JailDeviceAdminReceiver class not found", e)
-                    null
-                }
-                if (adminClass != null) {
-                    try {
-                        val adminComponent = android.content.ComponentName(context, adminClass)
-                        val method = DevicePolicyManager::class.java.getMethod(
-                            "installExistingPackage",
-                            android.content.ComponentName::class.java,
-                            String::class.java
-                        )
-                        val result = method.invoke(dpm, adminComponent, packageName) as? Boolean
-                        if (result == true) {
-                            context.sendBroadcast(
-                                Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE).apply {
-                                    setPackage(context.packageName)
-                                }
-                            )
-                            return RESULT_OK_INSTALL_EXISTING
-                        }
-                    } catch (e: Exception) {
-                        Log.e(TAG, "installExistingPackage via reflection failed", e)
-                    }
-                }
-            }
-        }
-
-        // Strategy 1b: Direct install (ACTION_INSTALL_PACKAGE)
+        // Strategy 1: Direct install via ACTION_INSTALL_PACKAGE in the
+        // CURRENT (parent) profile. This prompts the user with the system
+        // package installer to install the existing app into the work profile.
+        // Note: This runs in the parent profile and may not install into
+        // the work profile — it's a fallback.
+        Log.i(TAG, "Strategy 1: ACTION_INSTALL_PACKAGE in parent profile")
         try {
             val installIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
                     data = Uri.parse("package:$packageName")
                     putExtra(Intent.EXTRA_INSTALLER_PACKAGE_NAME, context.packageName)
-                    addFlags(FLAG_ACTIVITY_NEW_TASK)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     if (appInfo != null) {
                         putExtra("android.content.pm.extra.APP_INFO", appInfo)
                     }
@@ -133,7 +96,7 @@ object WorkProfileCloner {
                 Intent(Intent.ACTION_INSTALL_PACKAGE,
                        Uri.fromParts("package", packageName, null)).apply {
                     putExtra(Intent.EXTRA_INSTALLER_PACKAGE_NAME, context.packageName)
-                    addFlags(FLAG_ACTIVITY_NEW_TASK)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
             }
             context.startActivity(installIntent)
@@ -142,17 +105,10 @@ object WorkProfileCloner {
             Log.e(TAG, "ACTION_INSTALL_PACKAGE failed", e)
         }
 
-        // Strategy 1c: Market fallback
-        return try {
-            val marketIntent = Intent(Intent.ACTION_VIEW,
-                Uri.parse("market://details?id=$packageName")).apply {
-                addFlags(FLAG_ACTIVITY_NEW_TASK)
-            }
-            context.startActivity(marketIntent)
-            RESULT_OK_GOOGLE_PLAY
-        } catch (e: Exception) {
-            Log.e(TAG, "Market fallback failed", e)
-            RESULT_NO_SYS_MARKET
-        }
+        // No DPC available and ACTION_INSTALL_PACKAGE failed.
+        // Return NO_SYS_MARKET to let the caller try other strategies
+        // (e.g., LauncherApps-backed proxy activity in work profile).
+        Log.d(TAG, "No clone strategy available — deferring to caller")
+        return RESULT_NO_SYS_MARKET
     }
 }
