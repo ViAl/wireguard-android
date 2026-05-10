@@ -47,6 +47,16 @@ object WorkProfileCloner {
               targetProfile: UserHandle): Int {
         Log.i(TAG, "clone: pkg=$packageName target=$targetProfile")
 
+        // Bootstrap the work profile process first, so ShuttleProvider.onCreate()
+        // fires and sends the URI grant back to parent before we try to use Shuttle.
+        ShuttleCarrierActivity.bootstrap(context, targetProfile)
+        // Give the provider a moment to initialize
+        try {
+            Thread.sleep(500)
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+        }
+
         // Strategy 0: DPC install (profile owner — can install directly from parent)
         val dpcResult = tryDpcInstallFromParent(context, packageName)
         if (dpcResult != null) return dpcResult

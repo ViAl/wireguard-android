@@ -42,6 +42,45 @@ class ShuttleCarrierActivity : Activity() {
         private const val AUTHORITY_SUFFIX = ".shuttle"
 
         /**
+         * Bootstrap the work profile process by launching ShuttleCarrierActivity
+         * in the target profile via LauncherApps. This forces Android to create
+         * the application process in the work profile, which triggers:
+         *   - Application.onCreate()
+         *   - ContentProvider.onCreate() for all providers (including ShuttleProvider)
+         *   - ShuttleProvider.initialize() — sends URI grant back to parent
+         *
+         * Must be called from the parent profile context.
+         */
+        fun bootstrap(context: Context, workProfile: UserHandle) {
+            try {
+                val intent = Intent(context, ShuttleCarrierActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION or
+                             Intent.FLAG_ACTIVITY_NO_USER_ACTION or
+                             Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or
+                             Intent.FLAG_ACTIVITY_NO_HISTORY)
+                    putExtra("bootstrap", true)
+                }
+
+                val launcherAppsService = context.getSystemService(Context.LAUNCHER_APPS_SERVICE)
+                if (launcherAppsService != null) {
+                    val launcherClass = launcherAppsService.javaClass
+                    val startMethod = launcherClass.getMethod(
+                        "startActivity",
+                        Intent::class.java,
+                        UserHandle::class.java,
+                        android.graphics.Rect::class.java,
+                        Bundle::class.java
+                    )
+                    startMethod.invoke(launcherAppsService, intent, workProfile, null, null)
+                    Log.d(TAG, "bootstrap: launched ShuttleCarrier in work=$workProfile")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "bootstrap: failed to start ShuttleCarrier in work profile", e)
+            }
+        }
+
+        /**
          * Establish shuttle URI permission from parent → work profile.
          * Called from parent-profile code.
          *
@@ -125,6 +164,14 @@ class ShuttleCarrierActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Bootstrap: launched purely to create the process in work profile.
+        // No round-trip needed — ShuttleProvider.initialize() already handles it.
+        if (intent.getBooleanExtra("bootstrap", false)) {
+            Log.d(TAG, "Bootstrap activity — finishing immediately")
+            finish()
+            return
+        }
 
         val isEstablish = intent.getBooleanExtra("establish", false)
         val myUserId = getMyUserId()

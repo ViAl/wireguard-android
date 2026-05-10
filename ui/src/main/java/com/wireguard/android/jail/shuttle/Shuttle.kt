@@ -38,6 +38,16 @@ class Shuttle(val context: Context, val to: UserHandle) {
     fun <R> invoke(function: Context.() -> R): R {
         val result = ShuttleProvider.call(context, to, function)
         if (result.isNotReady()) {
+            Log.d(TAG, "Shuttle not ready — bootstrapping work profile process")
+            // Bootstrap the work profile process so ShuttleProvider.onCreate() fires,
+            // which calls initialize() and sends the URI grant back to the parent.
+            ShuttleCarrierActivity.bootstrap(context, to)
+            // Give the work profile a moment to initialize the provider
+            try {
+                Thread.sleep(500)
+            } catch (e: InterruptedException) {
+                Thread.currentThread().interrupt()
+            }
             Log.d(TAG, "Shuttle not ready — establishing permission")
             ShuttleCarrierActivity.establishPermission(context)
             // Retry after establishment
