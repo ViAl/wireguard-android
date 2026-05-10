@@ -115,6 +115,7 @@ jobs:
       - name: Sign APK (optional)
         id: sign
         if: ${{ steps.keystore.outputs.keystore_path != '' }}
+        continue-on-error: true
         shell: bash
         env:
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
@@ -133,12 +134,16 @@ jobs:
           "$ANDROID_HOME/build-tools/${ANDROID_BUILD_TOOLS}/apksigner" verify "$signed_apk"
           echo "final_apk=$signed_apk" >> "$GITHUB_OUTPUT"
 
-      - name: Final APK (debug APK is already signed with debug key)
+      - name: Determine final APK path
         id: final
         shell: bash
         run: |
           set -euxo pipefail
-          echo "final_apk=${{ steps.apk.outputs.unsigned_apk }}" >> "$GITHUB_OUTPUT"
+          if [ -n "${{ steps.sign.outputs.final_apk }}" ]; then
+            echo "final_apk=${{ steps.sign.outputs.final_apk }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "final_apk=${{ steps.apk.outputs.unsigned_apk }}" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Build artifact name
         id: artifact_name
@@ -154,14 +159,14 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: wireguard-android-apk-${{ github.run_id }}
-          path: ${{ steps.sign.outputs.final_apk || steps.final.outputs.final_apk }}
+          path: ${{ steps.final.outputs.final_apk }}
           if-no-files-found: error
 
       - name: Push APK to artifacts branch
         if: ${{ github.event_name != 'pull_request' && github.ref_name != 'master' }}
         shell: bash
         env:
-          FINAL_APK: ${{ steps.sign.outputs.final_apk || steps.final.outputs.final_apk }}
+          FINAL_APK: ${{ steps.final.outputs.final_apk }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euxo pipefail
