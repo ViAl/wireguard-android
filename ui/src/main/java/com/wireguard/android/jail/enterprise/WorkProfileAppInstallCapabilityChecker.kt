@@ -220,22 +220,53 @@ open class WorkProfileAppInstallCapabilityChecker(
             }
         }
 
+        /**
+         * Tries to open Play Store IN the target work profile using LauncherApps.
+         * LauncherApps can start activities in any profile the app can see.
+         */
+        private fun launchStoreViaLauncherApps(handle: UserHandle, packageName: String): Boolean {
+            WorkProfileLogger.d("launchStoreViaLauncherApps: handle=$handle package=$packageName")
+            try {
+                val playActivities = launcherApps?.getActivityList(PLAY_STORE_PACKAGE, handle).orEmpty()
+                if (playActivities.isNotEmpty()) {
+                    val activityInfo = playActivities.first()
+                    val componentName = android.content.ComponentName(
+                        PLAY_STORE_PACKAGE,
+                        activityInfo.name
+                    )
+                    val intent = Intent(Intent.ACTION_VIEW,
+                        Uri.parse("market://details?id=$packageName"))
+                    // LauncherApps.startActivity is only for launching apps from their
+                    // ComponentName, not for launching intents. But we can resolve
+                    // and launch via the activity's ComponentName.
+                    launcherApps?.startActivity(componentName, handle, null)
+                    WorkProfileLogger.d("launchStoreViaLauncherApps: succeeded")
+                    return true
+                }
+            } catch (e: Exception) {
+                WorkProfileLogger.e("launchStoreViaLauncherApps failed: ${e.message}", e)
+            }
+            return false
+        }
+
         @Suppress("DEPRECATION")
         private fun launchStoreInProfile(handle: UserHandle, packageName: String): Boolean {
             WorkProfileLogger.d("launchStoreInProfile: handle=$handle package=$packageName")
 
             // Strategy 0: Proxy through our own app copy inside the work profile.
-            if (Build.VERSION.SDK_INT >= 34) {
-                try {
-                    val cpa = appContext.getSystemService(CrossProfileApps::class.java)
-                    val proxyIntent = PlayStoreProxyActivity.buildCrossProfileProxyIntent(appContext, packageName)
-                    WorkProfileLogger.d("Strategy 0a: CrossProfileApps proxy intent=$proxyIntent")
-                    cpa?.startActivity(proxyIntent, handle, null, null)
-                    WorkProfileLogger.d("Strategy 0a: succeeded (no exception)")
-                    return true
-                } catch (e: Exception) {
-                    WorkProfileLogger.e("Strategy 0a failed: ${e.message}", e)
-                }
+            // Use LauncherApps.startActivity — it can start our ProxyActivity in the
+            // target profile, which will then open Play Store locally inside that profile.
+            try {
+                val proxyComponent = android.content.ComponentName(
+                    appContext.packageName,
+                    PlayStoreProxyActivity::class.java.name
+                )
+                WorkProfileLogger.d("Strategy 0a: LauncherApps proxy component=$proxyComponent")
+                launcherApps?.startActivity(proxyComponent, handle, null)
+                WorkProfileLogger.d("Strategy 0a: succeeded")
+                return true
+            } catch (e: Exception) {
+                WorkProfileLogger.e("Strategy 0a failed: ${e.message}", e)
             }
             try {
                 val proxyIntent = PlayStoreProxyActivity.buildProxyIntent(appContext, packageName)
