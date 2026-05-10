@@ -14,8 +14,8 @@ import android.os.Bundle
 inline class ShuttleResult<R>(private val bundle: Bundle?) {
 
     companion object {
-        @JvmField
-        internal val NOT_READY = ShuttleResult<Any>(Bundle())
+        internal val NOT_READY_BUNDLE = Bundle()
+        internal val NOT_READY = ShuttleResult<Any>(NOT_READY_BUNDLE)
     }
 
     fun isNotReady(): Boolean = bundle === NOT_READY.bundle

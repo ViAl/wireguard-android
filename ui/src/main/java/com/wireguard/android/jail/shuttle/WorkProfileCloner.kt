@@ -44,16 +44,14 @@ object WorkProfileCloner {
         // Strategy 0: DPC install (same profile owner, same process — no shuttle needed)
         val dpm = context.getSystemService(DevicePolicyManager::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && dpm != null) {
-            val adminComponent = android.content.ComponentName(
-                context,
-                try {
-                    Class.forName("com.wireguard.android.jail.enterprise.JailDeviceAdminReceiver")
-                } catch (e: ClassNotFoundException) {
-                    Log.e(TAG, "JailDeviceAdminReceiver class not found", e)
-                    null
-                }
-            )
-            if (adminComponent != null) {
+            val adminClass: Class<*>? = try {
+                Class.forName("com.wireguard.android.jail.enterprise.JailDeviceAdminReceiver")
+            } catch (e: ClassNotFoundException) {
+                Log.e(TAG, "JailDeviceAdminReceiver class not found", e)
+                null
+            }
+            if (adminClass != null) {
+                val adminComponent = android.content.ComponentName(context, adminClass)
                 try {
                     if (dpm.installExistingPackage(adminComponent, packageName)) {
                         Log.i(TAG, "DPC installExistingPackage succeeded for $packageName")
@@ -89,17 +87,15 @@ object WorkProfileCloner {
             val dpm = context.getSystemService(DevicePolicyManager::class.java)
             if (dpm != null && dpm.isAffiliatedUser) {
                 // Use reflection to call installExistingPackage
-                try {
-                    val adminComponent = android.content.ComponentName(
-                        context,
-                        try {
-                            Class.forName("com.wireguard.android.jail.enterprise.JailDeviceAdminReceiver")
-                        } catch (e: ClassNotFoundException) {
-                            Log.e(TAG, "JailDeviceAdminReceiver class not found", e)
-                            null
-                        }
-                    )
-                    if (adminComponent != null) {
+                val adminClass: Class<*>? = try {
+                    Class.forName("com.wireguard.android.jail.enterprise.JailDeviceAdminReceiver")
+                } catch (e: ClassNotFoundException) {
+                    Log.e(TAG, "JailDeviceAdminReceiver class not found", e)
+                    null
+                }
+                if (adminClass != null) {
+                    try {
+                        val adminComponent = android.content.ComponentName(context, adminClass)
                         val method = DevicePolicyManager::class.java.getMethod(
                             "installExistingPackage",
                             android.content.ComponentName::class.java,
