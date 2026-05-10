@@ -4,8 +4,8 @@
  */
 package com.wireguard.android.jail.enterprise
 
+import android.content.Context
 import android.content.Intent
-import android.content.pm.LauncherApps
 import android.net.Uri
 import android.os.Bundle
 import android.os.Process
@@ -68,36 +68,43 @@ class PlayStoreProxyActivity : AppCompatActivity() {
 
     private fun relayToPlayStore(uri: Uri) {
         // We're running inside the work profile, but Play Store lives in the
-        // parent profile. Use LauncherApps to launch Play Store in the parent
-        // user (the first non-ours user handle).
-        val launcherApps = getSystemService(LauncherApps::class.java)
-        val parentHandle = launcherApps?.profiles.orEmpty()
-            .firstOrNull { it != Process.myUserHandle() }
+        // parent profile. Use reflection to call LauncherApps.startActivity
+        // in the parent user.
+        try {
+            val launcherAppsService = getSystemService(Context.LAUNCHER_APPS_SERVICE)
+            if (launcherAppsService != null) {
+                val launcherClass = launcherAppsService.javaClass
+                val profiles = launcherClass.getMethod("getProfiles")
+                    .invoke(launcherAppsService) as? List<*> ?: emptyList<Any>()
+                val parentHandle = profiles.firstOrNull { it != Process.myUserHandle() } as? UserHandle
 
-        if (parentHandle != null) {
-            WorkProfileLogger.d("ProxyActivity: launching Play Store in parent=$parentHandle")
-            val playIntent = Intent(Intent.ACTION_VIEW, uri).apply {
-                setPackage(PLAY_STORE_PACKAGE)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                if (parentHandle != null) {
+                    WorkProfileLogger.d("ProxyActivity: launching Play Store in parent=$parentHandle")
+                    val componentName = android.content.ComponentName(
+                        PLAY_STORE_PACKAGE,
+                        "com.google.android.finsky.activities.MainActivity"
+                    )
+                    val startMethod = launcherClass.getMethod(
+                        "startActivity",
+                        android.content.ComponentName::class.java,
+                        UserHandle::class.java,
+                        android.graphics.Rect::class.java,
+                        android.os.Bundle::class.java
+                    )
+                    startMethod.invoke(launcherAppsService, componentName, parentHandle, null, null)
+                    WorkProfileLogger.d("ProxyActivity: LauncherApps startActivity succeeded")
+                    finish()
+                    return
+                }
             }
-            try {
-                val playComponent = android.content.ComponentName(
-                    PLAY_STORE_PACKAGE,
-                    "com.google.android.finsky.activities.MainActivity"
-                )
-                launcherApps!!.startActivity(playComponent, parentHandle, null)
-                WorkProfileLogger.d("ProxyActivity: LauncherApps startActivity succeeded")
-                finish()
-                return
-            } catch (e: Exception) {
-                WorkProfileLogger.e("ProxyActivity: LauncherApps startActivity failed: ${e.message}", e)
-            }
-        } else {
-            WorkProfileLogger.w("ProxyActivity: no parent profile found, launching locally")
+        } catch (e: Exception) {
+            WorkProfileLogger.e("ProxyActivity: LauncherApps reflection failed: ${e.message}", e)
         }
 
-        // Fallback: launch locally (without setPackage to let system resolver choose).
         try {
+            // Fallback: launch via startActivity. Since we're in the work profile,
+            // and Play Store isn't installed here, the system should open a URL picker
+            // or route to the primary profile's Play Store.
             val httpsUri = if (uri.scheme == "market") {
                 val packageName = uri.getQueryParameter("id") ?: run {
                     finish()
