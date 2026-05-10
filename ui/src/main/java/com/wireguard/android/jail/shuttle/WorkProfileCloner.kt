@@ -110,9 +110,9 @@ object WorkProfileCloner {
                             )
                             return RESULT_OK_INSTALL_EXISTING
                         }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "installExistingPackage via reflection failed", e)
                     }
-                } catch (e: Exception) {
-                    Log.e(TAG, "installExistingPackage via reflection failed", e)
                 }
             }
         }
