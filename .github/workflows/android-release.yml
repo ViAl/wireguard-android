@@ -158,8 +158,8 @@ jobs:
           path: ${{ steps.sign.outputs.final_apk || steps.final.outputs.final_apk }}
           if-no-files-found: error
 
-      - name: Optionally push APK to artifacts branch
-        if: ${{ github.event_name != 'pull_request' && ((github.event_name == 'workflow_dispatch' && inputs.push_to_artifacts_branch) || vars.PUSH_ARTIFACTS_BRANCH == 'true') }}
+      - name: Push APK to artifacts branch
+        if: ${{ github.event_name != 'pull_request' && github.ref_name != 'master' }}
         shell: bash
         env:
           FINAL_APK: ${{ steps.sign.outputs.final_apk || steps.final.outputs.final_apk }}
@@ -177,13 +177,14 @@ jobs:
             git rm -rf . || true
           fi
 
-          out_dir="apks/${GITHUB_REF_NAME}"
+          safe_ref="${GITHUB_REF_NAME//\//-}"
+          out_dir="apks/${safe_ref}"
           mkdir -p "$out_dir"
           cp "$FINAL_APK" "$out_dir/"
 
           git add "$out_dir"
           if ! git diff --cached --quiet; then
-            git commit -m "Add APK for ${GITHUB_REF_NAME}"
+            git commit -m "Add APK for ${safe_ref}"
             git push origin artifacts
           else
             echo "No changes to push to artifacts branch"
