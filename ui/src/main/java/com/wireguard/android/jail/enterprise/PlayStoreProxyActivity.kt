@@ -5,8 +5,11 @@
 package com.wireguard.android.jail.enterprise
 
 import android.content.Intent
+import android.content.pm.LauncherApps
 import android.net.Uri
 import android.os.Bundle
+import android.os.Process
+import android.os.UserHandle
 import androidx.appcompat.app.AppCompatActivity
 
 /**
@@ -64,24 +67,32 @@ class PlayStoreProxyActivity : AppCompatActivity() {
     }
 
     private fun relayToPlayStore(uri: Uri) {
-        // Try with setPackage(PLAY_STORE_PACKAGE) first — this ensures the
-        // intent resolves to Play Store specifically, not a browser or other handler.
-        // We're already running inside the work profile (that's the whole point of
-        // the proxy), so setPackage is safe here.
-        val primaryIntent = Intent(Intent.ACTION_VIEW, uri).apply {
-            setPackage(PLAY_STORE_PACKAGE)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        try {
-            startActivity(primaryIntent)
-            WorkProfileLogger.d("ProxyActivity: Play Store intent dispatched successfully")
-            finish()
-            return
-        } catch (e: Throwable) {
-            WorkProfileLogger.e("ProxyActivity: Failed to launch Play Store with uri=$uri", e)
+        // We're running inside the work profile, but Play Store lives in the
+        // parent profile. Use LauncherApps to launch Play Store in the parent
+        // user (the first non-ours user handle).
+        val launcherApps = getSystemService(LauncherApps::class.java)
+        val parentHandle = launcherApps?.profiles.orEmpty()
+            .firstOrNull { it != Process.myUserHandle() }
+
+        if (parentHandle != null) {
+            WorkProfileLogger.d("ProxyActivity: launching Play Store in parent=$parentHandle")
+            val playIntent = Intent(Intent.ACTION_VIEW, uri).apply {
+                setPackage(PLAY_STORE_PACKAGE)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            try {
+                launcherApps?.startActivity(playIntent, parentHandle, null, null)
+                WorkProfileLogger.d("ProxyActivity: LauncherApps startActivity succeeded")
+                finish()
+                return
+            } catch (e: Exception) {
+                WorkProfileLogger.e("ProxyActivity: LauncherApps startActivity failed: ${e.message}", e)
+            }
+        } else {
+            WorkProfileLogger.w("ProxyActivity: no parent profile found, launching locally")
         }
 
-        // Fallback without setPackage — let the system resolver figure it out.
+        // Fallback: launch locally (without setPackage to let system resolver choose).
         try {
             val httpsUri = if (uri.scheme == "market") {
                 val packageName = uri.getQueryParameter("id") ?: run {
