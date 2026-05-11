@@ -5,259 +5,129 @@
 package com.wireguard.android.jail.shuttle
 
 import android.app.Activity
+import android.app.KeyguardManager
 import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.os.Process
-import android.os.UserHandle
 import android.util.Log
 
 /**
  * Trampoline activity that establishes cross-profile URI permission grants
  * for ShuttleProvider.
  *
- * The Shuttle is used from the PARENT profile to execute code in the
- * WORK profile. The ContentProvider resides in both profiles (since the
- * app is installed in both). To call the work profile's ContentProvider
- * via `content://{workProfileId}@{packageName}.shuttle`, the parent needs
- * URI permission.
+ * This is a direct copy of Island's `ShuttleCarrierActivity` pattern.
+ * **No LauncherApps reflection is used.** Cross-profile routing is done
+ * via the system's cross-profile Activity forwarder using the
+ * `CATEGORY_PARENT_PROFILE` intent category.
  *
- * Permission establishment flow (round-trip):
+ * ## Flow
  *
- * 1. [Parent] establishPermission() creates an intent, sends it to work
- *    profile via LauncherApps (carrying the bare shuttle URI)
- * 2. [Work profile] Activity receives intent → constructs cross-profile
- *    URI `content://{myUserId}@{packageName}.shuttle` → sends it back
- *    to parent via LauncherApps with FLAG_GRANT_WRITE_URI_PERMISSION
- * 3. [Parent] Activity receives intent → takes persistable URI permission
- *    on the cross-profile URI → now parent can call the work profile's
- *    ContentProvider
+ * 1. A ShuttleProvider in the **work profile** calls
+ *    `sendToParentProfileQuietlyIfPossible()` which starts this activity
+ *    locally (within the work profile).
+ *
+ * 2. In `onCreate()`, the activity checks `isOwnerUser()`. Since we're in
+ *    the work profile (not owner), it calls `startActivityForResult()` with
+ *    the intent decorated by `CrossProfileShuttle.decorateIntentForActivityInParentProfile()`.
+ *    This adds `CATEGORY_PARENT_PROFILE`, causing the system's cross-profile
+ *    Activity forwarder to route the intent to the parent profile.
+ *
+ * 3. In the parent profile, `onCreate()` runs again. This time `isOwnerUser()`
+ *    is true, so it calls `ShuttleProvider.collect()` to take persistable URI
+ *    permission, then `setResult()` to send a grant back to the work profile.
+ *
+ * 4. Back in the work profile, `onActivityResult()` calls
+ *    `ShuttleProvider.collect()` again to take the return grant.
  */
 class ShuttleCarrierActivity : Activity() {
 
     companion object {
         private const val TAG = "WG.ShuttleCarrier"
-        private const val AUTHORITY_SUFFIX = ".shuttle"
+        private const val ACTION_SHUTTLE = "com.wireguard.android.action.SHUTTLE"
+        private const val SILENT_LAUNCH_FLAGS = Intent.FLAG_ACTIVITY_NO_ANIMATION or
+                Intent.FLAG_ACTIVITY_NO_USER_ACTION or
+                Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or
+                Intent.FLAG_ACTIVITY_NO_HISTORY
 
         /**
-         * Bootstrap the work profile process by launching ShuttleCarrierActivity
-         * in the target profile via LauncherApps. This forces Android to create
-         * the application process in the work profile, which triggers:
-         *   - Application.onCreate()
-         *   - ContentProvider.onCreate() for all providers (including ShuttleProvider)
-         *   - ShuttleProvider.initialize() — sends URI grant back to parent
+         * Send a URI grant intent to the parent profile to establish
+         * cross-profile URI permission.
          *
-         * Must be called from the parent profile context.
-         */
-        fun bootstrap(context: Context, workProfile: UserHandle) {
-            try {
-                val intent = Intent(context, ShuttleCarrierActivity::class.java).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION or
-                             Intent.FLAG_ACTIVITY_NO_USER_ACTION or
-                             Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or
-                             Intent.FLAG_ACTIVITY_NO_HISTORY)
-                    putExtra("bootstrap", true)
-                }
-
-                val launcherAppsService = context.getSystemService(Context.LAUNCHER_APPS_SERVICE)
-                if (launcherAppsService != null) {
-                    val launcherClass = launcherAppsService.javaClass
-                    val startMethod = launcherClass.getMethod(
-                        "startActivity",
-                        Intent::class.java,
-                        UserHandle::class.java,
-                        android.graphics.Rect::class.java,
-                        Bundle::class.java
-                    )
-                    startMethod.invoke(launcherAppsService, intent, workProfile, null, null)
-                    Log.d(TAG, "bootstrap: launched ShuttleCarrier in work=$workProfile")
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "bootstrap: failed to start ShuttleCarrier in work profile", e)
-            }
-        }
-
-        /**
-         * Establish shuttle URI permission from parent → work profile.
-         * Called from parent-profile code.
+         * Called from ShuttleProvider.initialize() when running in the
+         * work profile and no URI permission is yet granted.
          *
-         * Starts ShuttleCarrierActivity in the work profile via LauncherApps.
-         * The work-profile instance will send a cross-profile URI grant back.
+         * Mirrors Island's `ShuttleCarrierActivity.sendToParentProfileQuietlyIfPossible()`.
+         *
+         * @param context    context (must be work profile)
+         * @param decoration lambda to configure the intent (add clipData with URI, flags)
          */
-        fun establishPermission(context: Context) {
-            val bareUri = Uri.parse("content://${context.packageName}$AUTHORITY_SUFFIX")
-            val intent = Intent(context, ShuttleCarrierActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                clipData = ClipData.newUri(context.contentResolver, "shuttle", bareUri)
-                addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
-                         Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
-                addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION or
-                         Intent.FLAG_ACTIVITY_NO_USER_ACTION or
-                         Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or
-                         Intent.FLAG_ACTIVITY_NO_HISTORY)
-            }
+        fun sendToParentProfileQuietlyIfPossible(context: Context,
+                                                  decoration: Intent.() -> Unit) {
+            val intent = Intent(context, ShuttleCarrierActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or SILENT_LAUNCH_FLAGS)
+                .apply(decoration)
 
-            // Extra to signal this is a permission-establishment intent,
-            // not a return hop. The work-profile instance checks this.
-            intent.putExtra("establish", true)
-
+            // Wrap in try-catch to guard against ActivityNotFound when device is
+            // locked (credential-gated) — the cross-profile forwarder may not
+            // be available until the device is unlocked.
             try {
-                val launcherAppsService = context.getSystemService(Context.LAUNCHER_APPS_SERVICE)
-                if (launcherAppsService != null) {
-                    val launcherClass = launcherAppsService.javaClass
-                    val profilesMethod = launcherClass.getMethod("getProfiles")
-                    @Suppress("UNCHECKED_CAST")
-                    val profiles = profilesMethod.invoke(launcherAppsService) as? List<*> ?: emptyList<Any>()
-                    val myHandle = Process.myUserHandle()
-                    // Find the work profile (any profile that isn't current parent)
-                    val workProfileHandle = profiles.firstOrNull { it != myHandle } as? UserHandle
-                    if (workProfileHandle != null) {
-                        val startMethod = launcherClass.getMethod(
-                            "startActivity",
-                            Intent::class.java,
-                            UserHandle::class.java,
-                            android.graphics.Rect::class.java,
-                            Bundle::class.java
-                        )
-                        startMethod.invoke(launcherAppsService, intent,
-                            workProfileHandle, null, null)
-                        Log.d(TAG, "establishPermission: LauncherApps sent to work=$workProfileHandle")
-                        return
-                    }
-                }
+                context.startActivity(intent)
             } catch (e: Exception) {
-                Log.e(TAG, "establishPermission: LauncherApps reflection failed", e)
+                Log.e(TAG, "Cannot launch shuttle activity (device may be locked)", e)
             }
-
-            // Fallback: start locally (current profile — parent)
-            context.startActivity(intent)
-        }
-
-        /**
-         * Returns the numeric user ID of the current process.
-         * Equivalent to UserHandle.myUserId() but uses reflection for
-         * maximum compatibility.
-         */
-        private fun getMyUserId(): Int {
-            return try {
-                val handle = Process.myUserHandle()
-                val idMethod = UserHandle::class.java.getMethod("hashCode")
-                idMethod.invoke(handle) as? Int ?: 0
-            } catch (e: Exception) {
-                0 // conservative default
-            }
-        }
-
-        /**
-         * Build a cross-profile URI: `content://{userId}@{packageName}.shuttle`
-         */
-        private fun buildCrossProfileUri(packageName: String, userId: Int): Uri {
-            return Uri.Builder()
-                .scheme("content")
-                .encodedAuthority("$userId@${packageName}$AUTHORITY_SUFFIX")
-                .build()
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Bootstrap: launched purely to create the process in work profile.
-        // No round-trip needed — ShuttleProvider.initialize() already handles it.
-        if (intent.getBooleanExtra("bootstrap", false)) {
-            Log.d(TAG, "Bootstrap activity — finishing immediately")
+        if (isOwnerUser()) {
+            // We are in the PARENT profile — collect URI permission and
+            // send a reverse grant back to the work profile.
+            Log.d(TAG, "Parent profile: collecting URI permission")
+            ShuttleProvider.collect(this, intent)
+
+            // Send reverse shuttle back to work profile
+            setResult(RESULT_OK, Intent(null, ShuttleProvider.bareContentUri(this))
+                .setFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                          Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION))
             finish()
-            return
-        }
-
-        val isEstablish = intent.getBooleanExtra("establish", false)
-        val myUserId = getMyUserId()
-
-        if (isEstablish) {
-            // First hop: this activity was sent by parent into work profile.
-            // Now build the cross-profile URI for the work profile's provider
-            // and send it back to the parent with permission grant flags.
-            Log.d(TAG, "Establish hop in work profile (userId=$myUserId)")
-
-            val crossProfileUri = buildCrossProfileUri(packageName, myUserId)
-            val returnIntent = Intent(this, ShuttleCarrierActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                data = crossProfileUri
-                addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
-                         Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
-                addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION or
-                         Intent.FLAG_ACTIVITY_NO_USER_ACTION or
-                         Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or
-                         Intent.FLAG_ACTIVITY_NO_HISTORY)
-                // No "establish" extra — this is the return hop
-            }
-
-            // Send to parent profile
-            try {
-                val launcherAppsService = getSystemService(Context.LAUNCHER_APPS_SERVICE)
-                if (launcherAppsService != null) {
-                    val launcherClass = launcherAppsService.javaClass
-                    val profilesMethod = launcherClass.getMethod("getProfiles")
-                    @Suppress("UNCHECKED_CAST")
-                    val profiles = profilesMethod.invoke(launcherAppsService) as? List<*> ?: emptyList<Any>()
-                    val myHandle = Process.myUserHandle()
-                    // Find parent profile (any profile that isn't current — work profile)
-                    val parentHandle = profiles.firstOrNull { it != myHandle } as? UserHandle
-                    if (parentHandle != null) {
-                        val startMethod = launcherClass.getMethod(
-                            "startActivity",
-                            Intent::class.java,
-                            UserHandle::class.java,
-                            android.graphics.Rect::class.java,
-                            Bundle::class.java
-                        )
-                        startMethod.invoke(launcherAppsService, returnIntent,
-                            parentHandle, null, null)
-                        Log.d(TAG, "Return hop sent to parent=$parentHandle URI=$crossProfileUri")
-                        finish()
-                        return
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Return hop LauncherApps failed", e)
-            }
         } else {
-            // Second hop (or fallback): this activity is in the parent profile
-            // (or received directly). Collect URI permission.
-            Log.d(TAG, "Collect hop: intent data=${intent.data} clipData=${intent.clipData} flags=${intent.flags}")
-
-            // Check if this is a grant from initialize() — data has bare URI with GRANT flags
-            val isInitGrant = intent.data != null &&
-                    (intent.flags and Intent.FLAG_GRANT_WRITE_URI_PERMISSION) != 0
-
-            if (isInitGrant) {
-                // Grant from initialize(): work profile sent bare URI directly via data
-                Log.d(TAG, "Collect hop from initialize: data=${intent.data}")
-                ShuttleProvider.collect(this, intent)
-            } else {
-                // Collect from intent.data (cross-profile URI) first,
-                // fall back to clipData (bare URI)
-                val uriToPersist = intent.data ?: intent.clipData
-                    ?.takeIf { it.itemCount > 0 }
-                    ?.getItemAt(0)
-                    ?.uri
-
-                if (uriToPersist != null) {
-                    try {
-                        contentResolver.takePersistableUriPermission(
-                            uriToPersist, Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-                        )
-                        Log.d(TAG, "Collected persistable URI permission: $uriToPersist")
-                    } catch (e: SecurityException) {
-                        Log.e(TAG, "Failed to take persistable URI permission", e)
-                    }
-                }
+            // We are in the WORK profile — forward to parent profile
+            // via the system's cross-profile Activity forwarder.
+            Log.d(TAG, "Work profile: forwarding to parent profile")
+            val launchIntent = intent
+                .setAction(ACTION_SHUTTLE)
+                .setComponent(null)
+                .apply { flags = flags and Intent.FLAG_ACTIVITY_NEW_TASK.inv() }
+            try {
+                CrossProfileShuttle.decorateIntentForActivityInParentProfile(
+                    this, launchIntent
+                )
+                startActivityForResult(launchIntent, 1)
+            } catch (e: Exception) {
+                Log.e(TAG, "Cannot forward to parent profile", e)
+                finish()
             }
         }
+    }
 
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        Log.v(TAG, "onActivityResult: $data")
+        // Receive the reverse shuttle sent back as activity result
+        ShuttleProvider.collect(this, data ?: return)
         finish()
+    }
+
+    /** Check if this process is running in the owner (primary) user profile. */
+    private fun isOwnerUser(): Boolean {
+        return try {
+            Process.myUserHandle().hashCode() == 0
+        } catch (_: Exception) {
+            true // conservative: assume owner if reflection fails
+        }
     }
 }

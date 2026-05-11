@@ -172,17 +172,24 @@
         <provider
             android:name=".jail.shuttle.ShuttleProvider"
             android:authorities="${applicationId}.shuttle"
+            android:directBootAware="true"
             android:exported="true"
             android:grantUriPermissions="true" />
 
-        <!-- ShuttleCarrierActivity — URI permission trampoline -->
+        <!-- ShuttleCarrierActivity — URI permission trampoline (Island pattern)
+             Intent-filter enables cross-profile routing via the system Activity
+             forwarder (package "android") using CATEGORY_PARENT_PROFILE.
+             If forwarder not found, DPM addCrossProfileIntentFilter() is used. -->
         <activity
             android:name=".jail.shuttle.ShuttleCarrierActivity"
+            android:directBootAware="true"
             android:excludeFromRecents="true"
-            android:exported="true"
-            android:theme="@style/NoBackgroundTheme">
+            android:exported="false"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
             <intent-filter>
-                <action android:name="com.wireguard.android.action.SHUTTLE_ESTABLISH" />
+                <action android:name="com.wireguard.android.action.SHUTTLE" />
+                <category android:name="com.wireguard.android.category.PARENT_PROFILE" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
