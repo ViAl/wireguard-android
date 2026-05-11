@@ -4,7 +4,6 @@
  */
 package com.wireguard.android.jail.shuttle
 
-import android.app.Activity
 import android.content.*
 import android.content.ContentResolver.SCHEME_CONTENT
 import android.content.pm.PackageManager.PERMISSION_GRANTED
@@ -17,6 +16,35 @@ import android.util.SizeF
 import android.util.SparseArray
 import java.io.Serializable
 
+/**
+ * ContentProvider that enables lambda execution across user profiles via
+ * ContentProvider.call() with cross-profile URIs.
+ *
+ * Architecture (copied from Island):
+ *
+ *   ┌────────────────────────────────┐          ┌─────────────────────────────────┐
+ *   │         PARENT PROFILE         │          │          WORK PROFILE           │
+ *   │                                │          │                                 │
+ *   │ Shuttle.call() {               │          │ ShuttleProvider (ContentProvider)│
+ *   │   bundle = Bundle(Closure)     │          │   onCreate() → initialize()     │
+ *   │   uri = content://{wid}@auth   │  ──────► │     → initializeInIsland()     │
+ *   │   result = contentResolver     │          │       → sendToParentProfile()   │
+ *   │            .call(uri, ...)     │  ◄────── │     → call() → closure.invoke() │
+ *   │   return result.get()          │          │     → return Bundle result      │
+ *   │ }                              │          │                                 │
+ *   │                                │          │ ShuttleCarrierActivity           │
+ *   │ ShuttleCarrierActivity         │  ◄────── │   onCreate():                    │
+ *   │   onCreate():                  │  ──────► │   if (owner) → collect + result │
+ *   │   collect URI permission       │          │   else → startActivityForResult │
+ *   │   setResult() → back           │          │     → CATEGORY_PARENT_PROFILE   │
+ *   │                                │          │     → onActivityResult()        │
+ *   └────────────────────────────────┘          └─────────────────────────────────┘
+ *
+ * **No LauncherApps reflection is used.** Cross-profile Activity launch is done via:
+ * 1. `startActivityForResult()` from work profile with `CATEGORY_PARENT_PROFILE`
+ * 2. System Activity forwarder (package "android") resolves the intent
+ * 3. If forwarder not found, DPM `addCrossProfileIntentFilter()` is added
+ */
 class ShuttleProvider : ContentProvider() {
 
     companion object {
@@ -25,12 +53,14 @@ class ShuttleProvider : ContentProvider() {
         /** Authority derived from applicationId. */
         private const val AUTHORITY_SUFFIX = ".shuttle"
         private fun authority(context: Context) = context.packageName + AUTHORITY_SUFFIX
-        private fun bareContentUri(context: Context) =
+
+        /** Bare content URI (no profile prefix). */
+        internal fun bareContentUri(context: Context) =
             Uri.Builder().scheme(SCHEME_CONTENT).authority(authority(context)).build()
 
         /**
          * Build cross-profile URI: `content://<profileId>@<authority>`.
-         * The [profileId] is the USER ID of the TARGET profile where the
+         * [profileId] is the USER ID of the TARGET profile where the
          * ContentProvider lives.
          */
         private fun buildCrossProfileUri(context: Context, profileUserId: Int) =
@@ -43,34 +73,22 @@ class ShuttleProvider : ContentProvider() {
          * Get the cross-profile URI for a given target profile.
          */
         fun getCrossProfileUri(context: Context, profile: UserHandle): Uri {
-            val userId = getUserId(profile)
+            val userId = profile.hashCode()
             return buildCrossProfileUri(context, userId)
-        }
-
-        /**
-         * Get the numeric user ID from a UserHandle.
-         */
-        private fun getUserId(handle: UserHandle): Int {
-            return try {
-                val method = UserHandle::class.java.getMethod("hashCode")
-                method.invoke(handle) as? Int ?: 0
-            } catch (e: Exception) {
-                handle.hashCode()
-            }
         }
 
         /**
          * Send a lambda to a specific user profile via ContentProvider.call().
          *
-         * @param context caller context
-         * @param profile target UserHandle (use UserHandle of work profile)
+         * @param context  caller context
+         * @param profile  target UserHandle (e.g., work profile)
          * @param function lambda to execute in target profile
          * @return ShuttleResult wrapping the return value
          */
         fun <R> call(context: Context, profile: UserHandle,
                      function: Context.() -> R): ShuttleResult<R> {
             val bundle = Bundle(1).apply { putParcelable(null, Closure(function)) }
-            val uri = buildCrossProfileUri(context, getUserId(profile))
+            val uri = buildCrossProfileUri(context, profile.hashCode())
             return try {
                 ShuttleResult(
                     context.contentResolver.call(uri, function.javaClass.name, null, bundle)
@@ -87,7 +105,7 @@ class ShuttleProvider : ContentProvider() {
          * calling into [profile].
          */
         fun isReady(context: Context, profile: UserHandle): Boolean {
-            val uri = buildCrossProfileUri(context, getUserId(profile))
+            val uri = buildCrossProfileUri(context, profile.hashCode())
             return context.checkUriPermission(
                 uri, 0, Process.myUid(),
                 Intent.FLAG_GRANT_WRITE_URI_PERMISSION
@@ -96,29 +114,18 @@ class ShuttleProvider : ContentProvider() {
 
         /**
          * Collect URI permission grants from an intent (data or clipData).
-         * Called when the activity receives a URI grant via cross-profile intent.
+         * Called from ShuttleCarrierActivity when it receives a cross-profile
+         * intent with URI grant flags.
+         *
+         * Mirrors Island's `ShuttleProvider.collect()`.
          */
         fun collect(context: Context, intent: Intent) {
-            // Prefer intent.data (cross-profile URI from return hop),
-            // fall back to clipData (bare URI from establish hop)
-            val uris = sequence {
-                intent.data?.let { yield(it) }
-                intent.clipData?.let { cd ->
-                    for (i in 0 until cd.itemCount) {
-                        cd.getItemAt(i).uri?.let { yield(it) }
-                    }
-                }
-            }
-            uris.forEach { uri ->
-                try {
-                    context.contentResolver.takePersistableUriPermission(
-                        uri, Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-                    )
-                    Log.d(TAG, "[collect] Took persistable permission: $uri")
-                } catch (e: SecurityException) {
-                    // URI may already be granted or not grantable — log but don't crash
-                    Log.d(TAG, "[collect] Could not take persistable permission for $uri: ${e.message}")
-                }
+            val uri = intent.data ?: intent.clipData?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.uri
+            if (uri != null) {
+                Log.d(TAG, "[collect] Received: $uri")
+                context.contentResolver.takePersistableUriPermission(
+                    uri, Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
             }
         }
     }
@@ -136,77 +143,53 @@ class ShuttleProvider : ContentProvider() {
         else Bundle().apply { putBundleValue(null, result) }
     }
 
-    // ── Initialize permission grants ──────────────────────────────────
+    // ── Initialize permission grants (Island pattern) ────────────────
 
-    override fun onCreate(): Boolean {
-        initialize()
-        return true
-    }
+    override fun onCreate(): Boolean = true.also { initialize() }
 
+    /**
+     * Initialize URI permission grants for cross-profile ContentResolver.call().
+     *
+     * If we're running in the work profile (userId != 0), check if the bare
+     * shuttle URI permission is already granted. If not, send
+     * ShuttleCarrierActivity to the parent profile via cross-profile intent
+     * to establish the grant.
+     *
+     * This mirrors Island's `ShuttleProvider.initializeInIsland()`.
+     */
     private fun initialize() {
-        Log.d(TAG, "ShuttleProvider initializing (user=${Process.myUserHandle()})")
-
         val ctx = context ?: return
-        val myHandle = Process.myUserHandle()
+        val myId = Process.myUserHandle().hashCode()
 
-        // Try to find parent profile (any profile != current)
-        val parentHandle: UserHandle? = try {
-            val launcherAppsService = ctx.getSystemService(Context.LAUNCHER_APPS_SERVICE)
-            if (launcherAppsService != null) {
-                val launcherClass = launcherAppsService.javaClass
-                val profilesMethod = launcherClass.getMethod("getProfiles")
-                @Suppress("UNCHECKED_CAST")
-                val profiles = profilesMethod.invoke(launcherAppsService) as? List<*> ?: emptyList<Any>()
-                profiles.firstOrNull { it != myHandle } as? UserHandle
-            } else null
-        } catch (e: Exception) {
-            Log.w(TAG, "initialize: could not query profiles", e)
-            null
-        }
-
-        if (parentHandle == null) {
-            // Single profile (not work profile), nothing to do
-            Log.d(TAG, "initialize: no other profile found, nothing to establish")
+        if (myId == 0) {
+            // Parent profile — nothing to establish from here.
+            // The work profile will establish when its ShuttleProvider starts.
+            Log.d(TAG, "initialize: parent profile, nothing to do")
             return
         }
 
-        // We are in a secondary profile (work) with a parent.
-        // Build the bare shuttle URI and check if permission is already granted.
-        val bareUri = Uri.parse("content://${ctx.packageName}.shuttle")
-        if (ctx.checkUriPermission(bareUri, 0, Process.myUid(),
-                Intent.FLAG_GRANT_WRITE_URI_PERMISSION) == PERMISSION_GRANTED) {
-            Log.d(TAG, "initialize: already ready")
+        // We are in a secondary profile (work).
+        val uri = bareContentUri(ctx)
+        val appId = try {
+            UserHandle::class.java
+                .getMethod("getAppId", Int::class.javaPrimitiveType)
+                .invoke(null, Process.myUid()) as? Int ?: Process.myUid()
+        } catch (_: Exception) {
+            Process.myUid()
+        }
+
+        if (ctx.checkUriPermission(uri, 0, appId, Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            == PERMISSION_GRANTED) {
+            Log.d(TAG, "initialize: already ready (myId=$myId)")
             return
         }
 
-        // Permission not granted — send a URI grant intent to the parent profile.
-        // The parent will receive the bare URI and take persistable permission on it,
-        // allowing cross-profile ContentProvider calls.
-        Log.d(TAG, "initialize: establishing permission with parent=$parentHandle")
-        try {
-            val intent = Intent(ctx, ShuttleCarrierActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                // Send bare URI as data so parent can take persistable permission
-                data = bareUri
-                addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
-                        Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
-                addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION or
-                        Intent.FLAG_ACTIVITY_NO_USER_ACTION or
-                        Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or
-                        Intent.FLAG_ACTIVITY_NO_HISTORY)
-            }
-
-            val launcherAppsService = ctx.getSystemService(Context.LAUNCHER_APPS_SERVICE)!!
-            val launcherClass = launcherAppsService.javaClass
-            val startMethod = launcherClass.getMethod(
-                "startActivity",
-                Intent::class.java, UserHandle::class.java,
-                android.graphics.Rect::class.java, Bundle::class.java
-            )
-            startMethod.invoke(launcherAppsService, intent, parentHandle, null, null)
-            Log.d(TAG, "initialize: sent permission grant request to parent=$parentHandle")
-        } catch (e: Exception) {
-            Log.e(TAG, "initialize: failed to send permission grant", e)
+        // Not yet ready — establish via ShuttleCarrierActivity
+        Log.d(TAG, "initialize: establishing from work profile (myId=$myId)")
+        ShuttleCarrierActivity.sendToParentProfileQuietlyIfPossible(ctx) {
+            addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                     Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+            clipData = ClipData("Shuttle", emptyArray(), ClipData.Item(uri))
         }
     }
 
@@ -268,5 +251,4 @@ class ShuttleProvider : ContentProvider() {
             else -> throw IllegalArgumentException("Unsupported type: ${value.javaClass}")
         }
     }
-
 }

@@ -5,11 +5,16 @@
 package com.wireguard.android.jail.shuttle
 
 import android.content.Context
+import android.os.Process
 import android.os.UserHandle
 import android.util.Log
 
 /**
  * High-level Shuttle API: execute lambdas in another user profile.
+ *
+ * Mirrors Island's `Shuttle` class. Uses `ShuttleProvider.call()` to
+ * dispatch a Closure (serialized lambda) to the target profile's
+ * `ContentProvider.call()`, which deserializes and executes it.
  *
  * Usage (from parent profile, to run code in work profile):
  * ```kotlin
@@ -19,11 +24,11 @@ import android.util.Log
  * }
  * ```
  *
- * The shuttle uses ContentProvider.call() with cross-profile URIs
- * (`content://{profileId}@authority`). URI permission must be established
- * before the first call — this is handled automatically via
- * [ShuttleCarrierActivity.establishPermission] on the first `invoke()`
- * if the permission is not yet granted.
+ * URI permission is established automatically by `ShuttleProvider.onCreate()`
+ * when the provider starts in the work profile. If not yet ready,
+ * `invoke()` will throw `IllegalStateException("Shuttle not ready")`.
+ *
+ * **No LauncherApps reflection is used.**
  */
 class Shuttle(val context: Context, val to: UserHandle) {
 
@@ -33,40 +38,23 @@ class Shuttle(val context: Context, val to: UserHandle) {
 
     /**
      * Execute [function] in the target profile and return its result.
-     * If target is the current profile, runs locally.
+     * If target is the current profile, runs locally (no IPC).
      */
     fun <R> invoke(function: Context.() -> R): R {
+        val current = Process.myUserHandle()
+        if (to.hashCode() == current.hashCode()) {
+            // Same profile — run locally
+            return context.function()
+        }
+
         val result = ShuttleProvider.call(context, to, function)
         if (result.isNotReady()) {
-            Log.d(TAG, "Shuttle not ready — bootstrapping work profile process")
-            // Bootstrap the work profile process so ShuttleProvider.onCreate() fires,
-            // which calls initialize() and sends the URI grant back to the parent.
-            ShuttleCarrierActivity.bootstrap(context, to)
-            // Give the work profile a moment to initialize the provider
-            try {
-                Thread.sleep(500)
-            } catch (e: InterruptedException) {
-                Thread.currentThread().interrupt()
-            }
-            Log.d(TAG, "Shuttle not ready — establishing permission")
-            ShuttleCarrierActivity.establishPermission(context)
-            // Retry after establishment
-            val retry = ShuttleProvider.call(context, to, function)
-            if (retry.isNotReady()) {
-                // Give some time for async initialize() to complete
-                Log.d(TAG, "Shuttle still not ready — waiting for async initialize...")
-                try {
-                    Thread.sleep(500)
-                } catch (e: InterruptedException) {
-                    Thread.currentThread().interrupt()
-                }
-                val retry2 = ShuttleProvider.call(context, to, function)
-                if (retry2.isNotReady()) {
-                    throw IllegalStateException("Shuttle not ready after establish permission (retried)")
-                }
-                return retry2.get()
-            }
-            return retry.get()
+            throw IllegalStateException(
+                "Shuttle not ready. Ensure the work profile process has " +
+                        "been started (e.g., via LauncherApps.startActivity()) " +
+                        "so that ShuttleProvider.onCreate() can establish " +
+                        "URI permission grants."
+            )
         }
         return result.get()
     }
