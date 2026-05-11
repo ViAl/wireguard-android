@@ -33,15 +33,16 @@ class MainActivity : BaseActivity(), FragmentManager.OnBackStackChangedListener,
     private var selectedMainTab = MainTabsFragment.MainTab.VPN
 
     private fun handleBackPressed() {
-        val backStackEntries = supportFragmentManager.backStackEntryCount
+        val fragmentManager = supportFragmentManager
+        val backStackEntries = fragmentManager.backStackEntryCount
         // If the two-pane layout does not have an editor open, going back should exit the app.
         if (isTwoPaneLayout && backStackEntries <= 1) {
             finish()
             return
         }
 
-        if (backStackEntries >= 1)
-            supportFragmentManager.popBackStack()
+        if (backStackEntries >= 1 && !fragmentManager.isStateSaved)
+            fragmentManager.popBackStack()
 
         // Deselect the current tunnel on navigating back from the detail pane to the one-pane list.
         if (backStackEntries == 1)
@@ -113,7 +114,10 @@ class MainActivity : BaseActivity(), FragmentManager.OnBackStackChangedListener,
         invalidateOptionsMenu()
         if (tab != MainTabsFragment.MainTab.VPN) {
             selectedTunnel = null
-            supportFragmentManager.popBackStackImmediate(0, FragmentManager.POP_BACK_STACK_INCLUSIVE)
+            val fragmentManager = supportFragmentManager
+            if (!fragmentManager.isStateSaved) {
+                fragmentManager.popBackStackImmediate(0, FragmentManager.POP_BACK_STACK_INCLUSIVE)
+            }
         }
     }
 
