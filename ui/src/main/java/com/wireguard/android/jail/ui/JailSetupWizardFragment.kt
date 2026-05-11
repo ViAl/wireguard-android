@@ -22,6 +22,7 @@ import com.wireguard.android.jail.domain.WorkProfileSetupWizard
 import com.wireguard.android.jail.enterprise.ManagedProfileProvisioningManager
 import com.wireguard.android.jail.enterprise.PostProvisioningHandler
 import com.wireguard.android.jail.model.WorkProfileState
+import com.wireguard.android.jail.enterprise.WorkProfileLogger
 import com.wireguard.android.jail.storage.JailStore
 import kotlinx.coroutines.launch
 
@@ -208,6 +209,13 @@ class JailSetupWizardFragment : Fragment() {
             }
             Activity.RESULT_CANCELED -> {
                 R.string.jail_provisioning_launch_cancelled
+            }
+            9 -> {
+                WorkProfileLogger.e("Provisioning returned code 9 (Xiaomi custom error)")
+                data?.extras?.keySet()?.forEach { key ->
+                    WorkProfileLogger.e("  extra: $key = ${data.extras?.get(key)}")
+                }
+                R.string.jail_provisioning_launch_failed
             }
             else -> R.string.jail_provisioning_launch_failed
         }
