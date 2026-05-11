@@ -46,6 +46,7 @@ object WorkProfileLogger {
         }
         d("WorkProfileLogger initialised, file=${logFile.absolutePath}")
         d("App version: ${BuildConfig.VERSION_NAME} (build ${BuildConfig.VERSION_CODE})")
+        d("Build ID: WG-PROVISION-001")
     }
 
     // ── Public API ─────────────────────────────────────────────────────

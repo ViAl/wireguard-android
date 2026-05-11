@@ -8,12 +8,12 @@ import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import com.wireguard.android.R
@@ -34,25 +34,6 @@ class JailSetupWizardFragment : Fragment() {
     private var stepIndex = 0
     private var provisioningManager: ManagedProfileProvisioningManager? = null
     private var provisioningMessageRes: Int? = null
-
-    private val provisioningLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        provisioningMessageRes = when (result.resultCode) {
-            Activity.RESULT_OK -> R.string.jail_provisioning_launch_ok
-            Activity.RESULT_CANCELED -> R.string.jail_provisioning_launch_cancelled
-            else -> R.string.jail_provisioning_launch_failed
-        }
-        if (result.resultCode == Activity.RESULT_OK) {
-            // Run post-provisioning as a safety net — JailDeviceAdminReceiver should have
-            // already called PostProvisioningHandler from onProfileProvisioningComplete,
-            // but calling it again is idempotent and ensures UI reflects the final state.
-            PostProvisioningHandler.run(requireContext())
-            binding?.jailWizardProvisioningAction?.let {
-                it.isEnabled = false
-                it.text = getString(R.string.jail_provisioning_done)
-            }
-        }
-        refreshProvisioningState()
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -88,11 +69,24 @@ class JailSetupWizardFragment : Fragment() {
         }
         binding?.jailWizardProvisioningAction?.setOnClickListener {
             val manager = provisioningManager ?: return@setOnClickListener
-            runCatching { provisioningLauncher.launch(manager.createProvisioningIntent()) }
-                .onFailure {
+            val intent = manager.createProvisioningIntent()
+            if (intent != null) {
+                try {
+                    startActivityForResult(intent, REQUEST_PROVISION_MANAGED_PROFILE)
+                } catch (e: IllegalStateException) {
+                    // Fragment not attached — try from activity (Island fallback)
+                    try {
+                        requireActivity().startActivity(intent)
+                        requireActivity().finish()
+                    } catch (e2: Exception) {
+                        provisioningMessageRes = R.string.jail_provisioning_launch_failed
+                        refreshProvisioningState()
+                    }
+                } catch (e: Exception) {
                     provisioningMessageRes = R.string.jail_provisioning_launch_failed
                     refreshProvisioningState()
                 }
+            }
         }
         binding?.jailWizardAdbAction?.setOnClickListener {
             showAdbProvisioningInstructions()
@@ -203,7 +197,25 @@ class JailSetupWizardFragment : Fragment() {
         super.onDestroyView()
     }
 
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQUEST_PROVISION_MANAGED_PROFILE) return
+
+        provisioningMessageRes = when (resultCode) {
+            Activity.RESULT_OK -> {
+                PostProvisioningHandler.run(requireContext())
+                R.string.jail_provisioning_launch_ok
+            }
+            Activity.RESULT_CANCELED -> {
+                R.string.jail_provisioning_launch_cancelled
+            }
+            else -> R.string.jail_provisioning_launch_failed
+        }
+        refreshProvisioningState()
+    }
+
     companion object {
         private const val KEY_STEP = "jail_wizard_step"
+        private const val REQUEST_PROVISION_MANAGED_PROFILE = 1001
     }
 }
