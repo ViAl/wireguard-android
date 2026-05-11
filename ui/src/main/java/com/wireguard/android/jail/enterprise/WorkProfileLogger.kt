@@ -6,6 +6,7 @@ package com.wireguard.android.jail.enterprise
 
 import android.content.Context
 import android.util.Log
+import com.wireguard.android.BuildConfig
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -44,6 +45,7 @@ object WorkProfileLogger {
             logFile.delete()
         }
         d("WorkProfileLogger initialised, file=${logFile.absolutePath}")
+        d("App version: ${BuildConfig.VERSION_NAME} (build ${BuildConfig.VERSION_CODE})")
     }
 
     // ── Public API ─────────────────────────────────────────────────────
