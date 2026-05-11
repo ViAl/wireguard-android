@@ -40,7 +40,7 @@ class ManagedProfileProvisioningManager(
         }
 
         val provisioningIntent = createProvisioningIntent()
-        val provisioningLaunchable = capabilityChecker.isProvisioningIntentLaunchable(provisioningIntent)
+        val provisioningLaunchable = provisioningIntent != null && capabilityChecker.isProvisioningIntentLaunchable(provisioningIntent)
 
         return ProvisioningSnapshot(
             isProvisioningSupported = provisioningSupported,
@@ -52,8 +52,16 @@ class ManagedProfileProvisioningManager(
         )
     }
 
-    fun createProvisioningIntent(): Intent = Intent(DevicePolicyManager.ACTION_PROVISION_MANAGED_PROFILE).apply {
-        putExtra(DevicePolicyManager.EXTRA_PROVISIONING_DEVICE_ADMIN_COMPONENT_NAME, adminComponent)
+    fun createProvisioningIntent(): Intent? {
+        val intent = Intent(DevicePolicyManager.ACTION_PROVISION_MANAGED_PROFILE).apply {
+            putExtra(DevicePolicyManager.EXTRA_PROVISIONING_DEVICE_ADMIN_COMPONENT_NAME, adminComponent)
+            putExtra(DevicePolicyManager.EXTRA_PROVISIONING_SKIP_ENCRYPTION, true)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                putExtra(DevicePolicyManager.EXTRA_PROVISIONING_SKIP_USER_CONSENT, true)
+            }
+        }
+        if (intent.resolveActivity(context.packageManager) == null) return null
+        return intent
     }
 
     data class ProvisioningSnapshot(
