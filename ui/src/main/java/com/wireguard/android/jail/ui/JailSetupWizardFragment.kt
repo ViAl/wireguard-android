@@ -5,13 +5,19 @@
 package com.wireguard.android.jail.ui
 
 import android.app.Activity
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
+import com.wireguard.android.BuildConfig
 import com.wireguard.android.R
 import com.wireguard.android.databinding.JailSetupWizardFragmentBinding
 import com.wireguard.android.jail.domain.WorkProfileSetupWizard
@@ -79,6 +85,9 @@ class JailSetupWizardFragment : Fragment() {
                     refreshProvisioningState()
                 }
         }
+        binding?.jailWizardAdbAction?.setOnClickListener {
+            showAdbProvisioningInstructions()
+        }
         bindStep()
         refreshProvisioningState(clearTransientMessage = true)
     }
@@ -141,9 +150,43 @@ class JailSetupWizardFragment : Fragment() {
         binding.jailWizardProvisioningAction.isEnabled =
             snapshot.canLaunchProvisioning && !snapshot.managedProfileLikelyPresent
 
+        // Show ADB alternative when standard provisioning is not available
+        // (e.g. isProvisioningAllowed returns false or intent not launchable on certain OEMs).
+        val showAdbOption = !snapshot.canLaunchProvisioning && 
+            !snapshot.managedProfileLikelyPresent &&
+            snapshot.isProvisioningSupported
+        binding.jailWizardAdbAction.visibility = if (showAdbOption) View.VISIBLE else View.GONE
+        binding.jailWizardAdbLabel.visibility = if (showAdbOption) View.VISIBLE else View.GONE
+
         val messageRes = provisioningMessageRes
         binding.jailWizardProvisioningMessage.text = if (messageRes != null) getString(messageRes) else ""
         binding.jailWizardProvisioningMessage.visibility = if (messageRes != null) View.VISIBLE else View.GONE
+    }
+
+    /**
+     * Shows ADB provisioning instructions and copies the ADB command to clipboard.
+     */
+    private fun showAdbProvisioningInstructions() {
+        val context = requireContext()
+        val packageName = context.packageName
+        val adminComponent = "${packageName}/.jail.enterprise.JailDeviceAdminReceiver"
+        val adbCommand = buildString {
+            appendLine("# 1. Create managed profile via ADB:")
+            appendLine("adb shell dpm create-profile ${packageName}")
+            appendLine()
+            appendLine("# 2. Set as profile owner:")
+            appendLine("adb shell dpm set-profile-owner ${packageName}/$adminComponent")
+            appendLine()
+            appendLine("# Note: If step 2 fails, the profile may already exist.")
+            appendLine("# Check user ID and try adjusting:")
+            appendLine("adb shell dpm set-profile-owner --user 10 $packageName/$adminComponent")
+        }
+
+        // Copy to clipboard
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+        clipboard?.setPrimaryClip(ClipData.newPlainText("ADB provisioning", adbCommand))
+
+        Toast.makeText(context, R.string.jail_provisioning_adb_copied, Toast.LENGTH_LONG).show()
     }
 
     override fun onDestroyView() {

@@ -56,6 +56,12 @@ class DpcPackageInstaller(
     /**
      * Quick check whether DPC-based installation is *likely* to work,
      * without actually performing the install.
+     *
+     * ADB provisioning path: when set-profile-owner is run via ADB, the app
+     * becomes profile owner immediately but [DevicePolicyManager.isProfileOwnerApp]
+     * may return false on some OEMs (Samsung, Xiaomi) immediately after
+     * provisioning. We use a fallback check via shared preferences to detect
+     * this case.
      */
     fun isAvailable(): DpcAvailability {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
@@ -88,10 +94,21 @@ class DpcPackageInstaller(
         // Check via JailDeviceAdminReceiver (provisioning prefs)
         val provisioned = JailDeviceAdminReceiver().isProvisioned(context)
 
+        // Check via PostProvisioningHandler prefs (ADB provisioning fallback)
+        val adbProvisioned = PostProvisioningHandler.isProvisioned(context)
+
         WorkProfileLogger.d(
             "DpcPackageInstaller: isProfileOwner=$isProfileOwner, isDeviceOwner=$isDeviceOwner, " +
-            "isAdminActive=$isAdminActive, ownershipState=$ownershipState, provisioned=$provisioned"
+            "isAdminActive=$isAdminActive, ownershipState=$ownershipState, provisioned=$provisioned, " +
+            "adbProvisioned=$adbProvisioned"
         )
+
+        // ADB provisioning path: admin active + prefs flag is sufficient
+        // even if isProfileOwnerApp returns false on some OEMs.
+        if (isAdminActive && adbProvisioned) {
+            WorkProfileLogger.d("DpcPackageInstaller: ADB-provisioned via admin+prefs")
+            return DpcAvailability.Available
+        }
 
         if (!isProfileOwner) {
             WorkProfileLogger.d("DpcPackageInstaller: not profile owner (package=${context.packageName})")

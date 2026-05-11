@@ -21,23 +21,13 @@ import android.util.Log
 class JailDeviceAdminReceiver : DeviceAdminReceiver() {
 
     override fun onProfileProvisioningComplete(context: Context, intent: Intent) {
-        val admin = ComponentName(context, JailDeviceAdminReceiver::class.java)
-        val dpm = context.getSystemService(DevicePolicyManager::class.java) ?: return
+        Log.i(TAG, "Profile provisioning complete — running PostProvisioningHandler")
+        WorkProfileLogger.d("JailDeviceAdminReceiver: provisioning complete, running PostProvisioningHandler")
 
-        runCatching {
-            dpm.setProfileName(admin, PROFILE_NAME)
-            dpm.setProfileEnabled(admin)
-            Log.i(TAG, "Profile provisioning complete: name=$PROFILE_NAME")
-            WorkProfileLogger.d("JailDeviceAdminReceiver: provisioning complete, profile=$PROFILE_NAME")
-
-            // Record provisioning success
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            prefs.edit().putBoolean(KEY_PROVISIONED, true).apply()
-            WorkProfileLogger.d("JailDeviceAdminReceiver: provisioning recorded in prefs")
-        }.onFailure {
-            Log.w(TAG, "Failed to finish profile provisioning", it)
-            WorkProfileLogger.e("JailDeviceAdminReceiver: provisioning failed", it)
-        }
+        // Delegate to PostProvisioningHandler which handles all post-provisioning
+        // steps including profile naming, enabling, cross-profile intent filters,
+        // and URI permission grants.
+        PostProvisioningHandler.run(context)
     }
 
     /**
