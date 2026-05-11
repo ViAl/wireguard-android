@@ -77,11 +77,20 @@ object PostProvisioningHandler {
             )
 
             // 4. Grant persistable URI permission to shuttle provider for
-            //    cross-profile communication (API 30+).
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                val shuttleUri = ShuttleProvider.bareContentUri(context)
-                runCatching {
-                    dpm.grantCrossProfileUriPermission(
+            //    cross-profile communication (API 34+).
+            //    Use reflection to avoid compile-time dependency on API 34.
+            if (Build.VERSION.SDK_INT >= 34) {
+                try {
+                    val grantMethod = dpm.javaClass.getMethod(
+                        "grantCrossProfileUriPermission",
+                        ComponentName::class.java,
+                        String::class.java,
+                        android.net.Uri::class.java,
+                        Int::class.java
+                    )
+                    val shuttleUri = ShuttleProvider.bareContentUri(context)
+                    grantMethod.invoke(
+                        dpm,
                         admin,
                         context.packageName,
                         shuttleUri,
@@ -89,8 +98,8 @@ object PostProvisioningHandler {
                         Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
                         Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
                     )
-                }.onFailure {
-                    Log.w(TAG, "grantCrossProfileUriPermission failed (non-fatal)", it)
+                } catch (e: Exception) {
+                    Log.w(TAG, "grantCrossProfileUriPermission failed (non-fatal)", e)
                 }
             }
 
