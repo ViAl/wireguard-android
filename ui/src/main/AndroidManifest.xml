@@ -31,6 +31,12 @@
     <uses-feature
         android:name="android.hardware.camera"
         android:required="false" />
+    <uses-feature
+        android:name="android.software.device_admin"
+        android:required="false" />
+    <uses-feature
+        android:name="android.software.managed_users"
+        android:required="false" />
 
     <permission
         android:name="${applicationId}.permission.CONTROL_TUNNELS"
@@ -107,6 +113,19 @@
         </activity>
 
         <activity
+            android:name=".jail.enterprise.ProvisioningCompletionActivity"
+            android:directBootAware="true"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:permission="android.permission.BIND_DEVICE_ADMIN"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.app.action.PROVISIONING_SUCCESSFUL" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <activity
             android:name=".activity.LogViewerActivity"
             android:exported="false"
             android:label="@string/log_viewer_title">
@@ -141,22 +160,22 @@
 
         <receiver
             android:name=".jail.enterprise.JailDeviceAdminReceiver"
+            android:directBootAware="true"
             android:exported="true"
             android:label="@string/jail_dpc_receiver_label"
             android:permission="android.permission.BIND_DEVICE_ADMIN">
             <meta-data
                 android:name="android.app.device_admin"
                 android:resource="@xml/jail_device_admin_receiver" />
-
-            <intent-filter>
-                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
-                <action android:name="android.app.action.PROFILE_PROVISIONING_COMPLETE" />
-            </intent-filter>
-
-            <!-- Required for DPCCreatePackageInstall notifications -->
             <meta-data
                 android:name="android.app.extra.PROFILE_PROVISIONING_SKIP_ENCRYPTION"
                 android:value="true" />
+            <intent-filter>
+                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+                <action android:name="android.app.action.PROFILE_PROVISIONING_COMPLETE" />
+                <action android:name="android.intent.action.USER_INITIALIZE" />
+                <action android:name="android.app.action.DEVICE_OWNER_CHANGED" />
+            </intent-filter>
         </receiver>
 
         <!-- DPC provisioning content provider — required for managed profile setup -->

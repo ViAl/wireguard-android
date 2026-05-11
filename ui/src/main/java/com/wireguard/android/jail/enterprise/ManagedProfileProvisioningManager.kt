@@ -8,6 +8,7 @@ import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import com.wireguard.android.BuildConfig
 import android.os.Build
 import com.wireguard.android.jail.model.WorkProfileState
 import com.wireguard.android.jail.system.ManagedProfileDetector
@@ -58,6 +59,11 @@ class ManagedProfileProvisioningManager(
             putExtra(DevicePolicyManager.EXTRA_PROVISIONING_SKIP_ENCRYPTION, true)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 putExtra(DevicePolicyManager.EXTRA_PROVISIONING_SKIP_USER_CONSENT, true)
+            }
+            // Xiaomi MIUI workaround: provide dummy account to prevent provisioning cancel
+            if (BuildConfig.DEBUG) {
+                putExtra(DevicePolicyManager.EXTRA_PROVISIONING_ACCOUNT_TO_MIGRATE,
+                    android.accounts.Account("default_account", "miui_yellowpage"))
             }
         }
         if (intent.resolveActivity(context.packageManager) == null) return null
