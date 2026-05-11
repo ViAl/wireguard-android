@@ -8,7 +8,6 @@ import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -17,11 +16,11 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
-import com.wireguard.android.BuildConfig
 import com.wireguard.android.R
 import com.wireguard.android.databinding.JailSetupWizardFragmentBinding
 import com.wireguard.android.jail.domain.WorkProfileSetupWizard
 import com.wireguard.android.jail.enterprise.ManagedProfileProvisioningManager
+import com.wireguard.android.jail.enterprise.PostProvisioningHandler
 import com.wireguard.android.jail.model.WorkProfileState
 import com.wireguard.android.jail.storage.JailStore
 import kotlinx.coroutines.launch
@@ -41,6 +40,16 @@ class JailSetupWizardFragment : Fragment() {
             Activity.RESULT_OK -> R.string.jail_provisioning_launch_ok
             Activity.RESULT_CANCELED -> R.string.jail_provisioning_launch_cancelled
             else -> R.string.jail_provisioning_launch_failed
+        }
+        if (result.resultCode == Activity.RESULT_OK) {
+            // Run post-provisioning as a safety net — JailDeviceAdminReceiver should have
+            // already called PostProvisioningHandler from onProfileProvisioningComplete,
+            // but calling it again is idempotent and ensures UI reflects the final state.
+            PostProvisioningHandler.run(requireContext())
+            binding?.jailWizardProvisioningAction?.let {
+                it.isEnabled = false
+                it.text = getString(R.string.jail_provisioning_done)
+            }
         }
         refreshProvisioningState()
     }

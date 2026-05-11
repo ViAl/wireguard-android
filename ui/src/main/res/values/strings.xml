@@ -535,6 +535,7 @@
     <string name="jail_provisioning_adb_label">Standard provisioning is not available on this device. You can use ADB to set up the profile manually.</string>
     <string name="jail_provisioning_adb_button">Show ADB instructions</string>
     <string name="jail_provisioning_adb_copied">ADB provisioning command copied to clipboard</string>
+    <string name="jail_provisioning_done">✓ Work profile configured</string>
     <string name="jail_detail_work_profile_title">Work profile app availability</string>
     <string name="jail_detail_work_profile_state_installed">Installed in work profile</string>
     <string name="jail_detail_work_profile_state_auto">Automatic install is available</string>
