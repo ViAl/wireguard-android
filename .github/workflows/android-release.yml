@@ -39,7 +39,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          # tunnel/tools/* relies on git submodules for native build inputs.
           submodules: recursive
 
       - name: Set up Java 17
@@ -82,7 +81,19 @@ jobs:
           echo "CI_VERSION_CODE=${CI_VERSION_CODE}" >> "$GITHUB_ENV"
           echo "Building version: ${CI_VERSION_NAME} (${CI_VERSION_CODE})"
 
-      - name: Build release APK (unsigned by default)
+      - name: Decode keystore and set signing env vars
+        id: keystore
+        if: ${{ env.ANDROID_KEYSTORE_BASE64 != '' }}
+        shell: bash
+        run: |
+          set -euxo pipefail
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > release.keystore
+          echo "ANDROID_KEYSTORE_PATH=${PWD}/release.keystore" >> "$GITHUB_ENV"
+          echo "ANDROID_KEYSTORE_PASSWORD=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" >> "$GITHUB_ENV"
+          echo "ANDROID_KEY_ALIAS=${{ secrets.ANDROID_KEY_ALIAS }}" >> "$GITHUB_ENV"
+          echo "ANDROID_KEY_PASSWORD=${{ secrets.ANDROID_KEY_PASSWORD }}" >> "$GITHUB_ENV"
+
+      - name: Build release APK (signed via Gradle when keystore available)
         shell: bash
         run: |
           set -euxo pipefail
@@ -90,78 +101,35 @@ jobs:
             -PwireguardVersionCode="${CI_VERSION_CODE}" \
             -PwireguardVersionName="${CI_VERSION_NAME}"
 
-      - name: Locate generated APK
+      - name: Locate generated APK (signed or not)
         id: apk
         shell: bash
         run: |
           set -euxo pipefail
-          unsigned_apk="$(find ui/build/outputs/apk/release -type f -name '*-release-unsigned.apk' | head -n 1)"
-          if [ -z "${unsigned_apk}" ]; then
-            echo "No unsigned release APK found" >&2
+          apk="$(find ui/build/outputs/apk/release -type f -name '*-release.apk' ! -name '*-release-unsigned.apk' | head -n 1)"
+          if [ -z "${apk}" ]; then
+            # fallback to unsigned if no signed found (e.g. no keystore configured)
+            apk="$(find ui/build/outputs/apk/release -type f -name '*-release-unsigned.apk' | head -n 1)"
+          fi
+          if [ -z "${apk}" ]; then
+            echo "No release APK found" >&2
             exit 1
           fi
-          echo "unsigned_apk=${unsigned_apk}" >> "$GITHUB_OUTPUT"
-
-      - name: Decode keystore (optional)
-        id: keystore
-        if: ${{ env.ANDROID_KEYSTORE_BASE64 != '' }}
-        shell: bash
-        run: |
-          set -euxo pipefail
-          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > release.keystore
-          echo "keystore_path=release.keystore" >> "$GITHUB_OUTPUT"
-
-      - name: Sign APK (optional)
-        id: sign
-        if: ${{ steps.keystore.outputs.keystore_path != '' }}
-        shell: bash
-        env:
-          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: |
-          set -euxo pipefail
-          signed_apk="ui/build/outputs/apk/release/wireguard-release.apk"
-          "$ANDROID_HOME/build-tools/${ANDROID_BUILD_TOOLS}/apksigner" sign \
-            --ks "${{ steps.keystore.outputs.keystore_path }}" \
-            --ks-key-alias "$KEY_ALIAS" \
-            --ks-pass "pass:$KEYSTORE_PASSWORD" \
-            --key-pass "pass:$KEY_PASSWORD" \
-            --out "$signed_apk" \
-            "${{ steps.apk.outputs.unsigned_apk }}"
-          "$ANDROID_HOME/build-tools/${ANDROID_BUILD_TOOLS}/apksigner" verify "$signed_apk"
-          echo "final_apk=$signed_apk" >> "$GITHUB_OUTPUT"
-
-      - name: Use unsigned APK when signing is not configured
-        id: final
-        if: ${{ steps.sign.outputs.final_apk == '' }}
-        shell: bash
-        run: |
-          set -euxo pipefail
-          echo "final_apk=${{ steps.apk.outputs.unsigned_apk }}" >> "$GITHUB_OUTPUT"
-
-      - name: Build artifact name
-        id: artifact_name
-        shell: bash
-        env:
-          REF_NAME: ${{ github.ref_name }}
-        run: |
-          set -euxo pipefail
-          sanitized_ref="${REF_NAME//\//-}"
-          echo "name=wireguard-android-apk-${sanitized_ref}" >> "$GITHUB_OUTPUT"
+          echo "final_apk=${apk}" >> "$GITHUB_OUTPUT"
+          echo "APK: ${apk}"
 
       - name: Upload APK as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: wireguard-android-apk-${{ github.run_id }}
-          path: ${{ steps.sign.outputs.final_apk || steps.final.outputs.final_apk }}
+          name: wireguard-android-apk
+          path: ${{ steps.apk.outputs.final_apk }}
           if-no-files-found: error
 
       - name: Optionally push APK to artifacts branch
         if: ${{ github.event_name != 'pull_request' && ((github.event_name == 'workflow_dispatch' && inputs.push_to_artifacts_branch) || vars.PUSH_ARTIFACTS_BRANCH == 'true') }}
         shell: bash
         env:
-          FINAL_APK: ${{ steps.sign.outputs.final_apk || steps.final.outputs.final_apk }}
+          FINAL_APK: ${{ steps.apk.outputs.final_apk }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euxo pipefail
@@ -196,5 +164,4 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           generate_release_notes: true
-          files: ${{ steps.sign.outputs.final_apk || steps.final.outputs.final_apk }}
-
+          files: ${{ steps.apk.outputs.final_apk }}

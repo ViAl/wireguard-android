@@ -27,11 +27,26 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
         isCoreLibraryDesugaringEnabled = true
     }
+    signingConfigs {
+        create("fromEnv") {
+            val keystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
+            val keystorePass = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+            val keyAlias = System.getenv("ANDROID_KEY_ALIAS")
+            val keyPass = System.getenv("ANDROID_KEY_PASSWORD")
+            if (keystorePath != null) {
+                storeFile = file(keystorePath)
+                storePassword = keystorePass ?: ""
+                keyAlias = keyAlias ?: ""
+                keyPassword = keyPass ?: ""
+            }
+        }
+    }
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles("proguard-android-optimize.txt")
+            signingConfig = signingConfigs.findByName("fromEnv")
             packaging {
                 resources {
                     excludes += "DebugProbesKt.bin"
