@@ -30,14 +30,11 @@ android {
     signingConfigs {
         create("fromEnv") {
             val keystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
-            val keystorePass = System.getenv("ANDROID_KEYSTORE_PASSWORD")
-            val keyAlias = System.getenv("ANDROID_KEY_ALIAS")
-            val keyPass = System.getenv("ANDROID_KEY_PASSWORD")
             if (keystorePath != null) {
                 storeFile = file(keystorePath)
-                storePassword = keystorePass ?: ""
-                keyAlias = keyAlias ?: ""
-                keyPassword = keyPass ?: ""
+                storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD") ?: ""
+                keyAlias = System.getenv("ANDROID_KEY_ALIAS") ?: ""
+                keyPassword = System.getenv("ANDROID_KEY_PASSWORD") ?: ""
             }
         }
     }
