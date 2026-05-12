@@ -113,12 +113,10 @@ class JailAppRepository(
                 .thenBy(String.CASE_INSENSITIVE_ORDER) { it.packageName }
 
         private fun jailAppsSortTier(app: JailAppInfo): Int {
-            val selected = app.isSelectedForJail
-            val system = app.isSystemApp
             return when {
-                selected && !system -> 0
-                selected && system -> 1
-                !selected && !system -> 2
+                app.isSelectedForJail && !app.isSystemApp -> 0
+                app.isSelectedForJail && app.isSystemApp -> 1
+                !app.isSelectedForJail && !app.isSystemApp -> 2
                 else -> 3
             }
         }
