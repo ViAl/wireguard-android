@@ -250,9 +250,20 @@
     <string name="jail_inactive">Jail Inactive</string>
     <string name="jail_nav_setup">Setup</string>
     <string name="jail_nav_apps">Apps</string>
-    
     <string name="jail_nav_report">Report</string>
-    
+    <string name="jail_help_title">Understanding the Jail Audit</string>
+    <string name="jail_help_can_title">What Jail can limit</string>
+    <string name="jail_help_can_body">Jail can reduce the signals available to an app. This includes disabling clipboard access, camera, microphone, and location when the app is not in the foreground. Some of these protections are built into the work profile framework itself.</string>
+    <string name="jail_help_cannot_title">What Jail cannot limit</string>
+    <string name="jail_help_cannot_body">Jail does not provide sandbox-level isolation. Apps can still observe certain device info, network-level signals, and timing-based inference. The work profile is not a hardware sandbox. Check the app-specific risk report for a detailed breakdown.</string>
+    <string name="jail_report_title">Risk report</string>
+    <string name="jail_report_copy">Copy report</string>
+    <string name="jail_report_copied">Report copied to clipboard</string>
+    <string name="jail_report_intro">What %s can still see or infer about you</string>
+    <string name="jail_report_empty_title">No apps selected</string>
+    <string name="jail_report_empty_body">Select an app in the Jail tab to see its risk report.</string>
+    <string name="jail_report_open_details">Open app details</string>
+    <string name="jail_wizard_progress_format">Step %1$d of %2$d</string>
     <string name="jail_apps_search_hint">Search installed apps</string>
     <string name="jail_apps_empty">No installed apps match your search.</string>
     <plurals name="jail_apps_summary_selected">
