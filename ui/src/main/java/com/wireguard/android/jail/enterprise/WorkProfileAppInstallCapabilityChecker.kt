@@ -7,12 +7,18 @@ package com.wireguard.android.jail.enterprise
 import android.content.Context
 import android.content.Intent
 import android.content.pm.LauncherApps
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
+import android.os.Bundle
 import android.os.Process
+import android.os.UserHandle
 import com.wireguard.android.jail.domain.WorkProfileInstallGuide
 import com.wireguard.android.jail.model.WorkProfileAppAction
 import com.wireguard.android.jail.model.WorkProfileAppAvailability
 import com.wireguard.android.jail.model.WorkProfileAppInstallCapability
 import com.wireguard.android.jail.model.WorkProfileInstallEnvironmentReason
+import com.wireguard.android.jail.shuttle.WorkProfileCloner
 
 open class WorkProfileAppInstallCapabilityChecker(
     context: Context,
@@ -164,14 +170,55 @@ open class WorkProfileAppInstallCapabilityChecker(
         private val launcherApps = context.getSystemService(LauncherApps::class.java)
 
         override fun canLaunchStoreIntent(packageName: String): Boolean {
-            if (canLaunchStoreInOtherProfile()) return true
+            WorkProfileLogger.d("canLaunchStoreIntent($packageName)")
+            if (canLaunchStoreInOtherProfile()) {
+                WorkProfileLogger.d("canLaunchStoreInOtherProfile = true")
+                return true
+            }
             val primary = WorkProfileInstallGuide.playStoreDetailsIntent(packageName)
             val fallback = WorkProfileInstallGuide.playStoreHttpsIntent(packageName)
-            return resolvable(primary) || resolvable(fallback)
+            val result = resolvable(primary) || resolvable(fallback)
+            WorkProfileLogger.d("resolvable primary=$primary = ${resolvable(primary)}, fallback=$fallback = ${resolvable(fallback)}")
+            return result
         }
 
         override fun launchStoreIntent(packageName: String): Boolean {
-            if (launchStoreInOtherProfile()) return true
+            WorkProfileLogger.d("launchStoreIntent($packageName)")
+
+            // Strategy 0: DPC-based install into managed work profile.
+            // This is the most direct path — it clones the APK silently,
+            // without opening any store UI.
+            val dpcInstaller = DpcPackageInstaller(appContext)
+            val dpcAvailable = dpcInstaller.isAvailable()
+            WorkProfileLogger.d("launchStoreIntent: DPC available=${dpcAvailable.isAvailable}")
+            if (dpcAvailable.isAvailable) {
+                val result = dpcInstaller.install(packageName)
+                WorkProfileLogger.d("launchStoreIntent: DPC result=$result")
+                if (result.isSuccess) {
+                    WorkProfileLogger.d("launchStoreIntent: DPC install succeeded, skipping store UI")
+                    return true
+                }
+            }
+
+            // Strategy 0.5: WorkProfileCloner — try DPC install or
+            // ACTION_INSTALL_PACKAGE directly in parent profile.
+            val profiles = otherProfiles()
+            if (profiles.isNotEmpty()) {
+            val cloned = WorkProfileCloner.clone(appContext, packageName, null, profiles.first())
+                WorkProfileLogger.d("launchStoreIntent: WorkProfileCloner clone result=$cloned")
+                if (cloned != WorkProfileCloner.RESULT_NO_SYS_MARKET) {
+                    WorkProfileLogger.d("launchStoreIntent: WorkProfileCloner succeeded (result=$cloned)")
+                    if (cloned == WorkProfileCloner.RESULT_OK_GOOGLE_PLAY) {
+                        WorkProfileLogger.d("launchStoreIntent: Shuttle opened Play Store inside work profile")
+                    }
+                    return true
+                }
+            }
+
+            if (launchStoreInOtherProfile(packageName)) {
+                WorkProfileLogger.d("launchStoreInOtherProfile returned true")
+                return true
+            }
 
             val intents = listOf(
                 WorkProfileInstallGuide.playStoreDetailsIntent(packageName),
@@ -179,30 +226,122 @@ open class WorkProfileAppInstallCapabilityChecker(
             ).map { it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
 
             val candidate = intents.firstOrNull { resolvable(it) } ?: return false
+            WorkProfileLogger.d("launchStoreIntent: primary fallback candidate=$candidate")
             return runCatching {
                 appContext.startActivity(candidate)
                 true
             }.getOrDefault(false)
         }
 
-        private fun canLaunchStoreInOtherProfile(): Boolean =
-            otherProfiles().any { handle ->
-                runCatching { launcherApps?.getActivityList(PLAY_STORE_PACKAGE, handle).orEmpty().isNotEmpty() }
-                    .getOrDefault(false)
+        private fun canLaunchStoreInOtherProfile(): Boolean {
+            val profiles = otherProfiles()
+            WorkProfileLogger.d("canLaunchStoreInOtherProfile: profiles=$profiles (${profiles.size})")
+            return profiles.any { handle ->
+                val activities = runCatching { launcherApps?.getActivityList(PLAY_STORE_PACKAGE, handle).orEmpty() }.getOrDefault(emptyList())
+                WorkProfileLogger.d("  profile $handle: Play Store activities=${activities.size}")
+                activities.isNotEmpty()
+            }
+        }
+
+        private fun launchStoreInOtherProfile(packageName: String): Boolean {
+            val profiles = otherProfiles()
+            WorkProfileLogger.d("launchStoreInOtherProfile($packageName): profiles=$profiles (${profiles.size})")
+            return profiles.any { handle ->
+                launchStoreInProfile(handle, packageName)
+            }
+        }
+
+        private fun launchStoreInProfile(handle: UserHandle, packageName: String): Boolean {
+            WorkProfileLogger.d("launchStoreInProfile: handle=$handle package=$packageName")
+
+            // Strategy 1 (primary, API 36+): LauncherApps.getAppMarketActivityIntent.
+            // Returns an IntentSender that opens Play Store for the given package
+            // in the target profile.
+            if (Build.VERSION.SDK_INT >= 36) {
+                val ok = try {
+                    val la = appContext.getSystemService(Context.LAUNCHER_APPS_SERVICE) as? LauncherApps
+                    if (la != null) {
+                        val sender = la.getAppMarketActivityIntent(packageName, handle)
+                        if (sender != null) {
+                            WorkProfileLogger.d("Strategy 1a: getAppMarketActivityIntent handle=$handle")
+                            sender.sendIntent(appContext, 0, null, null, null)
+                            WorkProfileLogger.d("Strategy 1a: succeeded")
+                            true
+                        } else {
+                            WorkProfileLogger.e("Strategy 1a: getAppMarketActivityIntent returned null")
+                            false
+                        }
+                    } else {
+                        WorkProfileLogger.e("Strategy 1a: LauncherApps service is null")
+                        false
+                    }
+                } catch (e: Exception) {
+                    WorkProfileLogger.e("Strategy 1a failed: ${e.message}", e)
+                    false
+                }
+                if (ok) return true
             }
 
-        private fun launchStoreInOtherProfile(): Boolean {
-            val candidate = otherProfiles().firstNotNullOfOrNull { handle ->
-                val activity = runCatching {
-                    launcherApps?.getActivityList(PLAY_STORE_PACKAGE, handle).orEmpty().firstOrNull()
-                }.getOrNull() ?: return@firstNotNullOfOrNull null
-                handle to activity.componentName
-            } ?: return false
+            // Strategy 1b (API 33-35): LauncherApps.startActivity(Intent, UserHandle, Rect, Bundle)
+            // via reflection — the method exists at runtime but was removed from the compile-only
+            // API 36+ stubs in favor of more specific methods like startMainActivity.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                val ok = try {
+                    val la = appContext.getSystemService(Context.LAUNCHER_APPS_SERVICE)
+                    if (la != null) {
+                        val launcherClass = la.javaClass
+                        val storeIntent = Intent(Intent.ACTION_VIEW,
+                            Uri.parse("market://details?id=$packageName"))
+                            .setPackage(PLAY_STORE_PACKAGE)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        val startMethod = launcherClass.getMethod(
+                            "startActivity",
+                            Intent::class.java,
+                            UserHandle::class.java,
+                            android.graphics.Rect::class.java,
+                            Bundle::class.java
+                        )
+                        WorkProfileLogger.d("Strategy 1b: LauncherApps startActivity(Intent) ref handle=$handle")
+                        startMethod.invoke(la, storeIntent, handle, null, null)
+                        WorkProfileLogger.d("Strategy 1b: succeeded")
+                        true
+                    } else {
+                        WorkProfileLogger.e("Strategy 1b: LauncherApps service is null")
+                        false
+                    }
+                } catch (e: Exception) {
+                    WorkProfileLogger.e("Strategy 1b failed: ${e.message}", e)
+                    false
+                }
+                if (ok) return true
+            }
 
-            return runCatching {
-                launcherApps?.startMainActivity(candidate.second, candidate.first, null, null)
+            // Strategy 2 (fallback): market:// details intent without setPackage.
+            val fallbackOk = runCatching {
+                val intent = Intent(Intent.ACTION_VIEW,
+                    Uri.parse("market://details?id=$packageName"))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                WorkProfileLogger.d("Strategy 2: market:// fallback intent=$intent")
+                appContext.startActivity(intent)
                 true
             }.getOrDefault(false)
+            if (fallbackOk) { WorkProfileLogger.d("Strategy 2: succeeded"); return true }
+            else { WorkProfileLogger.e("Strategy 2 failed") }
+
+            // Strategy 3 (last resort): https://play.google.com URL.
+            val httpsOk = runCatching {
+                val url = "https://play.google.com/store/apps/details?id=$packageName"
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                WorkProfileLogger.d("Strategy 3: https fallback intent=$intent")
+                appContext.startActivity(intent)
+                true
+            }.getOrDefault(false)
+            if (httpsOk) { WorkProfileLogger.d("Strategy 3: succeeded"); return true }
+            else { WorkProfileLogger.e("Strategy 3 failed") }
+
+            WorkProfileLogger.e("All strategies exhausted for handle=$handle package=$packageName")
+            return false
         }
 
         private fun otherProfiles() = launcherApps?.profiles.orEmpty().filterNot { it == Process.myUserHandle() }

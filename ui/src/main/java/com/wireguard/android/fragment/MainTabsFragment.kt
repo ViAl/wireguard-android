@@ -5,6 +5,7 @@
 package com.wireguard.android.fragment
 
 import android.os.Bundle
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -61,8 +62,16 @@ class MainTabsFragment : Fragment() {
                 (activity as? Listener)?.onMainTabChanged(newTab)
             }
         })
-        showCurrentTab()
-        (activity as? Listener)?.onMainTabChanged(selectedTab)
+        try {
+            showCurrentTab()
+        } catch (e: IllegalStateException) {
+            Log.w(TAG, "showCurrentTab failed during view creation (re-entrant)", e)
+        }
+        try {
+            (activity as? Listener)?.onMainTabChanged(selectedTab)
+        } catch (e: IllegalStateException) {
+            Log.w(TAG, "onMainTabChanged failed during view creation (re-entrant)", e)
+        }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -77,19 +86,31 @@ class MainTabsFragment : Fragment() {
 
     private fun showCurrentTab() {
         val fragmentManager = childFragmentManager
+        if (fragmentManager.isStateSaved) {
+            Log.w(TAG, "showCurrentTab skipped: state is already saved")
+            return
+        }
+        if (fragmentManager.isDestroyed) {
+            Log.w(TAG, "showCurrentTab skipped: fragment manager is destroyed")
+            return
+        }
         val targetTag = selectedTab.tag
         val targetFragment = fragmentManager.findFragmentByTag(targetTag) ?: createFragmentFor(selectedTab)
-        fragmentManager.commit {
-            setReorderingAllowed(true)
-            MainTab.entries.forEach { tab ->
-                fragmentManager.findFragmentByTag(tab.tag)?.let { existing ->
-                    if (existing === targetFragment) show(existing) else hide(existing)
+        try {
+            fragmentManager.commit {
+                setReorderingAllowed(true)
+                MainTab.entries.forEach { tab ->
+                    fragmentManager.findFragmentByTag(tab.tag)?.let { existing ->
+                        if (existing === targetFragment) show(existing) else hide(existing)
+                    }
                 }
+                if (targetFragment.isAdded)
+                    show(targetFragment)
+                else
+                    add(R.id.main_tab_content, targetFragment, targetTag)
             }
-            if (targetFragment.isAdded)
-                show(targetFragment)
-            else
-                add(R.id.main_tab_content, targetFragment, targetTag)
+        } catch (e: IllegalStateException) {
+            Log.w(TAG, "showCurrentTab commit failed", e)
         }
     }
 
@@ -100,6 +121,7 @@ class MainTabsFragment : Fragment() {
     }
 
     companion object {
+        private const val TAG = "MainTabsFragment"
         private const val KEY_SELECTED_TAB = "selected_tab"
     }
 }

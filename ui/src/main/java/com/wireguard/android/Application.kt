@@ -22,6 +22,8 @@ import com.wireguard.android.backend.GoBackend
 import com.wireguard.android.backend.WgQuickBackend
 import com.wireguard.android.configStore.FileConfigStore
 import com.wireguard.android.jail.JailComponent
+import com.wireguard.android.jail.enterprise.PostProvisioningHandler
+import com.wireguard.android.jail.enterprise.WorkProfileLogger
 import com.wireguard.android.model.TunnelManager
 import com.wireguard.android.updater.Updater
 import com.wireguard.android.util.RootShell
@@ -87,6 +89,7 @@ class Application : android.app.Application() {
     override fun onCreate() {
         Log.i(TAG, USER_AGENT)
         super.onCreate()
+        WorkProfileLogger.init(this)
         DynamicColors.applyToActivitiesIfAvailable(this)
         rootShell = RootShell(applicationContext)
         toolsInstaller = ToolsInstaller(applicationContext, rootShell)
@@ -111,6 +114,17 @@ class Application : android.app.Application() {
         tunnelManager = TunnelManager(FileConfigStore(applicationContext))
         tunnelManager.onCreate()
         jailComponent = JailComponent(applicationContext, coroutineScope, tunnelManager)
+
+        // Auto-detect ADB/NFC provisioning: if the app is already a profile owner
+        // but hasn't completed post-provisioning steps, run them now.
+        runCatching {
+            val prefs = getSharedPreferences("provisioning", Context.MODE_PRIVATE)
+            if (!prefs.getBoolean("profile_provisioned", false)) {
+                PostProvisioningHandler.run(this)
+            }
+        }.onFailure {
+            Log.w(TAG, "Post-provisioning auto-detect failed", it)
+        }
         coroutineScope.launch(Dispatchers.IO) {
             try {
                 backend = determineBackend()

@@ -19,6 +19,7 @@ import com.wireguard.android.R
 import com.wireguard.android.fragment.MainTabsFragment
 import com.wireguard.android.fragment.TunnelDetailFragment
 import com.wireguard.android.fragment.TunnelEditorFragment
+import android.util.Log
 import com.wireguard.android.model.ObservableTunnel
 
 /**
@@ -32,8 +33,35 @@ class MainActivity : BaseActivity(), FragmentManager.OnBackStackChangedListener,
     private var backPressedCallback: OnBackPressedCallback? = null
     private var selectedMainTab = MainTabsFragment.MainTab.VPN
 
+    private fun safePopBackStackImmediate(tag: String = "") {
+        val fragmentManager = supportFragmentManager
+        if (fragmentManager.isStateSaved || fragmentManager.isDestroyed) {
+            Log.d(TAG, "safePopBackStackImmediate: skipped ($tag)")
+            return
+        }
+        try {
+            fragmentManager.popBackStackImmediate(0, FragmentManager.POP_BACK_STACK_INCLUSIVE)
+        } catch (e: IllegalStateException) {
+            Log.w(TAG, "safePopBackStackImmediate: ignored ($tag): ${e.message}")
+        }
+    }
+
+    private fun safePopBackStack(tag: String = "") {
+        val fragmentManager = supportFragmentManager
+        if (fragmentManager.isStateSaved || fragmentManager.isDestroyed) {
+            Log.d(TAG, "safePopBackStack: skipped ($tag)")
+            return
+        }
+        try {
+            fragmentManager.popBackStack()
+        } catch (e: IllegalStateException) {
+            Log.w(TAG, "safePopBackStack: ignored ($tag): ${e.message}")
+        }
+    }
+
     private fun handleBackPressed() {
-        val backStackEntries = supportFragmentManager.backStackEntryCount
+        val fragmentManager = supportFragmentManager
+        val backStackEntries = fragmentManager.backStackEntryCount
         // If the two-pane layout does not have an editor open, going back should exit the app.
         if (isTwoPaneLayout && backStackEntries <= 1) {
             finish()
@@ -41,7 +69,7 @@ class MainActivity : BaseActivity(), FragmentManager.OnBackStackChangedListener,
         }
 
         if (backStackEntries >= 1)
-            supportFragmentManager.popBackStack()
+            safePopBackStack("handleBackPressed")
 
         // Deselect the current tunnel on navigating back from the detail pane to the one-pane list.
         if (backStackEntries == 1)
@@ -113,7 +141,7 @@ class MainActivity : BaseActivity(), FragmentManager.OnBackStackChangedListener,
         invalidateOptionsMenu()
         if (tab != MainTabsFragment.MainTab.VPN) {
             selectedTunnel = null
-            supportFragmentManager.popBackStackImmediate(0, FragmentManager.POP_BACK_STACK_INCLUSIVE)
+            safePopBackStackImmediate("onMainTabChanged")
         }
     }
 
@@ -122,24 +150,24 @@ class MainActivity : BaseActivity(), FragmentManager.OnBackStackChangedListener,
         newTunnel: ObservableTunnel?
     ): Boolean {
         val fragmentManager = supportFragmentManager
-        if (fragmentManager.isStateSaved) {
+        if (fragmentManager.isStateSaved || fragmentManager.isDestroyed) {
             return false
         }
         if (selectedMainTab != MainTabsFragment.MainTab.VPN) {
-            fragmentManager.popBackStackImmediate(0, FragmentManager.POP_BACK_STACK_INCLUSIVE)
+            safePopBackStackImmediate("onSelectedTunnelChanged:notVpn")
             return newTunnel == null
         }
 
         val backStackEntries = fragmentManager.backStackEntryCount
         if (newTunnel == null) {
             // Clear everything off the back stack (all editors and detail fragments).
-            fragmentManager.popBackStackImmediate(0, FragmentManager.POP_BACK_STACK_INCLUSIVE)
+            safePopBackStackImmediate("onSelectedTunnelChanged:null")
             return true
         }
         if (backStackEntries == 2) {
             // Pop the editor off the back stack to reveal the detail fragment. Use the immediate
             // method to avoid the editor picking up the new tunnel while it is still visible.
-            fragmentManager.popBackStackImmediate()
+            safePopBackStackImmediate("onSelectedTunnelChanged:popEditor")
         } else if (backStackEntries == 0) {
             // Create and show a new detail fragment.
             fragmentManager.commit {
@@ -157,6 +185,7 @@ class MainActivity : BaseActivity(), FragmentManager.OnBackStackChangedListener,
     }
 
     companion object {
+        private const val TAG = "WireGuard/MainActivity"
         private const val KEY_SELECTED_MAIN_TAB = "selected_main_tab"
     }
 }

@@ -5,18 +5,24 @@
 package com.wireguard.android.jail.ui
 
 import android.app.Activity
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.activity.result.contract.ActivityResultContracts
+import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import com.wireguard.android.R
 import com.wireguard.android.databinding.JailSetupWizardFragmentBinding
 import com.wireguard.android.jail.domain.WorkProfileSetupWizard
 import com.wireguard.android.jail.enterprise.ManagedProfileProvisioningManager
+import com.wireguard.android.jail.enterprise.PostProvisioningHandler
 import com.wireguard.android.jail.model.WorkProfileState
+import com.wireguard.android.jail.enterprise.WorkProfileLogger
 import com.wireguard.android.jail.storage.JailStore
 import kotlinx.coroutines.launch
 
@@ -29,15 +35,6 @@ class JailSetupWizardFragment : Fragment() {
     private var stepIndex = 0
     private var provisioningManager: ManagedProfileProvisioningManager? = null
     private var provisioningMessageRes: Int? = null
-
-    private val provisioningLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        provisioningMessageRes = when (result.resultCode) {
-            Activity.RESULT_OK -> R.string.jail_provisioning_launch_ok
-            Activity.RESULT_CANCELED -> R.string.jail_provisioning_launch_cancelled
-            else -> R.string.jail_provisioning_launch_failed
-        }
-        refreshProvisioningState()
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -73,11 +70,27 @@ class JailSetupWizardFragment : Fragment() {
         }
         binding?.jailWizardProvisioningAction?.setOnClickListener {
             val manager = provisioningManager ?: return@setOnClickListener
-            runCatching { provisioningLauncher.launch(manager.createProvisioningIntent()) }
-                .onFailure {
+            val intent = manager.createProvisioningIntent()
+            if (intent != null) {
+                try {
+                    startActivityForResult(intent, REQUEST_PROVISION_MANAGED_PROFILE)
+                } catch (e: IllegalStateException) {
+                    // Fragment not attached — try from activity (Island fallback)
+                    try {
+                        requireActivity().startActivity(intent)
+                        requireActivity().finish()
+                    } catch (e2: Exception) {
+                        provisioningMessageRes = R.string.jail_provisioning_launch_failed
+                        refreshProvisioningState()
+                    }
+                } catch (e: Exception) {
                     provisioningMessageRes = R.string.jail_provisioning_launch_failed
                     refreshProvisioningState()
                 }
+            }
+        }
+        binding?.jailWizardAdbAction?.setOnClickListener {
+            showAdbProvisioningInstructions()
         }
         bindStep()
         refreshProvisioningState(clearTransientMessage = true)
@@ -141,9 +154,43 @@ class JailSetupWizardFragment : Fragment() {
         binding.jailWizardProvisioningAction.isEnabled =
             snapshot.canLaunchProvisioning && !snapshot.managedProfileLikelyPresent
 
+        // Show ADB alternative when standard provisioning is not available
+        // (e.g. isProvisioningAllowed returns false or intent not launchable on certain OEMs).
+        val showAdbOption = !snapshot.canLaunchProvisioning && 
+            !snapshot.managedProfileLikelyPresent &&
+            snapshot.isProvisioningSupported
+        binding.jailWizardAdbAction.visibility = if (showAdbOption) View.VISIBLE else View.GONE
+        binding.jailWizardAdbLabel.visibility = if (showAdbOption) View.VISIBLE else View.GONE
+
         val messageRes = provisioningMessageRes
         binding.jailWizardProvisioningMessage.text = if (messageRes != null) getString(messageRes) else ""
         binding.jailWizardProvisioningMessage.visibility = if (messageRes != null) View.VISIBLE else View.GONE
+    }
+
+    /**
+     * Shows ADB provisioning instructions and copies the ADB command to clipboard.
+     */
+    private fun showAdbProvisioningInstructions() {
+        val context = requireContext()
+        val packageName = context.packageName
+        val adminComponent = "${packageName}/.jail.enterprise.JailDeviceAdminReceiver"
+        val adbCommand = buildString {
+            appendLine("# 1. Create managed profile via ADB:")
+            appendLine("adb shell dpm create-profile ${packageName}")
+            appendLine()
+            appendLine("# 2. Set as profile owner:")
+            appendLine("adb shell dpm set-profile-owner ${packageName}/$adminComponent")
+            appendLine()
+            appendLine("# Note: If step 2 fails, the profile may already exist.")
+            appendLine("# Check user ID and try adjusting:")
+            appendLine("adb shell dpm set-profile-owner --user 10 $packageName/$adminComponent")
+        }
+
+        // Copy to clipboard
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+        clipboard?.setPrimaryClip(ClipData.newPlainText("ADB provisioning", adbCommand))
+
+        Toast.makeText(context, R.string.jail_provisioning_adb_copied, Toast.LENGTH_LONG).show()
     }
 
     override fun onDestroyView() {
@@ -151,7 +198,32 @@ class JailSetupWizardFragment : Fragment() {
         super.onDestroyView()
     }
 
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQUEST_PROVISION_MANAGED_PROFILE) return
+
+        provisioningMessageRes = when (resultCode) {
+            Activity.RESULT_OK -> {
+                PostProvisioningHandler.run(requireContext())
+                R.string.jail_provisioning_launch_ok
+            }
+            Activity.RESULT_CANCELED -> {
+                R.string.jail_provisioning_launch_cancelled
+            }
+            9 -> {
+                WorkProfileLogger.e("Provisioning returned code 9 (Xiaomi custom error)")
+                data?.extras?.keySet()?.forEach { key ->
+                    WorkProfileLogger.e("  extra: $key = ${data.extras?.get(key)}")
+                }
+                R.string.jail_provisioning_launch_failed
+            }
+            else -> R.string.jail_provisioning_launch_failed
+        }
+        refreshProvisioningState()
+    }
+
     companion object {
         private const val KEY_STEP = "jail_wizard_step"
+        private const val REQUEST_PROVISION_MANAGED_PROFILE = 1001
     }
 }

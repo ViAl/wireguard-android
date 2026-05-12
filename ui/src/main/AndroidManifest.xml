@@ -31,6 +31,12 @@
     <uses-feature
         android:name="android.hardware.camera"
         android:required="false" />
+    <uses-feature
+        android:name="android.software.device_admin"
+        android:required="false" />
+    <uses-feature
+        android:name="android.software.managed_users"
+        android:required="false" />
 
     <permission
         android:name="${applicationId}.permission.CONTROL_TUNNELS"
@@ -95,6 +101,19 @@
             tools:replace="screenOrientation" />
 
         <activity
+            android:name=".jail.enterprise.ProvisioningCompletionActivity"
+            android:directBootAware="true"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:permission="android.permission.BIND_DEVICE_ADMIN"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.app.action.PROVISIONING_SUCCESSFUL" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <activity
             android:name=".activity.LogViewerActivity"
             android:exported="false"
             android:label="@string/log_viewer_title">
@@ -129,18 +148,59 @@
 
         <receiver
             android:name=".jail.enterprise.JailDeviceAdminReceiver"
+            android:directBootAware="true"
             android:exported="true"
             android:label="@string/jail_dpc_receiver_label"
             android:permission="android.permission.BIND_DEVICE_ADMIN">
             <meta-data
                 android:name="android.app.device_admin"
                 android:resource="@xml/jail_device_admin_receiver" />
-
+            <meta-data
+                android:name="android.app.extra.PROFILE_PROVISIONING_SKIP_ENCRYPTION"
+                android:value="true" />
             <intent-filter>
                 <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
                 <action android:name="android.app.action.PROFILE_PROVISIONING_COMPLETE" />
+                <action android:name="android.intent.action.USER_INITIALIZE" />
+                <action android:name="android.app.action.DEVICE_OWNER_CHANGED" />
             </intent-filter>
         </receiver>
+
+        <!-- DPC provisioning content provider — required for managed profile setup -->
+        <provider
+            android:name=".jail.enterprise.JailDpcContentProvider"
+            android:authorities="${applicationId}.dpc"
+            android:exported="true"
+            android:grantUriPermissions="true"
+            android:permission="android.permission.INTERACT_ACROSS_PROFILES"
+            tools:ignore="ExportedContentProvider" />
+
+        <!-- ShuttleProvider — cross-profile lambda execution -->
+        <provider
+            android:name=".jail.shuttle.ShuttleProvider"
+            android:authorities="${applicationId}.shuttle"
+            android:directBootAware="true"
+            android:exported="true"
+            android:grantUriPermissions="true" />
+
+        <!-- ShuttleCarrierActivity — URI permission trampoline (Island pattern)
+             Intent-filter enables cross-profile routing via the system Activity
+             forwarder (package "android") using CATEGORY_PARENT_PROFILE.
+             If forwarder not found, DPM addCrossProfileIntentFilter() is used. -->
+        <activity
+            android:name=".jail.shuttle.ShuttleCarrierActivity"
+            android:directBootAware="true"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="com.wireguard.android.action.SHUTTLE" />
+                <category android:name="com.wireguard.android.category.PARENT_PROFILE" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
         <receiver
             android:name=".model.TunnelManager$IntentReceiver"
             android:exported="true"
