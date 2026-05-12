@@ -6,6 +6,7 @@ package com.wireguard.android.jail.ui
 
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.Context
 import android.os.Bundle
 import android.text.format.DateUtils
 import android.view.LayoutInflater

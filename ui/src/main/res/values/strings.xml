@@ -256,7 +256,6 @@
     <string name="jail_help_can_body">Jail can reduce the signals available to an app. This includes disabling clipboard access, camera, microphone, and location when the app is not in the foreground. Some of these protections are built into the work profile framework itself.</string>
     <string name="jail_help_cannot_title">What Jail cannot limit</string>
     <string name="jail_help_cannot_body">Jail does not provide sandbox-level isolation. Apps can still observe certain device info, network-level signals, and timing-based inference. The work profile is not a hardware sandbox. Check the app-specific risk report for a detailed breakdown.</string>
-    <string name="jail_report_title">Risk report</string>
     <string name="jail_report_copy">Copy report</string>
     <string name="jail_report_copied">Report copied to clipboard</string>
     <string name="jail_report_intro">What %s can still see or infer about you</string>
@@ -338,17 +337,16 @@
     <string name="jail_signal_fg_service_microphone_detail">The app declares a foreground service of type \u201Cmicrophone\u201D, meaning it may keep recording audio while a notification is visible.</string>
     <string name="jail_signal_fg_service_camera_short">Camera foreground service</string>
     <string name="jail_signal_fg_service_camera_detail">The app declares a foreground service of type \u201Ccamera\u201D, meaning it may keep using the camera while a notification is visible.</string>
-    <!-- Phase 4: human-readable report -->
-    <string name="jail_report_title">Risk report</string>
+    <!-- Phase 4: per-bullet phrasing. Keep technically honest. -->
 
-    <string name="jail_report_pending">Audit has not run yet for this app. Open it from the Apps tab or tap \u201CRe-audit\u201D on the details screen.</string>
+    <string name="jail_report_title">Risk report</string>
+    <string name="jail_report_pending">Audit has not run yet for this app. Open it from the Apps tab or tap "Re-audit" on the details screen.</string>
+    <string name="jail_report_overall_risk_format">Overall risk: %1$s</string>
     <string name="jail_report_section_can_see">What this app can likely see</string>
     <string name="jail_report_section_cannot_see">What this app probably cannot see</string>
     <string name="jail_report_section_work_profile">What changes inside a work profile</string>
     <string name="jail_report_section_network">Network metadata that may still leak</string>
     <string name="jail_report_section_residual">Risks that remain even with Jail</string>
-    <string name="jail_report_overall_risk_format">Overall risk: %1$s</string>
-    <!-- Phase 4: per-bullet phrasing. Keep technically honest. -->
     <string name="jail_report_can_see_own_ui">Everything you type, tap, or view inside this app\u2019s own UI.</string>
     <string name="jail_report_can_see_location">Your precise device location while the app is in use.</string>
     <string name="jail_report_can_see_background_location">Your location even while you are not actively using the app.</string>
