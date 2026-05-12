@@ -4,6 +4,8 @@
  */
 package com.wireguard.android.jail.ui
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.os.Bundle
 import android.text.format.DateUtils
 import android.view.LayoutInflater
@@ -25,15 +27,17 @@ import com.wireguard.android.databinding.JailReasonListItemBinding
 import com.wireguard.android.jail.domain.AppAuditManager
 import com.wireguard.android.jail.domain.JailAppRepository
 import com.wireguard.android.jail.domain.JailAuditRepository
+import com.wireguard.android.jail.domain.RiskReportBuilder
 import com.wireguard.android.jail.enterprise.WorkProfileAppCatalogService
 import com.wireguard.android.jail.enterprise.WorkProfileAppInstallService
 import com.wireguard.android.jail.model.AuditSnapshot
 import com.wireguard.android.jail.model.InstallResult
-import kotlinx.coroutines.flow.combine
 import com.wireguard.android.jail.model.JailAppInfo
 import com.wireguard.android.jail.model.RiskReason
 import com.wireguard.android.jail.model.WorkProfileAppAction
 import com.wireguard.android.jail.model.WorkProfileInstallEnvironmentReason
+import com.google.android.material.snackbar.Snackbar
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 /**
@@ -51,6 +55,10 @@ import kotlinx.coroutines.launch
 class JailAppDetailFragment : Fragment() {
     private var binding: JailAppDetailFragmentBinding? = null
     private lateinit var reasonsAdapter: ReasonsAdapter
+    private lateinit var riskFormatter: HumanReadableRiskFormatter
+    private val reportBuilder = RiskReportBuilder()
+    private var currentApp: JailAppInfo? = null
+    private var currentSnapshot: AuditSnapshot? = null
 
     private val repository: JailAppRepository
         get() = Application.getJailComponent().appRepository
@@ -87,6 +95,9 @@ class JailAppDetailFragment : Fragment() {
 
         binding.jailDetailWorkProfileAction.setOnClickListener { onWorkProfileActionClicked() }
 
+        riskFormatter = HumanReadableRiskFormatter(resources)
+        binding.jailDetailRiskReportCopy.setOnClickListener { copyRiskReport() }
+
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 // Combine app metadata (icon, label) with the latest audit snapshot so the UI
@@ -110,6 +121,8 @@ class JailAppDetailFragment : Fragment() {
     }
 
     private fun render(app: JailAppInfo?, snapshot: AuditSnapshot?, refreshing: Boolean) {
+        currentApp = app
+        currentSnapshot = snapshot
         val binding = binding ?: return
         binding.jailDetailIcon.setImageDrawable(app?.icon)
         binding.jailDetailLabel.text = app?.label ?: packageName
@@ -155,6 +168,7 @@ class JailAppDetailFragment : Fragment() {
         binding.jailDetailProgress.visibility = if (refreshing) View.VISIBLE else View.GONE
         binding.jailDetailRefresh.isEnabled = !refreshing
         renderWorkProfileState()
+        renderRiskReport(app, snapshot)
     }
 
     private fun renderWorkProfileState() {
@@ -223,6 +237,31 @@ class JailAppDetailFragment : Fragment() {
         }
         Toast.makeText(requireContext(), messageRes, Toast.LENGTH_SHORT).show()
         renderWorkProfileState()
+    }
+
+    private fun renderRiskReport(app: JailAppInfo?, snapshot: AuditSnapshot?) {
+        val binding = binding ?: return
+        if (app == null) {
+            binding.jailDetailRiskReportCard.visibility = View.GONE
+            return
+        }
+        val report = reportBuilder.build(app, snapshot)
+        binding.jailDetailRiskReportCard.visibility = View.VISIBLE
+        binding.jailDetailRiskReportHeadline.text = riskFormatter.headline(report)
+        binding.jailDetailRiskReportBody.text = riskFormatter.fullReportBody(report)
+    }
+
+    private fun copyRiskReport() {
+        val binding = binding ?: return
+        val app = currentApp ?: return
+        val snap = currentSnapshot
+        val report = reportBuilder.build(app, snap)
+        val cm = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        cm.setPrimaryClip(ClipData.newPlainText(
+            getString(R.string.jail_report_title),
+            riskFormatter.clipboardText(report)
+        ))
+        Snackbar.make(binding.root, R.string.jail_report_copied, Snackbar.LENGTH_SHORT).show()
     }
 
     private fun triggerRefresh() {

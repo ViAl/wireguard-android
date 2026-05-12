@@ -4,7 +4,6 @@
  */
 package com.wireguard.android.jail.ui
 
-import com.wireguard.android.jail.model.JailDestination
 import com.wireguard.android.jail.viewmodel.JailViewModel
 
 /**
@@ -14,7 +13,6 @@ import com.wireguard.android.jail.viewmodel.JailViewModel
  */
 interface JailFragmentHost {
     val jailViewModel: JailViewModel
-    fun navigateTo(destination: JailDestination)
 
     /** Full-screen overlay with honest expectations copy. */
     fun openHelp()
