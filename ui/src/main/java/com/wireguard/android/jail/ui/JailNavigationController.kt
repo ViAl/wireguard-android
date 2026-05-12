@@ -25,7 +25,7 @@ class JailNavigationController(
     private val factory: (JailDestination) -> Fragment,
     private val onDestinationChanged: (JailDestination) -> Unit = {}
 ) {
-    var currentDestination: JailDestination = JailDestination.OVERVIEW
+    var currentDestination: JailDestination = JailDestination.APPS
         private set
 
     fun navigate(destination: JailDestination) {
@@ -49,13 +49,13 @@ class JailNavigationController(
     }
 
     /**
-     * Pop back to [JailDestination.OVERVIEW] if we are not already there.
+     * Pop back to [JailDestination.APPS] if we are not already there.
      * @return `true` if a navigation was performed, `false` otherwise.
      */
-    fun popToOverview(): Boolean {
-        if (currentDestination == JailDestination.OVERVIEW)
+    fun popToApps(): Boolean {
+        if (currentDestination == JailDestination.APPS)
             return false
-        navigate(JailDestination.OVERVIEW)
+        navigate(JailDestination.APPS)
         return true
     }
 }

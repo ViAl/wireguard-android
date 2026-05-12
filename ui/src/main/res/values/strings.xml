@@ -244,19 +244,19 @@
     <string name="vpn">VPN</string>
     <string name="apps">Routing</string>
     <string name="jail">Jail</string>
-    <string name="jail_overview_title">Overview</string>
-    <string name="jail_nav_overview">Overview</string>
+    
+    
     <string name="jail_nav_setup">Setup</string>
     <string name="jail_nav_apps">Apps</string>
-    <string name="jail_nav_launch">Launch</string>
+    
     <string name="jail_nav_report">Report</string>
-    <string name="jail_overview_intro">Jail helps reduce what a risky app can observe. It is not a sandbox and does not stop all tracking.</string>
+    
     <string name="jail_card_work_profile_title">Work profile setup</string>
     <string name="jail_card_work_profile_subtitle">Guided steps to isolate selected apps in a separate Android work profile.</string>
     <string name="jail_card_app_audit_title">App audit</string>
     <string name="jail_card_app_audit_subtitle">See which permissions and signals each selected app carries.</string>
-    <string name="jail_card_sterile_launch_title">Sterile launch</string>
-    <string name="jail_card_sterile_launch_subtitle">A pre-launch checklist and profile-aware launch flow. Not a real sandbox.</string>
+    
+    
     <string name="jail_card_risk_report_title">Risk report</string>
     <string name="jail_card_risk_report_subtitle">Plain-language explanation of what a selected app may still observe.</string>
     <string name="jail_card_network_isolation_title">Network isolation</string>
@@ -437,25 +437,6 @@
     <string name="jail_launch_check_battery">Battery optimisation disabled for this app</string>
     <string name="jail_launch_check_heavy_reasons">Strong audit signals remain (see App detail for weights)</string>
     <string name="jail_launch_work_manual_hint">Could not open the work-profile copy from here. Open the app from your work launcher (briefcase badge), or change the preset to Main profile.</string>
-    <string name="jail_detail_routing_title">Jail routing on your tunnel</string>
-    <string name="jail_detail_routing_tunnel_hint">Uses the Jail tunnel name saved on the Launch tab.</string>
-    <string name="jail_detail_routing_mode">Routing mode for this app</string>
-    <string name="jail_detail_routing_apply">Apply to tunnel config</string>
-    <string name="jail_detail_routing_merge_note">Merges with existing include/exclude lists on that tunnel. If Android routing mode conflicts, Jail will ask you to adjust the Routing tab first.</string>
-    <string name="jail_detail_routing_applied">Routing updated</string>
-    <string name="jail_detail_routing_conflict">Could not merge: %1$s</string>
-    <string name="jail_detail_routing_no_tunnel">Choose a Jail tunnel on the Launch tab first.</string>
-    <string name="jail_detail_routing_help_body">Jail routing edits the include/exclude app lists on the tunnel you picked as the Jail tunnel (same lists as the Routing tab). Jail merges your choice with what is already there; if the tunnel is in the wrong split-tunnel mode (include-only vs exclude-only), Android cannot merge automatically — switch mode in Routing, or pick another tunnel.</string>
-    <string name="jail_merge_confirm_title">Merge Jail routing?</string>
-    <string name="jail_merge_confirm_body">This updates the chosen tunnel\u2019s per-app routing lists. Existing entries from the Routing tab are preserved where possible; Jail only removes entries it previously added when you clear a Jail routing mode.</string>
-    <string name="jail_detail_routing_merge_tunnel_message">This updates \"%1$s\" include/exclude lists. Entries from the Routing tab stay merged; Jail only removes packages it previously managed when you revert a Jail policy.</string>
-    <string name="jail_merge_continue">Continue</string>
-    <string name="jail_merge_cancel">Cancel</string>
-    <string name="jail_mode_default">Default</string>
-    <string name="jail_mode_route">Route through Jail tunnel</string>
-    <string name="jail_mode_exclude">Exclude from Jail tunnel</string>
-    <string name="jail_mode_strict">Strict (route + expect work profile)</string>
-    <string name="jail_mode_disabled">Disabled</string>
     <string name="tunnel">Tunnel</string>
     <string name="no_tunnels_configured">No tunnels configured</string>
     <string name="saving">Saving…</string>
@@ -536,7 +517,7 @@
     <string name="jail_provisioning_adb_button">Show ADB instructions</string>
     <string name="jail_provisioning_adb_copied">ADB provisioning command copied to clipboard</string>
     <string name="jail_provisioning_done">✓ Work profile configured</string>
-    <string name="jail_detail_work_profile_title">Work profile app availability</string>
+
     <string name="jail_detail_work_profile_state_installed">Installed in work profile</string>
     <string name="jail_detail_work_profile_state_auto">Automatic install is available</string>
     <string name="jail_detail_work_profile_state_manual">Manual install is required</string>
@@ -544,13 +525,15 @@
     <string name="jail_detail_work_profile_action_open">Open in work profile</string>
     <string name="jail_detail_work_profile_action_installed">Installed</string>
     <string name="jail_detail_work_profile_action_install">Install automatically</string>
-    <string name="jail_detail_work_profile_action_store">Open store manually</string>
+
     <string name="jail_detail_work_profile_action_unavailable">Unavailable</string>
     <string name="jail_detail_work_profile_result_installed">Installed in work profile.</string>
     <string name="jail_detail_work_profile_result_already">Already installed in work profile.</string>
     <string name="jail_detail_work_profile_result_manual">Manual action required to finish installation.</string>
     <string name="jail_detail_work_profile_result_unsupported">Automatic install is unsupported in this profile state.</string>
     <string name="jail_detail_work_profile_result_failed">Work-profile operation failed.</string>
+    <string name="jail_detail_install_to_jail_title">Install to Jail</string>
+    <string name="jail_detail_install_to_jail_button">Install to Jail</string>
     <string name="jail_detail_work_profile_reason_installed">Already installed in the work profile.</string>
     <string name="jail_detail_work_profile_reason_owner_confirmed">Automatic install may be available because this app appears to be profile owner.</string>
     <string name="jail_detail_work_profile_reason_not_ours">Manual install is required because this managed profile is not owned by Jail.</string>
