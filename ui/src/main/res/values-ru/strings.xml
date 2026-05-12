@@ -263,17 +263,13 @@
     <string name="vpn">VPN</string>
     <string name="apps">Маршрутизация</string>
     <string name="jail">Jail</string>
-    <string name="jail_overview_title">Обзор</string>
     <string name="jail_nav_setup">Настройка</string>
     <string name="jail_nav_apps">Приложения</string>
     <string name="jail_nav_report">Отчёт</string>
-    <string name="jail_overview_intro">Jail помогает сократить, что может наблюдать потенциально опасное приложение. Это не песочница и не блокирует всё отслеживание.</string>
     <string name="jail_card_work_profile_title">Рабочий профиль</string>
     <string name="jail_card_work_profile_subtitle">Пошаговые подсказки для изоляции выбранных приложений в отдельном рабочем профиле Android.</string>
     <string name="jail_card_app_audit_title">Аудит приложений</string>
     <string name="jail_card_app_audit_subtitle">Какие разрешения и сигналы есть у каждого выбранного приложения.</string>
-    <string name="jail_card_sterile_launch_title">«Стерильный» запуск</string>
-    <string name="jail_card_sterile_launch_subtitle">Чек-лист перед запуском и учёт профилей. Это не настоящая изоляция (песочница).</string>
     <string name="jail_card_risk_report_title">Отчёт о рисках</string>
     <string name="jail_card_risk_report_subtitle">Разъяснение простым языком — что приложение может по-прежнему видеть или угадывать.</string>
     <string name="jail_card_network_isolation_title">Изоляция сети</string>

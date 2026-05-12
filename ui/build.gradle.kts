@@ -43,7 +43,7 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles("proguard-android-optimize.txt")
-            signingConfig = signingConfigs.findByName("fromEnv")
+            signingConfig = if (System.getenv("ANDROID_KEYSTORE_PATH") != null) signingConfigs.findByName("fromEnv") else null
             packaging {
                 resources {
                     excludes += "DebugProbesKt.bin"
