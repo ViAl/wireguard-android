@@ -13,14 +13,12 @@ import com.wireguard.android.R
  * without duplicating string-tag constants.
  */
 enum class JailDestination(val tag: String, @StringRes val titleRes: Int) {
-    OVERVIEW("jail_overview", R.string.jail_nav_overview),
     SETUP("jail_setup", R.string.jail_nav_setup),
     APPS("jail_apps", R.string.jail_nav_apps),
-    LAUNCH("jail_launch", R.string.jail_nav_launch),
     REPORT("jail_report", R.string.jail_nav_report);
 
     companion object {
-        fun fromPosition(position: Int): JailDestination = entries.getOrElse(position) { OVERVIEW }
+        fun fromPosition(position: Int): JailDestination = entries.getOrElse(position) { SETUP }
 
         fun fromTag(tag: String?): JailDestination? = entries.firstOrNull { it.tag == tag }
     }

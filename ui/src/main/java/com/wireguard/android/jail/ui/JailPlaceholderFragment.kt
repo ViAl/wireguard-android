@@ -41,7 +41,7 @@ class JailPlaceholderFragment : Fragment() {
 
     private fun destination(): JailDestination {
         val tag = arguments?.getString(ARG_DESTINATION_TAG)
-        return JailDestination.fromTag(tag) ?: JailDestination.OVERVIEW
+        return JailDestination.fromTag(tag) ?: JailDestination.APPS
     }
 
     companion object {

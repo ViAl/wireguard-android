@@ -96,7 +96,7 @@ class JailFragment : Fragment(), JailFragmentHost {
 
         val initialDestination = savedInstanceState?.getString(KEY_DESTINATION)
             ?.let { JailDestination.fromTag(it) }
-            ?: JailDestination.OVERVIEW
+            ?: JailDestination.APPS
 
         navigationController = JailNavigationController(
             fragmentManager = childFragmentManager,
@@ -125,7 +125,7 @@ class JailFragment : Fragment(), JailFragmentHost {
         val detailRestored = childFragmentManager.findFragmentByTag(DETAIL_FRAGMENT_TAG) != null
         val helpRestored = childFragmentManager.findFragmentByTag(HELP_FRAGMENT_TAG) != null
         backPressedCallback = object : OnBackPressedCallback(
-            detailRestored || helpRestored || initialDestination != JailDestination.OVERVIEW,
+            detailRestored || helpRestored || initialDestination != JailDestination.APPS,
         ) {
             override fun handleOnBackPressed() {
                 if (dismissAppDetailIfPresent()) {
@@ -136,7 +136,7 @@ class JailFragment : Fragment(), JailFragmentHost {
                     updateBackCallbackEnabled()
                     return
                 }
-                if (!navigationController.popToOverview()) {
+                if (!navigationController.popToApps()) {
                     isEnabled = false
                     requireActivity().onBackPressedDispatcher.onBackPressed()
                 }
@@ -190,16 +190,14 @@ class JailFragment : Fragment(), JailFragmentHost {
             return
         }
         if (!::navigationController.isInitialized) return
-        cb.isEnabled = navigationController.currentDestination != JailDestination.OVERVIEW ||
+        cb.isEnabled = navigationController.currentDestination != JailDestination.APPS ||
             childFragmentManager.findFragmentByTag(DETAIL_FRAGMENT_TAG) != null ||
             childFragmentManager.findFragmentByTag(HELP_FRAGMENT_TAG) != null
     }
 
     private fun createFragmentFor(destination: JailDestination): Fragment = when (destination) {
-        JailDestination.OVERVIEW -> JailOverviewFragment()
         JailDestination.APPS -> JailAppsFragment()
         JailDestination.REPORT -> JailReportFragment()
-        JailDestination.LAUNCH -> JailLaunchFragment()
         JailDestination.SETUP -> JailSetupWizardFragment()
     }
 
