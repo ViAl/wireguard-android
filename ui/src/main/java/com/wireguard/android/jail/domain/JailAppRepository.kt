@@ -9,6 +9,7 @@ import com.wireguard.android.jail.model.AuditSnapshot
 import com.wireguard.android.jail.model.JailAppBadge
 import com.wireguard.android.jail.model.JailAppInfo
 import com.wireguard.android.jail.storage.JailSelectionStore
+import com.wireguard.android.jail.system.CrossProfileAppsWrapper
 import com.wireguard.android.jail.system.InstalledAppsSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -56,8 +57,9 @@ class JailAppRepository(
      */
     suspend fun refreshInstalledApps(context: Context) {
         val selected = selectionStore.selected.value
+        val crossProfileApps = CrossProfileAppsWrapper(context)
         val loaded = withContext(Dispatchers.Default) {
-            InstalledAppsSource.load(context.packageManager, selected)
+            InstalledAppsSource.load(context.packageManager, selected, crossProfileApps)
         }
         installedAppsBase.value = loaded.map(JailAppInfoBase::from)
     }
@@ -113,11 +115,13 @@ class JailAppRepository(
                 .thenBy(String.CASE_INSENSITIVE_ORDER) { it.packageName }
 
         private fun jailAppsSortTier(app: JailAppInfo): Int {
+            // Apps installed in the Jail profile appear above everything else.
+            if (app.installedInOtherProfile == true) return 0
             return when {
-                app.isSelectedForJail && !app.isSystemApp -> 0
-                app.isSelectedForJail && app.isSystemApp -> 1
-                !app.isSelectedForJail && !app.isSystemApp -> 2
-                else -> 3
+                app.isSelectedForJail && !app.isSystemApp -> 1
+                app.isSelectedForJail && app.isSystemApp -> 2
+                !app.isSelectedForJail && !app.isSystemApp -> 3
+                else -> 4
             }
         }
     }

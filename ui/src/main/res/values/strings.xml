@@ -266,8 +266,8 @@
     <string name="jail_apps_search_hint">Search installed apps</string>
     <string name="jail_apps_empty">No installed apps match your search.</string>
     <plurals name="jail_apps_summary_selected">
-        <item quantity="one">%1$d of %2$d apps selected for Jail</item>
-        <item quantity="other">%1$d of %2$d apps selected for Jail</item>
+        <item quantity="one">%1$d of %2$d apps installed in Jail</item>
+        <item quantity="other">%1$d of %2$d apps installed in Jail</item>
     </plurals>
     <string name="jail_apps_badges_separator"> · </string>
     <string name="jail_app_badge_selected">Selected</string>
@@ -511,4 +511,10 @@
     <string name="jail_detail_work_profile_reason_manual_only">Automatic install is not available in this environment; manual store install is the supported path.</string>
     <string name="jail_detail_work_profile_reason_no_path">No supported automatic or manual install path is currently available.</string>
     <string name="jail_detail_work_profile_reason_unknown">Install environment could not be diagnosed reliably.</string>
+    <string name="jail_profile_main_installed">Main ✓</string>
+    <string name="jail_profile_main_not_installed">Main —</string>
+    <string name="jail_profile_main_unknown">Main ?</string>
+    <string name="jail_profile_jail_installed">Jail ✓</string>
+    <string name="jail_profile_jail_not_installed">Jail —</string>
+    <string name="jail_profile_jail_unknown">Jail ?</string>
 </resources>

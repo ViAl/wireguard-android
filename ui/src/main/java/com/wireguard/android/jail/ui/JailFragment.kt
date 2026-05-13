@@ -51,7 +51,6 @@ class JailFragment : Fragment(), JailFragmentHost {
             add(binding.jailNavHost.id, JailHelpFragment(), HELP_FRAGMENT_TAG)
             addToBackStack(HELP_BACK_STACK_NAME)
         }
-        updateBackCallbackEnabled()
     }
 
     override fun openAppDetail(packageName: String) {
@@ -62,7 +61,16 @@ class JailFragment : Fragment(), JailFragmentHost {
             add(binding.jailNavHost.id, JailAppDetailFragment.newInstance(packageName), DETAIL_FRAGMENT_TAG)
             addToBackStack(DETAIL_BACK_STACK_NAME)
         }
-        updateBackCallbackEnabled()
+    }
+
+    private fun dismissHelpIfPresent(): Boolean {
+        val fragment = childFragmentManager.findFragmentByTag(HELP_FRAGMENT_TAG)
+        if (fragment == null) return false
+        childFragmentManager.popBackStackImmediate(
+            HELP_BACK_STACK_NAME,
+            FragmentManager.POP_BACK_STACK_INCLUSIVE,
+        )
+        return true
     }
 
     private fun dismissAppDetailIfPresent(): Boolean {
@@ -148,29 +156,36 @@ class JailFragment : Fragment(), JailFragmentHost {
         val helpRestored = childFragmentManager.findFragmentByTag(HELP_FRAGMENT_TAG) != null
         backPressedCallback = object : OnBackPressedCallback(detailRestored || helpRestored) {
             override fun handleOnBackPressed() {
-                if (dismissAppDetailIfPresent()) {
-                    updateBackCallbackEnabled()
-                    return
-                }
-                if (!isEnabled) {
-                    requireActivity().onBackPressedDispatcher.onBackPressed()
-                }
+                if (dismissHelpIfPresent()) return
+                if (dismissAppDetailIfPresent()) return
+                // Nothing to dismiss — hand off to system.
+                isEnabled = false
+                requireActivity().onBackPressedDispatcher.onBackPressed()
             }
         }.also { callback ->
             requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, callback)
         }
-        updateBackCallbackEnabled()
+
+        // Keep callback enabled state in sync with the back stack, even after async commits.
+        childFragmentManager.addOnBackStackChangedListener {
+            backPressedCallback?.isEnabled =
+                childFragmentManager.findFragmentByTag(HELP_FRAGMENT_TAG) != null ||
+                childFragmentManager.findFragmentByTag(DETAIL_FRAGMENT_TAG) != null
+        }
     }
 
     override fun onHiddenChanged(hidden: Boolean) {
         super.onHiddenChanged(hidden)
-        updateBackCallbackEnabled()
+        if (!hidden) {
+            triggerAuditIfNeeded()
+        }
     }
 
     override fun onResume() {
         super.onResume()
         // Re-check provisioning state when returning from Android setup screens.
         updateProvisioningState()
+        triggerAuditIfNeeded()
     }
 
     override fun onDestroyView() {
@@ -207,14 +222,11 @@ class JailFragment : Fragment(), JailFragmentHost {
         }
     }
 
-    private fun updateBackCallbackEnabled() {
-        val cb = backPressedCallback ?: return
-        if (!isAdded || isHidden) {
-            cb.isEnabled = false
-            return
+    private fun triggerAuditIfNeeded() {
+        Application.getCoroutineScope().launch {
+            val auditRepo = Application.getJailComponent().auditRepository
+            auditRepo.refreshAllSelected(requireContext().applicationContext)
         }
-        cb.isEnabled = childFragmentManager.findFragmentByTag(DETAIL_FRAGMENT_TAG) != null ||
-            childFragmentManager.findFragmentByTag(HELP_FRAGMENT_TAG) != null
     }
 
     private fun updateProvisioningState() {

@@ -177,21 +177,45 @@ class JailAppsFragment : Fragment() {
             onToggle: (String) -> Unit,
             onOpenDetail: (String) -> Unit
         ) {
+            val context = binding.root.context
             val app = row.app
             binding.jailAppIcon.setImageDrawable(app.icon)
             binding.jailAppLabel.text = app.label
             binding.jailAppPackage.text = app.packageName
-            binding.jailAppCheckbox.setOnCheckedChangeListener(null)
-            binding.jailAppCheckbox.isChecked = app.isSelectedForJail
+
+            // Main profile chip
+            val mainChip = binding.mainProfileChip
+            mainChip.text = context.getString(
+                if (app.installedInMainProfile) R.string.jail_profile_main_installed
+                else R.string.jail_profile_main_not_installed
+            )
+            mainChip.contentDescription = mainChip.text
+
+            // Jail (other profile) chip
+            val jailChip = binding.jailProfileChip
+            when (app.installedInOtherProfile) {
+                true -> {
+                    jailChip.text = context.getString(R.string.jail_profile_jail_installed)
+                    jailChip.contentDescription = jailChip.text
+                }
+                false -> {
+                    jailChip.text = context.getString(R.string.jail_profile_jail_not_installed)
+                    jailChip.contentDescription = jailChip.text
+                }
+                null -> {
+                    jailChip.text = context.getString(R.string.jail_profile_jail_unknown)
+                    jailChip.contentDescription = jailChip.text
+                }
+            }
+
             val badges = badgesFor(row)
             if (badges.isEmpty()) {
                 binding.jailAppBadges.visibility = View.GONE
             } else {
-                val context = binding.root.context
                 binding.jailAppBadges.visibility = View.VISIBLE
                 binding.jailAppBadges.text = badges.joinToString(badgesSeparator) { context.getString(it.labelRes) }
             }
-            binding.jailAppRow.setOnClickListener { onToggle(app.packageName) }
+            binding.jailAppRow.setOnClickListener { onOpenDetail(app.packageName) }
             binding.jailAppInfo.setOnClickListener { onOpenDetail(app.packageName) }
         }
     }

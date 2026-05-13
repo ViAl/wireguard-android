@@ -283,10 +283,10 @@
     <string name="jail_apps_search_hint">Поиск установленных приложений</string>
     <string name="jail_apps_empty">Нет приложений по запросу.</string>
     <plurals name="jail_apps_summary_selected">
-        <item quantity="one">%1$d из %2$d приложения отмечено для Jail</item>
-        <item quantity="few">%1$d из %2$d приложений отмечено для Jail</item>
-        <item quantity="many">%1$d из %2$d приложений отмечено для Jail</item>
-        <item quantity="other">%1$d из %2$d приложений отмечено для Jail</item>
+        <item quantity="one">%1$d из %2$d приложения установлено в Jail</item>
+        <item quantity="few">%1$d из %2$d приложений установлено в Jail</item>
+        <item quantity="many">%1$d из %2$d приложений установлено в Jail</item>
+        <item quantity="other">%1$d из %2$d приложений установлено в Jail</item>
     </plurals>
     <string name="jail_apps_badges_separator"> · </string>
     <string name="jail_app_badge_selected">Выбрано</string>
@@ -471,4 +471,10 @@
     <string name="biometric_auth_error_reason">Ошибка аутентификации: %s</string>
     <string name="jail_detail_install_to_jail_title">Установить в Jail</string>
     <string name="jail_detail_install_to_jail_button">Установить в Jail</string>
+    <string name="jail_profile_main_installed">Основной ✓</string>
+    <string name="jail_profile_main_not_installed">Основной —</string>
+    <string name="jail_profile_main_unknown">Основной ?</string>
+    <string name="jail_profile_jail_installed">Jail ✓</string>
+    <string name="jail_profile_jail_not_installed">Jail —</string>
+    <string name="jail_profile_jail_unknown">Jail ?</string>
 </resources>
