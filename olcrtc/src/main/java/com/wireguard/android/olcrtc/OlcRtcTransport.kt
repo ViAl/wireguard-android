@@ -6,6 +6,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlin.coroutines.cancellation.CancellationException
 
 enum class OlcRtcTransportState {
     IDLE, STARTING, READY, STOPPING, ERROR
@@ -46,6 +47,9 @@ class OlcRtcTransport(private val appContext: Context) {
                 // Step 2: Start Go client (heavy work, IO is fine)
                 startGoClient(config)
                 _state.value = OlcRtcTransportState.READY
+            } catch (e: CancellationException) {
+                _state.value = OlcRtcTransportState.IDLE
+                throw e
             } catch (e: Exception) {
                 android.util.Log.e("OlcRtcTransport", "Failed to start", e)
                 _state.value = OlcRtcTransportState.ERROR

@@ -31,6 +31,8 @@ data class OlcRtcConfig(
             if (config.name.length > MAX_NAME_LENGTH) return "Name too long (max $MAX_NAME_LENGTH)"
             if (!NAME_PATTERN.matches(config.name)) return "Name contains invalid characters"
             if (config.carrier.isBlank()) return "Carrier is required"
+            if (config.carrier !in VALID_CARRIERS) return "Unsupported carrier: ${config.carrier}. Supported: ${VALID_CARRIERS.joinToString()}"
+            if (config.transport !in VALID_TRANSPORTS) return "Unsupported transport: ${config.transport}. Supported: ${VALID_TRANSPORTS.joinToString()}"
             if (config.roomId.isBlank()) return "Room ID is required"
             if (config.clientId.isBlank()) return "Client ID is required"
             if (config.keyHex.isBlank()) return "Encryption key is required"
