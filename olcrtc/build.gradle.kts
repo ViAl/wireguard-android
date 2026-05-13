@@ -18,10 +18,15 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    // Include prebuilt .so files from jniLibs
     sourceSets {
         getByName("main") {
             jniLibs.srcDirs("src/main/jniLibs")
+        }
+    }
+
+    buildTypes {
+        release {
+            consumerProguardFiles("consumer-rules.pro")
         }
     }
 
@@ -30,20 +35,12 @@ android {
     }
 }
 
-
-    buildTypes {
-        release {
-            consumerProguardFiles("consumer-rules.pro")
-        }
-    }
 dependencies {
     // Pre-built classes.jar from gomobile AAR (mobile.Mobile + proxy classes)
     implementation(files("src/main/libs/olcrtc-classes.jar"))
 
     // AndroidX Core (for NotificationCompat, etc.)
     implementation("androidx.core:core-ktx:1.13.1")
-
-
 
     // AndroidX Fragment (for Fragment, lifecycle, etc.)
     implementation("androidx.fragment:fragment-ktx:1.8.5")
