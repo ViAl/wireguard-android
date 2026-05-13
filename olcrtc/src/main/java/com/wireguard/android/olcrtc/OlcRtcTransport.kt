@@ -2,9 +2,9 @@ package com.wireguard.android.olcrtc
 
 import android.content.Context
 import android.content.Intent
-import mobile.LogWriterInterface
+import mobile.LogWriter
 import mobile.Mobile
-import mobile.SocketProtectorInterface
+import mobile.SocketProtector
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -88,14 +88,14 @@ class OlcRtcTransport(private val appContext: Context) {
             Mobile.setProviders()
 
             // Set callbacks using interfaces
-            Mobile.setProtector(object : SocketProtectorInterface {
+            Mobile.setProtector(object : SocketProtector {
                 override fun protect(fd: Long): Boolean {
                     android.util.Log.d("OlcRtcTransport", "Protect socket fd=$fd")
                     // Real implementation would call VpnService.protect(fd.toInt())
                     return true
                 }
             })
-            Mobile.setLogWriter(object : LogWriterInterface {
+            Mobile.setLogWriter(object : LogWriter {
                 override fun writeLog(msg: String) {
                     android.util.Log.d("OlcRTC", msg)
                 }
@@ -105,29 +105,21 @@ class OlcRtcTransport(private val appContext: Context) {
             Mobile.setLink("direct")
             Mobile.setTransport(config.transport)
             Mobile.setDNS(config.dnsServer)
-            Mobile.setVP8Options(config.vp8Fps, config.vp8BatchSize)
+            Mobile.setVP8Options(config.vp8Fps.toLong(), config.vp8BatchSize.toLong())
             Mobile.setDebug(false)
 
-            // Start
-            val err = Mobile.startWithTransport(
+            Mobile.startWithTransport(
                 carrierName = config.carrier,
                 transportName = config.transport,
                 roomID = config.roomId,
                 clientID = config.clientId,
                 keyHex = config.keyHex,
-                socksPort = config.socksPort,
+                socksPort = config.socksPort.toLong(),
                 socksUser = config.socksUser ?: "",
                 socksPass = config.socksPass ?: ""
             )
-            if (err != null) {
-                throw RuntimeException("Mobile.startWithTransport failed: $err")
-            }
 
-            // Wait for ready with timeout
-            val readyErr = Mobile.waitReady(25_000L)
-            if (readyErr != null) {
-                throw RuntimeException("Mobile.waitReady failed: $readyErr")
-            }
+            Mobile.waitReady(25_000L)
 
             android.util.Log.d("OlcRtcTransport", "Go client ready: carrier=${config.carrier}")
         } catch (e: Exception) {
