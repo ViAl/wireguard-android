@@ -71,23 +71,41 @@ class OlcRtcTransport(private val appContext: Context) {
 
     private fun startGoClient(config: OlcRtcConfig) {
         try {
-            // Phase 2 stub — real call in Phase 3:
-            // mobile.Mobile.Start(config.carrier, config.transport, config.roomId,
-            //     config.clientId, config.keyHex, config.socksPort.toLong(),
-            //     config.socksUser ?: "", config.socksPass ?: "")
-            android.util.Log.d("OlcRtcTransport", "startGoClient: carrier=${config.carrier}, room=${config.roomId}")
+            MobileBridge.load()
+            MobileBridge.setLink("direct")
+            MobileBridge.setTransport(config.transport)
+            MobileBridge.setDNS(config.dnsServer)
+            MobileBridge.setVP8Options(config.vp8Fps, config.vp8BatchSize)
+            MobileBridge.setDebug(false)
+
+            val err = MobileBridge.startWithTransport(
+                carrierName = config.carrier,
+                transportName = config.transport,
+                roomID = config.roomId,
+                clientID = config.clientId,
+                keyHex = config.keyHex,
+                socksPort = config.socksPort,
+                socksUser = config.socksUser ?: "",
+                socksPass = config.socksPass ?: ""
+            )
+            if (err != null) {
+                throw RuntimeException("Mobile.Start failed: $err")
+            }
+            android.util.Log.d("OlcRtcTransport", "Go client started: carrier=${config.carrier}")
         } catch (e: Exception) {
-            android.util.Log.e("OlcRtcTransport", "mobile.Mobile.Start failed", e)
+            android.util.Log.e("OlcRtcTransport", "startGoClient failed", e)
             throw e
         }
     }
 
     private fun stopGoClient() {
         try {
-            // mobile.Mobile.Stop()
-            android.util.Log.d("OlcRtcTransport", "stopGoClient")
+            if (MobileBridge.load()) {
+                MobileBridge.stop()
+            }
+            android.util.Log.d("OlcRtcTransport", "Go client stopped")
         } catch (e: Exception) {
-            android.util.Log.w("OlcRtcTransport", "mobile.Mobile.Stop failed", e)
+            android.util.Log.w("OlcRtcTransport", "stopGoClient failed", e)
         }
     }
 
