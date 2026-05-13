@@ -511,4 +511,10 @@
     <string name="jail_detail_work_profile_reason_manual_only">Automatic install is not available in this environment; manual store install is the supported path.</string>
     <string name="jail_detail_work_profile_reason_no_path">No supported automatic or manual install path is currently available.</string>
     <string name="jail_detail_work_profile_reason_unknown">Install environment could not be diagnosed reliably.</string>
+    <string name="jail_profile_main_installed">Main ✓</string>
+    <string name="jail_profile_main_not_installed">Main —</string>
+    <string name="jail_profile_main_unknown">Main ?</string>
+    <string name="jail_profile_jail_installed">Jail ✓</string>
+    <string name="jail_profile_jail_not_installed">Jail —</string>
+    <string name="jail_profile_jail_unknown">Jail ?</string>
 </resources>

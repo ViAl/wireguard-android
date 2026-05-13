@@ -471,4 +471,10 @@
     <string name="biometric_auth_error_reason">Ошибка аутентификации: %s</string>
     <string name="jail_detail_install_to_jail_title">Установить в Jail</string>
     <string name="jail_detail_install_to_jail_button">Установить в Jail</string>
+    <string name="jail_profile_main_installed">Основной ✓</string>
+    <string name="jail_profile_main_not_installed">Основной —</string>
+    <string name="jail_profile_main_unknown">Основной ?</string>
+    <string name="jail_profile_jail_installed">Jail ✓</string>
+    <string name="jail_profile_jail_not_installed">Jail —</string>
+    <string name="jail_profile_jail_unknown">Jail ?</string>
 </resources>

@@ -65,6 +65,16 @@ class JailFragment : Fragment(), JailFragmentHost {
         updateBackCallbackEnabled()
     }
 
+    private fun dismissHelpIfPresent(): Boolean {
+        val fragment = childFragmentManager.findFragmentByTag(HELP_FRAGMENT_TAG)
+        if (fragment == null) return false
+        childFragmentManager.popBackStackImmediate(
+            HELP_BACK_STACK_NAME,
+            FragmentManager.POP_BACK_STACK_INCLUSIVE,
+        )
+        return true
+    }
+
     private fun dismissAppDetailIfPresent(): Boolean {
         if (childFragmentManager.findFragmentByTag(DETAIL_FRAGMENT_TAG) == null) return false
         return childFragmentManager.popBackStackImmediate(
@@ -148,13 +158,16 @@ class JailFragment : Fragment(), JailFragmentHost {
         val helpRestored = childFragmentManager.findFragmentByTag(HELP_FRAGMENT_TAG) != null
         backPressedCallback = object : OnBackPressedCallback(detailRestored || helpRestored) {
             override fun handleOnBackPressed() {
+                if (dismissHelpIfPresent()) {
+                    updateBackCallbackEnabled()
+                    return
+                }
                 if (dismissAppDetailIfPresent()) {
                     updateBackCallbackEnabled()
                     return
                 }
-                if (!isEnabled) {
-                    requireActivity().onBackPressedDispatcher.onBackPressed()
-                }
+                isEnabled = false
+                requireActivity().onBackPressedDispatcher.onBackPressed()
             }
         }.also { callback ->
             requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, callback)
