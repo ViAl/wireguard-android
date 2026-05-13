@@ -9,6 +9,9 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import com.wireguard.android.Application
+import com.wireguard.android.backend.Backend
+import com.wireguard.android.backend.Tunnel
 import kotlin.coroutines.cancellation.CancellationException
 
 enum class OlcRtcTransportState {
@@ -87,19 +90,8 @@ class OlcRtcTransport(private val appContext: Context) {
             // Must call setProviders before each start, not at load
             Mobile.setProviders()
 
-            // Set callbacks using interfaces
-            Mobile.setProtector(object : SocketProtector {
-                override fun protect(fd: Long): Boolean {
-                    android.util.Log.d("OlcRtcTransport", "Protect socket fd=$fd")
-                    // Real implementation would call VpnService.protect(fd.toInt())
-                    return true
-                }
-            })
-            Mobile.setLogWriter(object : LogWriter {
-                override fun writeLog(msg: String) {
-                    android.util.Log.d("OlcRTC", msg)
-                }
-            })
+            // SocketProtector/LogWriter callbacks skipped — gomobile AAR classes not available.
+            // Go→Java callbacks would crash. Native-only calls work fine.
 
             // Configure
             Mobile.setLink("direct")
@@ -121,6 +113,13 @@ class OlcRtcTransport(private val appContext: Context) {
 
             Mobile.waitReady(25_000L)
 
+            // Stop any active WireGuard tunnel
+            try {
+                stopWireGuardTunnels()
+            } catch (e: Exception) {
+                android.util.Log.w("OlcRtcTransport", "Failed to stop WireGuard tunnel", e)
+            }
+
             android.util.Log.d("OlcRtcTransport", "Go client ready: carrier=${config.carrier}")
         } catch (e: Exception) {
             android.util.Log.e("OlcRtcTransport", "startGoClient failed", e)
@@ -136,6 +135,28 @@ class OlcRtcTransport(private val appContext: Context) {
             android.util.Log.d("OlcRtcTransport", "Go client stopped")
         } catch (e: Exception) {
             android.util.Log.w("OlcRtcTransport", "stopGoClient failed", e)
+        }
+    }
+
+    /**
+     * Stop all running WireGuard tunnels to avoid conflict with OlcRTC VPN.
+     */
+    private fun stopWireGuardTunnels() {
+        kotlinx.coroutines.runBlocking {
+            try {
+                val manager = Application.getTunnelManager()
+                val tunnels = manager.getTunnels()
+                val backend = Application.getBackend()
+                for (i in 0 until tunnels.size()) {
+                    val tunnel = tunnels.get(i)
+                    if (tunnel.state == Tunnel.State.UP) {
+                        backend.setState(tunnel, Tunnel.State.DOWN, null)
+                        android.util.Log.d("OlcRtcTransport", "Stopped WG tunnel: \${tunnel.name}")
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("OlcRtcTransport", "stopWireGuardTunnels failed", e)
+            }
         }
     }
 
