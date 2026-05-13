@@ -60,6 +60,7 @@ class JailAppDetailFragment : Fragment() {
     private val reportBuilder = RiskReportBuilder()
     private var currentApp: JailAppInfo? = null
     private var currentSnapshot: AuditSnapshot? = null
+    private var autoTriggered: Boolean = false
 
     private val repository: JailAppRepository
         get() = Application.getJailComponent().appRepository
@@ -88,8 +89,6 @@ class JailAppDetailFragment : Fragment() {
 
         binding.jailDetailPackage.text = packageName
 
-        binding.jailDetailRefresh.setOnClickListener { triggerRefresh() }
-
         binding.jailDetailRiskHelp.setOnClickListener {
             (parentFragment as? JailFragmentHost)?.openHelp()
         }
@@ -109,7 +108,16 @@ class JailAppDetailFragment : Fragment() {
                         Triple(apps, snapshot, refreshing)
                     }
                     .collect { (apps, snapshot, refreshing) ->
-                        render(apps.firstOrNull { it.packageName == packageName }, snapshot, refreshing)
+                        val app = apps.firstOrNull { it.packageName == packageName }
+                        render(app, snapshot, refreshing)
+                        // Auto-trigger audit once on first render when app data is available,
+                        // a secondary profile exists, and no snapshot exists yet.
+                        if (!autoTriggered && app != null && app.installedInOtherProfile != null) {
+                            autoTriggered = true
+                            if (snapshot == null) {
+                                triggerRefresh()
+                            }
+                        }
                     }
             }
         }
@@ -167,7 +175,6 @@ class JailAppDetailFragment : Fragment() {
         }
 
         binding.jailDetailProgress.visibility = if (refreshing) View.VISIBLE else View.GONE
-        binding.jailDetailRefresh.isEnabled = !refreshing
         renderWorkProfileState()
         renderRiskReport(app, snapshot)
     }
