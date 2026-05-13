@@ -30,6 +30,12 @@ android {
     }
 }
 
+
+    buildTypes {
+        release {
+            consumerProguardFiles("consumer-rules.pro")
+        }
+    }
 dependencies {
     // Pre-built classes.jar from gomobile AAR (mobile.Mobile + proxy classes)
     implementation(files("src/main/libs/olcrtc-classes.jar"))
