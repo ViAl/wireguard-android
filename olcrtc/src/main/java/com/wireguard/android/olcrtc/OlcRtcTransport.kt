@@ -90,8 +90,19 @@ class OlcRtcTransport(private val appContext: Context) {
             // Must call setProviders before each start, not at load
             Mobile.setProviders()
 
-            // SocketProtector/LogWriter callbacks skipped — gomobile AAR classes not available.
-            // Go→Java callbacks would crash. Native-only calls work fine.
+            // Wire SocketProtector and LogWriter callbacks (now available from AAR classes.jar)
+            Mobile.setProtector(object : SocketProtector {
+                override fun protect(fd: Long): Boolean {
+                    android.util.Log.d("OlcRtcTransport", "Protect socket fd=$fd")
+                    // Real implementation would call VpnService.protect(fd.toInt())
+                    return true
+                }
+            })
+            Mobile.setLogWriter(object : LogWriter {
+                override fun writeLog(msg: String) {
+                    android.util.Log.d("OlcRTC", msg)
+                }
+            })
 
             // Configure
             Mobile.setLink("direct")

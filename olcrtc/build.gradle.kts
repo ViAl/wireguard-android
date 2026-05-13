@@ -31,6 +31,9 @@ android {
 }
 
 dependencies {
+    // Pre-built classes.jar from gomobile AAR (mobile.Mobile + proxy classes)
+    implementation(files("src/main/libs/olcrtc-classes.jar"))
+
     // AndroidX Core (for NotificationCompat, etc.)
     implementation("androidx.core:core-ktx:1.13.1")
 
