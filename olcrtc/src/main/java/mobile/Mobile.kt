@@ -73,7 +73,7 @@ object Mobile {
  */
 class proxySocketProtector(private val impl: (Int) -> Boolean) {
     @Suppress("unused")
-    fun protect(fd: Int): Boolean = impl(fd)
+    fun Protect(fd: Int): Boolean = impl(fd)
 }
 
 /**
@@ -82,5 +82,5 @@ class proxySocketProtector(private val impl: (Int) -> Boolean) {
  */
 class proxyLogWriter(private val impl: (String) -> Unit) {
     @Suppress("unused")
-    fun writeLog(msg: String) { impl(msg) }
+    fun WriteLog(msg: String) { impl(msg) }
 }
