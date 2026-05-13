@@ -2,9 +2,9 @@ package com.wireguard.android.olcrtc
 
 import android.content.Context
 import android.content.Intent
+import mobile.LogWriterInterface
 import mobile.Mobile
-import mobile.proxyLogWriter
-import mobile.proxySocketProtector
+import mobile.SocketProtectorInterface
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -84,21 +84,31 @@ class OlcRtcTransport(private val appContext: Context) {
         try {
             Mobile.load()
 
-            // Set required callbacks BEFORE start
-            Mobile.setProtector(proxySocketProtector { fd ->
-                android.util.Log.d("OlcRtcTransport", "Protect fd=$fd")
-                true
+            // Must call setProviders before each start, not at load
+            Mobile.setProviders()
+
+            // Set callbacks using interfaces
+            Mobile.setProtector(object : SocketProtectorInterface {
+                override fun protect(fd: Long): Boolean {
+                    android.util.Log.d("OlcRtcTransport", "Protect socket fd=$fd")
+                    // Real implementation would call VpnService.protect(fd.toInt())
+                    return true
+                }
             })
-            Mobile.setLogWriter(proxyLogWriter { msg ->
-                android.util.Log.d("OlcRTC", msg)
+            Mobile.setLogWriter(object : LogWriterInterface {
+                override fun writeLog(msg: String) {
+                    android.util.Log.d("OlcRTC", msg)
+                }
             })
 
+            // Configure
             Mobile.setLink("direct")
             Mobile.setTransport(config.transport)
             Mobile.setDNS(config.dnsServer)
             Mobile.setVP8Options(config.vp8Fps, config.vp8BatchSize)
             Mobile.setDebug(false)
 
+            // Start
             val err = Mobile.startWithTransport(
                 carrierName = config.carrier,
                 transportName = config.transport,
@@ -110,9 +120,16 @@ class OlcRtcTransport(private val appContext: Context) {
                 socksPass = config.socksPass ?: ""
             )
             if (err != null) {
-                throw RuntimeException("Mobile.Start failed: $err")
+                throw RuntimeException("Mobile.startWithTransport failed: $err")
             }
-            android.util.Log.d("OlcRtcTransport", "Go client started: carrier=${config.carrier}")
+
+            // Wait for ready with timeout
+            val readyErr = Mobile.waitReady(25_000L)
+            if (readyErr != null) {
+                throw RuntimeException("Mobile.waitReady failed: $readyErr")
+            }
+
+            android.util.Log.d("OlcRtcTransport", "Go client ready: carrier=${config.carrier}")
         } catch (e: Exception) {
             android.util.Log.e("OlcRtcTransport", "startGoClient failed", e)
             throw e
