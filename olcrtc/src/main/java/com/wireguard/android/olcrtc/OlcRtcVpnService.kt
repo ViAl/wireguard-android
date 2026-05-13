@@ -36,7 +36,7 @@ class OlcRtcVpnService : VpnService() {
             ACTION_START -> {
                 val config = extractConfig(intent)
                 if (config != null) {
-                    Thread { startVpn(config) }.start()
+                    startVpn(config)
                 }
             }
             ACTION_STOP -> stopVpn()
