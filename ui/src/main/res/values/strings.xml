@@ -246,23 +246,23 @@
     <string name="jail">Jail</string>
     
     
+    <string name="jail_active">Jail Active</string>
+    <string name="jail_inactive">Jail Inactive</string>
     <string name="jail_nav_setup">Setup</string>
     <string name="jail_nav_apps">Apps</string>
-    
     <string name="jail_nav_report">Report</string>
-    
-    <string name="jail_card_work_profile_title">Work profile setup</string>
-    <string name="jail_card_work_profile_subtitle">Guided steps to isolate selected apps in a separate Android work profile.</string>
-    <string name="jail_card_app_audit_title">App audit</string>
-    <string name="jail_card_app_audit_subtitle">See which permissions and signals each selected app carries.</string>
-    
-    
-    <string name="jail_card_risk_report_title">Risk report</string>
-    <string name="jail_card_risk_report_subtitle">Plain-language explanation of what a selected app may still observe.</string>
-    <string name="jail_card_network_isolation_title">Network isolation</string>
-    <string name="jail_card_network_isolation_subtitle">Route selected apps through a WireGuard tunnel of your choice.</string>
-    <string name="jail_placeholder_coming_later">This Jail section will become available in a later update.</string>
-    <string name="jail_placeholder_header">Not yet implemented</string>
+    <string name="jail_help_title">Understanding the Jail Audit</string>
+    <string name="jail_help_can_title">What Jail can limit</string>
+    <string name="jail_help_can_body">Jail can reduce the signals available to an app. This includes disabling clipboard access, camera, microphone, and location when the app is not in the foreground. Some of these protections are built into the work profile framework itself.</string>
+    <string name="jail_help_cannot_title">What Jail cannot limit</string>
+    <string name="jail_help_cannot_body">Jail does not provide sandbox-level isolation. Apps can still observe certain device info, network-level signals, and timing-based inference. The work profile is not a hardware sandbox. Check the app-specific risk report for a detailed breakdown.</string>
+    <string name="jail_report_copy">Copy report</string>
+    <string name="jail_report_copied">Report copied to clipboard</string>
+    <string name="jail_report_intro">What %s can still see or infer about you</string>
+    <string name="jail_report_empty_title">No apps selected</string>
+    <string name="jail_report_empty_body">Select an app in the Jail tab to see its risk report.</string>
+    <string name="jail_report_open_details">Open app details</string>
+    <string name="jail_wizard_progress_format">Step %1$d of %2$d</string>
     <string name="jail_apps_search_hint">Search installed apps</string>
     <string name="jail_apps_empty">No installed apps match your search.</string>
     <plurals name="jail_apps_summary_selected">
@@ -337,20 +337,16 @@
     <string name="jail_signal_fg_service_microphone_detail">The app declares a foreground service of type \u201Cmicrophone\u201D, meaning it may keep recording audio while a notification is visible.</string>
     <string name="jail_signal_fg_service_camera_short">Camera foreground service</string>
     <string name="jail_signal_fg_service_camera_detail">The app declares a foreground service of type \u201Ccamera\u201D, meaning it may keep using the camera while a notification is visible.</string>
-    <!-- Phase 4: human-readable report -->
+    <!-- Phase 4: per-bullet phrasing. Keep technically honest. -->
+
     <string name="jail_report_title">Risk report</string>
-    <string name="jail_report_intro">Plain-language summary of what each selected app can probably observe. Jail lowers some of this; it cannot eliminate it.</string>
-    <string name="jail_report_empty_title">No apps selected</string>
-    <string name="jail_report_empty_body">Pick apps in the Apps tab first. A risk report will appear here for each selected app.</string>
-    <string name="jail_report_pending">Audit has not run yet for this app. Open it from the Apps tab or tap \u201CRe-audit\u201D on the details screen.</string>
+    <string name="jail_report_pending">Audit has not run yet for this app. Open it from the Apps tab or tap "Re-audit" on the details screen.</string>
+    <string name="jail_report_overall_risk_format">Overall risk: %1$s</string>
     <string name="jail_report_section_can_see">What this app can likely see</string>
     <string name="jail_report_section_cannot_see">What this app probably cannot see</string>
     <string name="jail_report_section_work_profile">What changes inside a work profile</string>
     <string name="jail_report_section_network">Network metadata that may still leak</string>
     <string name="jail_report_section_residual">Risks that remain even with Jail</string>
-    <string name="jail_report_open_details">Open full audit details</string>
-    <string name="jail_report_overall_risk_format">Overall risk: %1$s</string>
-    <!-- Phase 4: per-bullet phrasing. Keep technically honest. -->
     <string name="jail_report_can_see_own_ui">Everything you type, tap, or view inside this app\u2019s own UI.</string>
     <string name="jail_report_can_see_location">Your precise device location while the app is in use.</string>
     <string name="jail_report_can_see_background_location">Your location even while you are not actively using the app.</string>
@@ -388,32 +384,6 @@
     <string name="jail_report_residual_overlay">Overlays can imitate other app UIs and capture taps in the overlay area.</string>
     <string name="jail_report_residual_system_app">This is a system app; it may have pre-granted capabilities that a regular app would have to ask for.</string>
     <string name="jail_report_confidence_format">(%1$s)</string>
-    <string name="jail_report_copy">Copy report to clipboard</string>
-    <string name="jail_report_copied">Report copied</string>
-    <string name="jail_card_help_title">What Jail can and can\u2019t do</string>
-    <string name="jail_card_help_subtitle">Plain expectations: what this feature can help you with, and what it does not change.</string>
-    <string name="jail_help_title">About Jail</string>
-    <string name="jail_help_can_title">What Jail can do</string>
-    <string name="jail_help_can_body">• Guide you to reduce what a selected app can see and do (permissions, background work, network path through a chosen WireGuard tunnel).\n• Help you think in terms of work profile separation and pre-launch checklists — not a technical bypass of the Android sandbox.</string>
-    <string name="jail_help_cannot_title">What Jail cannot do</string>
-    <string name="jail_help_cannot_body">• It does not make a third-party app \u201Csafe\u201D or \u201Cuntrackable\u201D. The app can still see what you do inside it and can use any permission you grant.\n• It does not block in-app tracking, overlay fraud, or all fingerprinting. A VPN changes the network path, not every way an app can infer state.</string>
-    <string name="jail_wizard_progress_format">Step %1$d of %2$d</string>
-    <string name="jail_wizard_title">Work profile guide</string>
-    <string name="jail_wizard_next">Next</string>
-    <string name="jail_wizard_back">Back</string>
-    <string name="jail_wizard_done">Done</string>
-    <string name="jail_wizard_step_what_title">What is a work profile?</string>
-    <string name="jail_wizard_step_what_body">A work profile is a separate space on your device with its own app installs and data. On supported devices, Jail can launch Android\'s managed-profile provisioning flow to create one.</string>
-    <string name="jail_wizard_step_detect_title">Check whether you already have one</string>
-    <string name="jail_wizard_step_detect_body">Look for a briefcase badge on app icons, or open Android Settings and search for “Work profile”. Jail reports profile state conservatively: it can detect profile presence, but OEM behavior may limit exact confirmation.</string>
-    <string name="jail_wizard_step_install_title">Apps are installed separately</string>
-    <string name="jail_wizard_step_install_body">Putting an app \u201Cin work\u201D means installing it again inside the work profile. Jail does not move or clone app data automatically.</string>
-    <string name="jail_wizard_step_icons_title">Choose the right icon</string>
-    <string name="jail_wizard_step_icons_body">The icon with the briefcase launches the work-profile copy; the normal icon launches the personal profile copy. They are separate installations.</string>
-    <string name="jail_wizard_step_limits_title">What isolation helps with</string>
-    <string name="jail_wizard_step_limits_body">Work profile reduces exposure of personal apps and files to the work copy. It does not stop the app from observing what you do inside that app.</string>
-    <string name="jail_wizard_step_honest_title">Honest limits</string>
-    <string name="jail_wizard_step_honest_body">This wizard is guidance only. Your employer\u2019s MDM or Android\u2019s own settings control provisioning. Jail shows status when it can — it does not promise automated setup.</string>
     <string name="jail_launch_title">Sterile launch</string>
     <string name="jail_launch_tunnel_none">(None)</string>
     <string name="jail_launch_tunnel_label">Jail tunnel (existing WireGuard tunnel)</string>
@@ -513,10 +483,6 @@
     <string name="jail_provisioning_launch_ok">Provisioning flow started. Complete Android setup screens to finish.</string>
     <string name="jail_provisioning_launch_cancelled">Provisioning was cancelled.</string>
     <string name="jail_provisioning_launch_failed">Could not launch provisioning on this device.</string>
-    <string name="jail_provisioning_adb_label">Standard provisioning is not available on this device. You can use ADB to set up the profile manually.</string>
-    <string name="jail_provisioning_adb_button">Show ADB instructions</string>
-    <string name="jail_provisioning_adb_copied">ADB provisioning command copied to clipboard</string>
-    <string name="jail_provisioning_done">✓ Work profile configured</string>
 
     <string name="jail_detail_work_profile_state_installed">Installed in work profile</string>
     <string name="jail_detail_work_profile_state_auto">Automatic install is available</string>
