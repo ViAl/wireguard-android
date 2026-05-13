@@ -311,7 +311,6 @@
     <string name="jail_detail_reasons_header">Сигналы, повлиявшие на балл</string>
     <string name="jail_detail_no_signals">Для этого приложения не обнаружено аудит-сигналов. Оно по-прежнему может получать данные в своём интерфейсе.</string>
     <string name="jail_detail_audit_pending">Для этого приложения аудит ещё не запускался.</string>
-    <string name="jail_detail_refresh">Проверить снова</string>
     <string name="jail_detail_last_checked">Последняя проверка: %1$s</string>
     <string name="jail_detail_last_checked_never">Последняя проверка: никогда</string>
     <string name="jail_detail_declared_permissions_header">Разрешения в манифесте приложения</string>

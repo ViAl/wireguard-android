@@ -292,7 +292,6 @@
     <string name="jail_detail_reasons_header">Signals contributing to the score</string>
     <string name="jail_detail_no_signals">No audit signals fired for this app. It still may access data inside its own UI.</string>
     <string name="jail_detail_audit_pending">Audit has not run yet for this app.</string>
-    <string name="jail_detail_refresh">Re-audit this app</string>
     <string name="jail_detail_last_checked">Last checked: %1$s</string>
     <string name="jail_detail_last_checked_never">Last checked: never</string>
     <string name="jail_detail_declared_permissions_header">Permissions declared by the app</string>

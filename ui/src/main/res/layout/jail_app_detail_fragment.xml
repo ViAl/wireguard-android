@@ -127,14 +127,7 @@
                     android:textAppearance="?attr/textAppearanceBodySmall"
                     tools:text="Last checked: just now" />
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/jail_detail_refresh"
-                    style="?attr/materialButtonOutlinedStyle"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="end"
-                    android:layout_marginTop="8dp"
-                    android:text="@string/jail_detail_refresh" />
+                <!-- Refresh button removed; audit runs automatically on detail open -->
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
