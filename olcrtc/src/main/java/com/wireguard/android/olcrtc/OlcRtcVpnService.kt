@@ -88,30 +88,16 @@ class OlcRtcVpnService : VpnService() {
             ?: throw IllegalStateException("Failed to establish VPN interface")
 
         val fd = vpnInterface!!.fd
-        val configDir = File(filesDir, "tun2socks").also { it.mkdirs() }
-
-        if (OlcRtcNativeLib.load()) {
-            val configPath = OlcRtcNativeLib.generateTun2socksConfig(
-                configDir = configDir,
-                socksPort = config.socksPort,
-                tunFd = fd.toString(),
-                dnsServer = config.dnsServer
-            )
-            val result = OlcRtcNativeLib.startTun2socksNative(configPath, fd)
-            if (result != 0) {
-                android.util.Log.w("OlcRtcVpnService", "tun2socks start returned $result")
-            }
-        }
+        android.util.Log.d("OlcRtcVpnService", "TUN fd=$fd established for ${config.name}")
+        // hev-socks5-tunnel native bridge will be wired in a follow-up.
+        // The TUN interface is created and the Go AAR will handle routing.
 
         isRunning = true
     }
 
     private fun stopVpn() {
         if (!isRunning) return
-        if (OlcRtcNativeLib.load()) {
-            try { OlcRtcNativeLib.stopTun2socksNative() }
-            catch (e: Exception) { android.util.Log.w("OlcRtcVpnService", "stop error", e) }
-        }
+        android.util.Log.d("OlcRtcVpnService", "Stopping VPN")
         vpnInterface?.close()
         vpnInterface = null
         isRunning = false
