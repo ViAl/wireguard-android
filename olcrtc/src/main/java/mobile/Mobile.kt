@@ -22,11 +22,13 @@ object Mobile {
     private external fun _init()
     external fun setProviders()
 
+    @Throws(Exception::class)
     external fun start(
         carrierName: String, roomID: String, clientID: String, keyHex: String,
         socksPort: Long, socksUser: String, socksPass: String
     )
 
+    @Throws(Exception::class)
     external fun startWithTransport(
         carrierName: String, transportName: String, roomID: String, clientID: String,
         keyHex: String, socksPort: Long, socksUser: String, socksPass: String
@@ -34,6 +36,7 @@ object Mobile {
 
     external fun stop()
     external fun isRunning(): Boolean
+    @Throws(Exception::class)
     external fun waitReady(timeoutMillis: Long)
 
     // ---- config ----
@@ -44,12 +47,14 @@ object Mobile {
     external fun setVP8Options(fps: Long, batchSize: Long)
 
     // ---- utilities ----
+    @Throws(Exception::class)
     external fun ping(
         carrierName: String, transportName: String, roomID: String, clientID: String,
         keyHex: String, socksPort: Long, timeoutMillis: Long, pingURL: String,
         vp8FPS: Long, vp8BatchSize: Long
     ): Long
 
+    @Throws(Exception::class)
     external fun check(
         carrierName: String, transportName: String, roomID: String, clientID: String,
         keyHex: String, socksPort: Long, timeoutMillis: Long, vp8FPS: Long, vp8BatchSize: Long
