@@ -63,16 +63,24 @@ object Mobile {
     ): Long
 
     // ---- protect / log ----
-    external fun setProtector(protector: SocketProtectorProxy)
-    external fun setLogWriter(writer: LogWriterProxy)
+    external fun setProtector(protector: proxySocketProtector)
+    external fun setLogWriter(writer: proxyLogWriter)
 }
 
-class SocketProtectorProxy(private val impl: (Int) -> Boolean) {
+/**
+ * JNI name must match Go's proxySocketProtector inner class.
+ * Export: Java_mobile_Mobile_00024proxySocketProtector_protect
+ */
+class proxySocketProtector(private val impl: (Int) -> Boolean) {
     @Suppress("unused")
     fun protect(fd: Int): Boolean = impl(fd)
 }
 
-class LogWriterProxy(private val impl: (String) -> Unit) {
+/**
+ * JNI name must match Go's proxyLogWriter inner class.
+ * Export: Java_mobile_Mobile_00024proxyLogWriter_writeLog
+ */
+class proxyLogWriter(private val impl: (String) -> Unit) {
     @Suppress("unused")
     fun writeLog(msg: String) { impl(msg) }
 }

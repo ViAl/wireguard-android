@@ -2,9 +2,9 @@ package com.wireguard.android.olcrtc
 
 import android.content.Context
 import android.content.Intent
-import mobile.LogWriterProxy
 import mobile.Mobile
-import mobile.SocketProtectorProxy
+import mobile.proxyLogWriter
+import mobile.proxySocketProtector
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -85,11 +85,11 @@ class OlcRtcTransport(private val appContext: Context) {
             Mobile.load()
 
             // Set required callbacks BEFORE start
-            Mobile.setProtector(SocketProtectorProxy { fd ->
+            Mobile.setProtector(proxySocketProtector { fd ->
                 android.util.Log.d("OlcRtcTransport", "Protect fd=$fd")
                 true
             })
-            Mobile.setLogWriter(LogWriterProxy { msg ->
+            Mobile.setLogWriter(proxyLogWriter { msg ->
                 android.util.Log.d("OlcRTC", msg)
             })
 
