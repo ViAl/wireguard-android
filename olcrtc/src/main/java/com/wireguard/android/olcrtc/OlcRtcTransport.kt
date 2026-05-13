@@ -2,6 +2,9 @@ package com.wireguard.android.olcrtc
 
 import android.content.Context
 import android.content.Intent
+import mobile.LogWriterProxy
+import mobile.Mobile
+import mobile.SocketProtectorProxy
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -79,24 +82,24 @@ class OlcRtcTransport(private val appContext: Context) {
 
     private fun startGoClient(config: OlcRtcConfig) {
         try {
-            MobileBridge.load()
+            Mobile.load()
 
             // Set required callbacks BEFORE start
-            MobileBridge.setProtector(SocketProtectorProxy { fd ->
+            Mobile.setProtector(SocketProtectorProxy { fd ->
                 android.util.Log.d("OlcRtcTransport", "Protect fd=$fd")
                 true
             })
-            MobileBridge.setLogWriter(LogWriterProxy { msg ->
+            Mobile.setLogWriter(LogWriterProxy { msg ->
                 android.util.Log.d("OlcRTC", msg)
             })
 
-            MobileBridge.setLink("direct")
-            MobileBridge.setTransport(config.transport)
-            MobileBridge.setDNS(config.dnsServer)
-            MobileBridge.setVP8Options(config.vp8Fps, config.vp8BatchSize)
-            MobileBridge.setDebug(false)
+            Mobile.setLink("direct")
+            Mobile.setTransport(config.transport)
+            Mobile.setDNS(config.dnsServer)
+            Mobile.setVP8Options(config.vp8Fps, config.vp8BatchSize)
+            Mobile.setDebug(false)
 
-            val err = MobileBridge.startWithTransport(
+            val err = Mobile.startWithTransport(
                 carrierName = config.carrier,
                 transportName = config.transport,
                 roomID = config.roomId,
@@ -118,8 +121,8 @@ class OlcRtcTransport(private val appContext: Context) {
 
     private fun stopGoClient() {
         try {
-            if (MobileBridge.load()) {
-                MobileBridge.stop()
+            if (Mobile.load()) {
+                Mobile.stop()
             }
             android.util.Log.d("OlcRtcTransport", "Go client stopped")
         } catch (e: Exception) {
