@@ -166,8 +166,11 @@ class JailFragment : Fragment(), JailFragmentHost {
                     updateBackCallbackEnabled()
                     return
                 }
+                // Nothing to dismiss — hand off to system. Re-enable callback
+                // so it can handle future detail/help openings.
                 isEnabled = false
                 requireActivity().onBackPressedDispatcher.onBackPressed()
+                isEnabled = true
             }
         }.also { callback ->
             requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, callback)

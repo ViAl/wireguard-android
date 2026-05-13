@@ -35,7 +35,11 @@ object InstalledAppsSource {
      * @param selectedPackages the packages currently selected for Jail. Included even when a
      * row could not be built so callers can reconcile selection state.
      */
-    fun load(packageManager: PackageManager, selectedPackages: Set<String>): List<JailAppInfo> {
+    fun load(
+        packageManager: PackageManager,
+        selectedPackages: Set<String>,
+        crossProfileApps: CrossProfileAppsWrapper
+    ): List<JailAppInfo> {
         val merged = LinkedHashMap<String, PackageInfo>(
             selectedPackages.size + APP_LIST_HINT
         )
@@ -50,7 +54,7 @@ object InstalledAppsSource {
 
         val results = ArrayList<JailAppInfo>(merged.size)
         merged.values.forEach { pi ->
-            buildFromPackageInfo(packageManager, pi, selectedPackages)?.let { results.add(it) }
+            buildFromPackageInfo(packageManager, pi, selectedPackages, crossProfileApps)?.let { results.add(it) }
         }
 
         results.sortWith(
@@ -72,7 +76,8 @@ object InstalledAppsSource {
     private fun buildFromPackageInfo(
         packageManager: PackageManager,
         packageInfo: PackageInfo,
-        selectedPackages: Set<String>
+        selectedPackages: Set<String>,
+        crossProfileApps: CrossProfileAppsWrapper
     ): JailAppInfo? {
         val appInfo = packageInfo.applicationInfo ?: return null
         val packageName = packageInfo.packageName
@@ -94,7 +99,7 @@ object InstalledAppsSource {
             isSystemApp = isSystemApp,
             hasInternetPermission = hasInternet,
             installedInMainProfile = true,
-            installedInOtherProfile = null,
+            installedInOtherProfile = crossProfileApps.isInstalledInOtherProfile(packageName),
             isSelectedForJail = packageName in selectedPackages
         )
     }
