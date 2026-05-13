@@ -1,116 +1,108 @@
 package com.wireguard.android.olcrtc
 
+import android.content.Context
+import android.content.Intent
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-/**
- * Lifecycle state of an OlcRTC transport tunnel.
- */
 enum class OlcRtcTransportState {
-    IDLE,
-    STARTING,
-    READY,
-    STOPPING,
-    ERROR
+    IDLE, STARTING, READY, STOPPING, ERROR
 }
 
-/**
- * Wraps the olcrtc Go AAR and manages WebRTC tunnel lifecycle.
- *
- * Thread-safe: all public methods can be called from any thread.
- * All heavy operations run on [Dispatchers.IO].
- */
-class OlcRtcTransport {
+class OlcRtcTransport(private val appContext: Context) {
 
     private val _state = MutableStateFlow(OlcRtcTransportState.IDLE)
     val state: StateFlow<OlcRtcTransportState> = _state.asStateFlow()
 
     private var config: OlcRtcConfig? = null
     private var scope: CoroutineScope? = null
-    private var transportJob: Job? = null
 
-    // Reference to the mobile.Mobile class (loaded from AAR)
-    // In Phase 1 we stub the native calls; real implementation in Phase 2
-    private var mobileInstance: Any? = null
-
-    /**
-     * Start the OlcRTC transport with the given [config].
-     *
-     * This method:
-     * 1. Initializes the olcrtc Go library
-     * 2. Starts the WebRTC connection via the carrier
-     * 3. Exposes a local SOCKS5 proxy on [OlcRtcConfig.socksPort]
-     *
-     * Returns immediately. Use [state] flow to observe progress.
-     */
-    fun start(config: OlcRtcConfig): Job {
+    fun start(config: OlcRtcConfig) {
         stop()
-
         this.config = config
         scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         _state.value = OlcRtcTransportState.STARTING
 
-        transportJob = scope?.launch {
+        scope?.launch {
             try {
-                // Phase 1: stub — will call mobile.Mobile.Start() in Phase 2
-                // For now, simulate startup delay
-                delay(100)
-
+                val intent = Intent(appContext, OlcRtcVpnService::class.java).apply {
+                    action = OlcRtcVpnService.ACTION_START
+                    putExtra(OlcRtcVpnService.EXTRA_CONFIG_NAME, config.name)
+                    putExtra(OlcRtcVpnService.EXTRA_CONFIG_CARRIER, config.carrier)
+                    putExtra(OlcRtcVpnService.EXTRA_CONFIG_ROOM, config.roomId)
+                    putExtra(OlcRtcVpnService.EXTRA_CONFIG_CLIENT, config.clientId)
+                    putExtra(OlcRtcVpnService.EXTRA_CONFIG_KEY, config.keyHex)
+                    putExtra(OlcRtcVpnService.EXTRA_CONFIG_TRANSPORT, config.transport)
+                    putExtra(OlcRtcVpnService.EXTRA_CONFIG_SOCKS_PORT, config.socksPort)
+                    putExtra(OlcRtcVpnService.EXTRA_CONFIG_DNS, config.dnsServer)
+                }
+                appContext.startForegroundService(intent)
+                delay(500)
+                startGoClient(config)
                 _state.value = OlcRtcTransportState.READY
             } catch (e: Exception) {
+                android.util.Log.e("OlcRtcTransport", "Failed to start", e)
                 _state.value = OlcRtcTransportState.ERROR
-                throw e
             }
         }
-
-        return transportJob!!
     }
 
-    /**
-     * Stop the transport.
-     *
-     * Tears down WebRTC connection, closes SOCKS5 proxy, frees native resources.
-     */
     fun stop() {
         if (_state.value == OlcRtcTransportState.IDLE) return
-
         _state.value = OlcRtcTransportState.STOPPING
+
+        try {
+            stopGoClient()
+            val intent = Intent(appContext, OlcRtcVpnService::class.java).apply {
+                action = OlcRtcVpnService.ACTION_STOP
+            }
+            appContext.startService(intent)
+        } catch (e: Exception) {
+            android.util.Log.w("OlcRtcTransport", "Error during stop", e)
+        }
 
         scope?.cancel()
         scope = null
-        transportJob = null
         config = null
-
-        // Phase 1: stub — will call mobile.Mobile.Stop() in Phase 2
-        // System.gc() — placeholder for native cleanup
-
         _state.value = OlcRtcTransportState.IDLE
     }
 
-    /**
-     * Returns the current config or null if not started.
-     */
-    fun getConfig(): OlcRtcConfig? = config
+    private fun startGoClient(config: OlcRtcConfig) {
+        try {
+            // Phase 2 stub — real call in Phase 3:
+            // mobile.Mobile.Start(config.carrier, config.transport, config.roomId,
+            //     config.clientId, config.keyHex, config.socksPort.toLong(),
+            //     config.socksUser ?: "", config.socksPass ?: "")
+            android.util.Log.d("OlcRtcTransport", "startGoClient: carrier=${config.carrier}, room=${config.roomId}")
+        } catch (e: Exception) {
+            android.util.Log.e("OlcRtcTransport", "mobile.Mobile.Start failed", e)
+            throw e
+        }
+    }
 
-    /**
-     * Returns true if the transport is currently running (READY state).
-     */
+    private fun stopGoClient() {
+        try {
+            // mobile.Mobile.Stop()
+            android.util.Log.d("OlcRtcTransport", "stopGoClient")
+        } catch (e: Exception) {
+            android.util.Log.w("OlcRtcTransport", "mobile.Mobile.Stop failed", e)
+        }
+    }
+
+    fun getConfig(): OlcRtcConfig? = config
     fun isRunning(): Boolean = _state.value == OlcRtcTransportState.READY
 
-    /**
-     * Returns a human-readable summary of the transport status.
-     */
     fun getStatusSummary(): String {
-        val currentState = _state.value
-        val name = config?.name ?: "unnamed"
-        return when (currentState) {
-            OlcRtcTransportState.IDLE -> "OlcRTC '$name': idle"
-            OlcRtcTransportState.STARTING -> "OlcRTC '$name': starting..."
-            OlcRtcTransportState.READY -> "OlcRTC '$name': running (${config?.carrier ?: "?"} / ${config?.transport ?: "?"})"
-            OlcRtcTransportState.STOPPING -> "OlcRTC '$name': stopping..."
-            OlcRtcTransportState.ERROR -> "OlcRTC '$name': error"
+        val s = _state.value
+        val n = config?.name ?: "unnamed"
+        return when (s) {
+            OlcRtcTransportState.IDLE -> "OlcRTC '$n': idle"
+            OlcRtcTransportState.STARTING -> "OlcRTC '$n': starting..."
+            OlcRtcTransportState.READY -> "OlcRTC '$n': running (${config?.carrier ?: "?"})"
+            OlcRtcTransportState.STOPPING -> "OlcRTC '$n': stopping..."
+            OlcRtcTransportState.ERROR -> "OlcRTC '$n': error"
         }
     }
 }

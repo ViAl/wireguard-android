@@ -27,6 +27,9 @@ android {
 }
 
 dependencies {
+    // AndroidX Core (for NotificationCompat, etc.)
+    implementation("androidx.core:core-ktx:1.13.1")
+
     // Pre-built olcrtc AAR
     implementation(files("src/main/libs/olcrtc.aar"))
 

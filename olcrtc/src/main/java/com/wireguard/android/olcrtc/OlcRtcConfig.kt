@@ -15,7 +15,9 @@ data class OlcRtcConfig(
     val vp8BatchSize: Int = 8,
     val dnsServer: String = "1.1.1.1:53",
     val excludedApplications: Set<String> = emptySet(),
-    val includedApplications: Set<String> = emptySet()
+    val includedApplications: Set<String> = emptySet(),
+    val socksUser: String? = null,
+    val socksPass: String? = null
 ) {
     companion object {
         const val MAX_NAME_LENGTH = 15
