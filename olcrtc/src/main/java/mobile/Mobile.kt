@@ -19,7 +19,7 @@ object Mobile {
     }
 
     // ---- lifecycle ----
-    private external fun _init()
+    private external fun _1init()
     external fun setProviders()
 
     @Throws(Exception::class)
