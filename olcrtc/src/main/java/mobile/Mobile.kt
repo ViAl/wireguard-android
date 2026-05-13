@@ -10,7 +10,10 @@ object Mobile {
         return try {
             System.loadLibrary("gojni")
             loaded = true
-            _init()
+            // _1init() is deliberately NOT called.
+            // libgojni.so's _1init() tries to FindClass() gomobile-generated proxy classes
+            // (proxySocketProtector, proxyLogWriter) that don't exist in our hand-written setup.
+            // This only matters if Go→Java callbacks are used, which we handle via interfaces.
             true
         } catch (e: UnsatisfiedLinkError) {
             Log.e("Mobile", "libgojni.so not found: ${e.message}")
