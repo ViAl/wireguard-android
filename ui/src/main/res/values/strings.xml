@@ -266,8 +266,8 @@
     <string name="jail_apps_search_hint">Search installed apps</string>
     <string name="jail_apps_empty">No installed apps match your search.</string>
     <plurals name="jail_apps_summary_selected">
-        <item quantity="one">%1$d of %2$d apps selected for Jail</item>
-        <item quantity="other">%1$d of %2$d apps selected for Jail</item>
+        <item quantity="one">%1$d of %2$d apps installed in Jail</item>
+        <item quantity="other">%1$d of %2$d apps installed in Jail</item>
     </plurals>
     <string name="jail_apps_badges_separator"> · </string>
     <string name="jail_app_badge_selected">Selected</string>

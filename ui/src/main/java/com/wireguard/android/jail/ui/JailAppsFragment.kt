@@ -215,7 +215,7 @@ class JailAppsFragment : Fragment() {
                 binding.jailAppBadges.visibility = View.VISIBLE
                 binding.jailAppBadges.text = badges.joinToString(badgesSeparator) { context.getString(it.labelRes) }
             }
-            binding.jailAppRow.setOnClickListener { onToggle(app.packageName) }
+            binding.jailAppRow.setOnClickListener { onOpenDetail(app.packageName) }
             binding.jailAppInfo.setOnClickListener { onOpenDetail(app.packageName) }
         }
     }

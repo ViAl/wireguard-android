@@ -283,10 +283,10 @@
     <string name="jail_apps_search_hint">Поиск установленных приложений</string>
     <string name="jail_apps_empty">Нет приложений по запросу.</string>
     <plurals name="jail_apps_summary_selected">
-        <item quantity="one">%1$d из %2$d приложения отмечено для Jail</item>
-        <item quantity="few">%1$d из %2$d приложений отмечено для Jail</item>
-        <item quantity="many">%1$d из %2$d приложений отмечено для Jail</item>
-        <item quantity="other">%1$d из %2$d приложений отмечено для Jail</item>
+        <item quantity="one">%1$d из %2$d приложения установлено в Jail</item>
+        <item quantity="few">%1$d из %2$d приложений установлено в Jail</item>
+        <item quantity="many">%1$d из %2$d приложений установлено в Jail</item>
+        <item quantity="other">%1$d из %2$d приложений установлено в Jail</item>
     </plurals>
     <string name="jail_apps_badges_separator"> · </string>
     <string name="jail_app_badge_selected">Выбрано</string>

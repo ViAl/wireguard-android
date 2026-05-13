@@ -115,11 +115,13 @@ class JailAppRepository(
                 .thenBy(String.CASE_INSENSITIVE_ORDER) { it.packageName }
 
         private fun jailAppsSortTier(app: JailAppInfo): Int {
+            // Apps installed in the Jail profile appear above everything else.
+            if (app.installedInOtherProfile == true) return 0
             return when {
-                app.isSelectedForJail && !app.isSystemApp -> 0
-                app.isSelectedForJail && app.isSystemApp -> 1
-                !app.isSelectedForJail && !app.isSystemApp -> 2
-                else -> 3
+                app.isSelectedForJail && !app.isSystemApp -> 1
+                app.isSelectedForJail && app.isSystemApp -> 2
+                !app.isSelectedForJail && !app.isSystemApp -> 3
+                else -> 4
             }
         }
     }
