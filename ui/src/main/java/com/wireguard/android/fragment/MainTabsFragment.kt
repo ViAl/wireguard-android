@@ -15,12 +15,14 @@ import com.google.android.material.tabs.TabLayout
 import com.wireguard.android.R
 import com.wireguard.android.databinding.MainTabsFragmentBinding
 import com.wireguard.android.jail.ui.JailFragment
+import com.wireguard.android.olcrtc.ui.OlcRtcMainFragment
 
 class MainTabsFragment : Fragment() {
     enum class MainTab(val tag: String) {
         VPN("vpn_tab"),
         APPS("apps_tab"),
-        JAIL("jail_tab");
+        JAIL("jail_tab"),
+        OLCRTC("olcrtc_tab");
 
         companion object {
             fun fromPosition(position: Int): MainTab = entries.getOrElse(position) { VPN }
@@ -118,6 +120,7 @@ class MainTabsFragment : Fragment() {
         MainTab.VPN -> TunnelListFragment()
         MainTab.APPS -> TunnelAppsFragment()
         MainTab.JAIL -> JailFragment()
+        MainTab.OLCRTC -> OlcRtcMainFragment()
     }
 
     companion object {

@@ -37,6 +37,9 @@ dependencies {
     // Pre-built olcrtc AAR
     implementation(files("src/main/libs/olcrtc.aar"))
 
+    // AndroidX Fragment (for Fragment, lifecycle, etc.)
+    implementation("androidx.fragment:fragment-ktx:1.8.5")
+
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 
