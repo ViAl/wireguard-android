@@ -77,10 +77,9 @@ class OlcRtcVpnService : VpnService() {
 
         createNotificationChannel()
         val notification = buildNotification(config.name)
-        val fgsType = android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE or
-            android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(FOREGROUND_SERVICE_ID, notification, fgsType)
+            startForeground(FOREGROUND_SERVICE_ID, notification,
+                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         } else {
             startForeground(FOREGROUND_SERVICE_ID, notification)
         }
