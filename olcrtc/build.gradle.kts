@@ -24,6 +24,10 @@ android {
             jniLibs.srcDirs("src/main/jniLibs")
         }
     }
+
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
 }
 
 dependencies {
