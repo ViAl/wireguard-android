@@ -1,5 +1,6 @@
 package com.wireguard.android.olcrtc.ui
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -9,6 +10,7 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
@@ -24,6 +26,16 @@ class OlcRtcListFragment : Fragment() {
     private var listView: LinearLayout? = null
     private var emptyView: TextView? = null
     private var configStore: OlcRtcConfigStore? = null
+    private var pendingConnectConfig: OlcRtcConfig? = null
+
+    private val vpnPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            pendingConnectConfig?.let { OlcRtcManager.connect(requireContext(), it) }
+        }
+        pendingConnectConfig = null
+    }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         val view = inflater.inflate(
@@ -111,8 +123,17 @@ class OlcRtcListFragment : Fragment() {
         btnRow.addView(Button(ctx).apply {
             text = if (isActive && state == OlcRtcConnectionState.CONNECTED) "Disconnect" else "Connect"
             setOnClickListener {
-                if (isActive && state == OlcRtcConnectionState.CONNECTED) OlcRtcManager.disconnect()
-                else OlcRtcManager.connect(requireContext(), config)
+                if (isActive && state == OlcRtcConnectionState.CONNECTED) {
+                    OlcRtcManager.disconnect()
+                } else {
+                    val intent = android.net.VpnService.prepare(requireContext())
+                    if (intent != null) {
+                        pendingConnectConfig = config
+                        vpnPermissionLauncher.launch(intent)
+                    } else {
+                        OlcRtcManager.connect(requireContext(), config)
+                    }
+                }
                 refreshList()
             }
         })

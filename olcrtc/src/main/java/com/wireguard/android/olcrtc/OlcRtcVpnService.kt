@@ -34,30 +34,30 @@ class OlcRtcVpnService : VpnService() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_START -> {
-                val name = intent.getStringExtra(EXTRA_CONFIG_NAME) ?: return START_NOT_STICKY
-                val carrier = intent.getStringExtra(EXTRA_CONFIG_CARRIER) ?: return START_NOT_STICKY
-                val room = intent.getStringExtra(EXTRA_CONFIG_ROOM) ?: return START_NOT_STICKY
-                val client = intent.getStringExtra(EXTRA_CONFIG_CLIENT) ?: return START_NOT_STICKY
-                val key = intent.getStringExtra(EXTRA_CONFIG_KEY) ?: return START_NOT_STICKY
-                val transport = intent.getStringExtra(EXTRA_CONFIG_TRANSPORT) ?: "vp8channel"
-                val socksPort = intent.getIntExtra(EXTRA_CONFIG_SOCKS_PORT, 10808)
-                val dns = intent.getStringExtra(EXTRA_CONFIG_DNS) ?: "1.1.1.1:53"
-
-                val config = OlcRtcConfig(
-                    name = name,
-                    carrier = carrier,
-                    roomId = room,
-                    clientId = client,
-                    keyHex = key,
-                    transport = transport,
-                    socksPort = socksPort,
-                    dnsServer = dns
-                )
-                startVpn(config)
+                val config = extractConfig(intent)
+                if (config != null) {
+                    Thread { startVpn(config) }.start()
+                }
             }
             ACTION_STOP -> stopVpn()
         }
         return Service.START_NOT_STICKY
+    }
+
+    private fun extractConfig(intent: Intent): OlcRtcConfig? {
+        val name = intent.getStringExtra(EXTRA_CONFIG_NAME) ?: return null
+        val carrier = intent.getStringExtra(EXTRA_CONFIG_CARRIER) ?: return null
+        val room = intent.getStringExtra(EXTRA_CONFIG_ROOM) ?: return null
+        val client = intent.getStringExtra(EXTRA_CONFIG_CLIENT) ?: return null
+        val key = intent.getStringExtra(EXTRA_CONFIG_KEY) ?: return null
+        val transport = intent.getStringExtra(EXTRA_CONFIG_TRANSPORT) ?: "vp8channel"
+        val socksPort = intent.getIntExtra(EXTRA_CONFIG_SOCKS_PORT, 10808)
+        val dns = intent.getStringExtra(EXTRA_CONFIG_DNS) ?: "1.1.1.1:53"
+        return OlcRtcConfig(
+            name = name, carrier = carrier, roomId = room,
+            clientId = client, keyHex = key, transport = transport,
+            socksPort = socksPort, dnsServer = dns
+        )
     }
 
     private fun startVpn(config: OlcRtcConfig) {

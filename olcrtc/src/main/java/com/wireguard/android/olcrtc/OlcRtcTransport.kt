@@ -27,19 +27,23 @@ class OlcRtcTransport(private val appContext: Context) {
 
         scope?.launch {
             try {
-                val intent = Intent(appContext, OlcRtcVpnService::class.java).apply {
-                    action = OlcRtcVpnService.ACTION_START
-                    putExtra(OlcRtcVpnService.EXTRA_CONFIG_NAME, config.name)
-                    putExtra(OlcRtcVpnService.EXTRA_CONFIG_CARRIER, config.carrier)
-                    putExtra(OlcRtcVpnService.EXTRA_CONFIG_ROOM, config.roomId)
-                    putExtra(OlcRtcVpnService.EXTRA_CONFIG_CLIENT, config.clientId)
-                    putExtra(OlcRtcVpnService.EXTRA_CONFIG_KEY, config.keyHex)
-                    putExtra(OlcRtcVpnService.EXTRA_CONFIG_TRANSPORT, config.transport)
-                    putExtra(OlcRtcVpnService.EXTRA_CONFIG_SOCKS_PORT, config.socksPort)
-                    putExtra(OlcRtcVpnService.EXTRA_CONFIG_DNS, config.dnsServer)
+                // Step 1: Start VpnService — must be on main thread
+                withContext(Dispatchers.Main) {
+                    val intent = Intent(appContext, OlcRtcVpnService::class.java).apply {
+                        action = OlcRtcVpnService.ACTION_START
+                        putExtra(OlcRtcVpnService.EXTRA_CONFIG_NAME, config.name)
+                        putExtra(OlcRtcVpnService.EXTRA_CONFIG_CARRIER, config.carrier)
+                        putExtra(OlcRtcVpnService.EXTRA_CONFIG_ROOM, config.roomId)
+                        putExtra(OlcRtcVpnService.EXTRA_CONFIG_CLIENT, config.clientId)
+                        putExtra(OlcRtcVpnService.EXTRA_CONFIG_KEY, config.keyHex)
+                        putExtra(OlcRtcVpnService.EXTRA_CONFIG_TRANSPORT, config.transport)
+                        putExtra(OlcRtcVpnService.EXTRA_CONFIG_SOCKS_PORT, config.socksPort)
+                        putExtra(OlcRtcVpnService.EXTRA_CONFIG_DNS, config.dnsServer)
+                    }
+                    appContext.startForegroundService(intent)
                 }
-                appContext.startForegroundService(intent)
                 delay(500)
+                // Step 2: Start Go client (heavy work, IO is fine)
                 startGoClient(config)
                 _state.value = OlcRtcTransportState.READY
             } catch (e: Exception) {
@@ -72,6 +76,16 @@ class OlcRtcTransport(private val appContext: Context) {
     private fun startGoClient(config: OlcRtcConfig) {
         try {
             MobileBridge.load()
+
+            // Set required callbacks BEFORE start
+            MobileBridge.setProtector(SocketProtectorProxy { fd ->
+                android.util.Log.d("OlcRtcTransport", "Protect fd=$fd")
+                true
+            })
+            MobileBridge.setLogWriter(LogWriterProxy { msg ->
+                android.util.Log.d("OlcRTC", msg)
+            })
+
             MobileBridge.setLink("direct")
             MobileBridge.setTransport(config.transport)
             MobileBridge.setDNS(config.dnsServer)
