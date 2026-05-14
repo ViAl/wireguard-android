@@ -1,23 +1,26 @@
 package com.wireguard.android.rtc
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+
 class RtcLogBuffer(
-    private val maxEntries: Int = 50,
+    private val maxEntries: Int = 100,
 ) {
-    private val entries = ArrayDeque<String>()
+    private val mutableEntries = MutableStateFlow<List<String>>(emptyList())
+    val entries: StateFlow<List<String>> = mutableEntries.asStateFlow()
 
     @Synchronized
     fun add(message: String) {
-        if (entries.size >= maxEntries) {
-            entries.removeFirst()
-        }
-        entries.addLast(message)
+        val next = (mutableEntries.value + message).takeLast(maxEntries)
+        mutableEntries.value = next
     }
 
     @Synchronized
-    fun snapshot(): List<String> = entries.toList()
+    fun snapshot(): List<String> = mutableEntries.value
 
     @Synchronized
     fun clear() {
-        entries.clear()
+        mutableEntries.value = emptyList()
     }
 }

@@ -528,4 +528,16 @@
     <string name="rtc_status_running">Running</string>
     <string name="rtc_invalid_uri">Invalid OlcRTC URI</string>
 
+
+    <string name="rtc_status_stopping">Stopping…</string>
+    <string name="rtc_status_error">Error: %1$s</string>
+    <string name="rtc_status_running_details">Running (%1$s, SOCKS %2$d)</string>
+    <string name="rtc_preview_display_name">Display name:</string>
+    <string name="rtc_preview_carrier">Carrier:</string>
+    <string name="rtc_preview_transport">Transport:</string>
+    <string name="rtc_preview_room_id">Room ID:</string>
+    <string name="rtc_preview_client_id">Client ID:</string>
+    <string name="rtc_preview_key">Key:</string>
+    <string name="rtc_logs">Logs</string>
+
 </resources>

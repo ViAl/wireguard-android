@@ -4,15 +4,17 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Toast
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.wireguard.android.R
 import com.wireguard.android.databinding.RtcFragmentBinding
 import com.wireguard.android.rtc.RtcController
 import com.wireguard.android.rtc.RtcState
 import com.wireguard.android.rtc.config.OlcRtcTunnelConfig
 import com.wireguard.android.rtc.config.OlcRtcUriParser
+import com.wireguard.android.rtc.native.OlcRtcNativeEngine
 import kotlinx.coroutines.launch
 
 class RtcFragment : Fragment() {
@@ -22,7 +24,9 @@ class RtcFragment : Fragment() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        rtcController = RtcController(requireContext().applicationContext)
+        rtcController = RtcController(
+            engine = OlcRtcNativeEngine { line -> rtcController.logBuffer.add(line) },
+        )
     }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
@@ -32,35 +36,31 @@ class RtcFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        val binding = requireNotNull(binding)
+        val b = requireNotNull(binding)
 
-        binding.parseButton.setOnClickListener {
-            val raw = binding.rtcUriInput.text?.toString().orEmpty()
+        b.parseButton.setOnClickListener {
+            val raw = b.rtcUriInput.text?.toString().orEmpty()
             runCatching { OlcRtcUriParser.parse(raw) }
-                .onSuccess { config ->
-                    parsedConfig = config
-                    renderConfig(config)
-                    binding.errorText.text = ""
+                .onSuccess {
+                    parsedConfig = it
+                    renderConfig(it)
+                    b.errorText.text = ""
+                    rtcController.logBuffer.add("Parsed successfully")
                 }
                 .onFailure { error ->
                     parsedConfig = null
                     clearPreview()
-                    binding.errorText.text = error.message ?: getString(R.string.rtc_invalid_uri)
+                    b.errorText.text = error.message ?: getString(R.string.rtc_invalid_uri)
                 }
         }
-
-        binding.startButton.setOnClickListener {
-            val config = parsedConfig
-            if (config == null) {
-                Toast.makeText(requireContext(), R.string.rtc_invalid_uri, Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-            rtcController.start(config)
-        }
-        binding.stopButton.setOnClickListener { rtcController.stop() }
+        b.startButton.setOnClickListener { parsedConfig?.let { rtcController.start(it) } ?: run { b.errorText.text = getString(R.string.rtc_invalid_uri) } }
+        b.stopButton.setOnClickListener { rtcController.stop() }
 
         viewLifecycleOwner.lifecycleScope.launch {
-            rtcController.state.collect { state -> renderState(state) }
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch { rtcController.state.collect { renderState(it) } }
+                launch { rtcController.logBuffer.entries.collect { lines -> b.logText.text = lines.joinToString("\n") } }
+            }
         }
     }
 
@@ -69,33 +69,59 @@ class RtcFragment : Fragment() {
         super.onDestroyView()
     }
 
+    override fun onDestroy() {
+        rtcController.close()
+        super.onDestroy()
+    }
+
     private fun renderConfig(config: OlcRtcTunnelConfig) {
-        val binding = requireNotNull(binding)
-        binding.previewDisplayName.text = config.effectiveDisplayName
-        binding.previewCarrier.text = config.carrier.uriValue
-        binding.previewTransport.text = config.transport.uriValue
-        binding.previewRoomId.text = config.roomId
-        binding.previewClientId.text = config.clientId
-        binding.previewKey.text = config.maskedKey()
+        val b = requireNotNull(binding)
+        b.previewDisplayName.text = config.effectiveDisplayName
+        b.previewCarrier.text = config.carrier.uriValue
+        b.previewTransport.text = config.transport.uriValue
+        b.previewRoomId.text = config.roomId
+        b.previewClientId.text = config.clientId
+        b.previewKey.text = config.maskedKey()
     }
 
     private fun clearPreview() {
-        val binding = requireNotNull(binding)
-        binding.previewDisplayName.text = "—"
-        binding.previewCarrier.text = "—"
-        binding.previewTransport.text = "—"
-        binding.previewRoomId.text = "—"
-        binding.previewClientId.text = "—"
-        binding.previewKey.text = "—"
+        val b = requireNotNull(binding)
+        b.previewDisplayName.text = "—"
+        b.previewCarrier.text = "—"
+        b.previewTransport.text = "—"
+        b.previewRoomId.text = "—"
+        b.previewClientId.text = "—"
+        b.previewKey.text = "—"
     }
 
     private fun renderState(state: RtcState) {
-        val binding = requireNotNull(binding)
-        binding.statusText.text = when (state) {
-            RtcState.Stopped -> getString(R.string.rtc_status_stopped)
-            RtcState.Starting -> getString(R.string.rtc_status_starting)
-            RtcState.Running -> getString(R.string.rtc_status_running)
-            is RtcState.Error -> state.message
+        val b = requireNotNull(binding)
+        when (state) {
+            RtcState.Stopped -> {
+                b.statusText.text = getString(R.string.rtc_status_stopped)
+                b.startButton.isEnabled = parsedConfig != null
+                b.stopButton.isEnabled = false
+            }
+            RtcState.Starting -> {
+                b.statusText.text = getString(R.string.rtc_status_starting)
+                b.startButton.isEnabled = false
+                b.stopButton.isEnabled = false
+            }
+            is RtcState.Running -> {
+                b.statusText.text = getString(R.string.rtc_status_running_details, state.displayName, state.socksPort)
+                b.startButton.isEnabled = false
+                b.stopButton.isEnabled = true
+            }
+            RtcState.Stopping -> {
+                b.statusText.text = getString(R.string.rtc_status_stopping)
+                b.startButton.isEnabled = false
+                b.stopButton.isEnabled = false
+            }
+            is RtcState.Error -> {
+                b.statusText.text = getString(R.string.rtc_status_error, state.message)
+                b.startButton.isEnabled = parsedConfig != null
+                b.stopButton.isEnabled = false
+            }
         }
     }
 }
