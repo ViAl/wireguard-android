@@ -250,6 +250,7 @@ public final class GoBackend implements Backend {
      */
     @Override
     public State setState(final Tunnel tunnel, State state, @Nullable final Config config) throws Exception {
+        Log.d(TAG, "setState: tunnel=" + tunnel.getName() + " state=" + state + " config=" + (config != null ? "present" : "null"));
         final State originalState = getState(tunnel);
 
         if (state == State.TOGGLE)
@@ -264,6 +265,7 @@ public final class GoBackend implements Backend {
             try {
                 setStateInternal(tunnel, config, state);
             } catch (final Exception e) {
+                Log.e(TAG, "setStateInternal failed for " + tunnel.getName(), e);
                 if (originalTunnel != null)
                     setStateInternal(originalTunnel, originalConfig, State.UP);
                 throw e;
@@ -276,6 +278,7 @@ public final class GoBackend implements Backend {
 
     private void setStateInternal(final Tunnel tunnel, @Nullable final Config config, final State state)
             throws Exception {
+        Log.d(TAG, "setStateInternal: tunnel=" + tunnel.getName() + " state=" + state + " config=" + (config != null ? "present" : "null"));
         Log.i(TAG, "Bringing tunnel " + tunnel.getName() + ' ' + state);
 
         if (state == State.UP) {
@@ -305,7 +308,7 @@ public final class GoBackend implements Backend {
                 return;
             }
 
-
+            Log.d(TAG, "Starting DNS resolution for " + config.getPeers().size() + " peers");
             dnsRetry: for (int i = 0; i < DNS_RESOLUTION_RETRIES; ++i) {
                 // Pre-resolve IPs so they're cached when building the userspace string
                 for (final Peer peer : config.getPeers()) {
@@ -314,6 +317,7 @@ public final class GoBackend implements Backend {
                         continue;
                     if (ep.getResolved().orElse(null) == null) {
                         if (i < DNS_RESOLUTION_RETRIES - 1) {
+                            Log.d(TAG, "DNS retry " + (i+1) + "/" + DNS_RESOLUTION_RETRIES + " for peer endpoint " + ep.getHost());
                             Log.w(TAG, "DNS host \"" + ep.getHost() + "\" failed to resolve; trying again");
                             Thread.sleep(1000);
                             continue dnsRetry;
@@ -323,6 +327,7 @@ public final class GoBackend implements Backend {
                 }
                 break;
             }
+            Log.d(TAG, "DNS resolution completed for all peers");
 
             // Build config
             final String goConfig = config.toWgUserspaceString();
@@ -367,20 +372,27 @@ public final class GoBackend implements Backend {
             service.setUnderlyingNetworks(null);
 
             builder.setBlocking(true);
+            Log.d(TAG, "Building VPN interface and establishing TUN");
             try (final ParcelFileDescriptor tun = builder.establish()) {
                 if (tun == null)
                     throw new BackendException(Reason.TUN_CREATION_ERROR);
+                Log.d(TAG, "TUN device established, fd=" + tun.getFd());
                 Log.d(TAG, "Go backend " + wgVersion());
+                Log.d(TAG, "Calling wgTurnOn(ifName=" + tunnel.getName() + ", goConfig.length=" + goConfig.length() + ")");
                 currentTunnelHandle = wgTurnOn(tunnel.getName(), tun.detachFd(), goConfig);
             }
-            if (currentTunnelHandle < 0)
+            Log.d(TAG, "wgTurnOn returned handle=" + currentTunnelHandle);
+            if (currentTunnelHandle < 0) {
+                Log.e(TAG, "wgTurnOn FAILED: handle=" + currentTunnelHandle);
                 throw new BackendException(Reason.GO_ACTIVATION_ERROR_CODE, currentTunnelHandle);
+            }
 
             currentTunnel = tunnel;
             currentConfig = config;
 
             service.protect(wgGetSocketV4(currentTunnelHandle));
             service.protect(wgGetSocketV6(currentTunnelHandle));
+            Log.d(TAG, "Tunnel UP successful, calling onStateChange(UP)");
         } else {
             if (currentTunnelHandle == -1) {
                 Log.w(TAG, "Tunnel already down");
@@ -391,6 +403,7 @@ public final class GoBackend implements Backend {
             currentTunnelHandle = -1;
             currentConfig = null;
             wgTurnOff(handleToClose);
+            Log.d(TAG, "setStateInternal: tunnel DOWN complete, handle closed");
             try {
                 vpnService.get(0, TimeUnit.NANOSECONDS).stopSelf();
             } catch (final TimeoutException ignored) { }

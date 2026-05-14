@@ -195,6 +195,7 @@ class TunnelManager(private val configStore: ConfigStore) : BaseObservable() {
     }
 
     suspend fun setTunnelState(tunnel: ObservableTunnel, state: Tunnel.State): Tunnel.State = withContext(Dispatchers.Main.immediate) {
+        Log.d(TAG, "setTunnelState: tunnel=${tunnel.name} state=$state currentState=${tunnel.state}")
         var newState = tunnel.state
         var throwable: Throwable? = null
         try {
@@ -203,6 +204,8 @@ class TunnelManager(private val configStore: ConfigStore) : BaseObservable() {
                 lastUsedTunnel = tunnel
         } catch (e: Throwable) {
             throwable = e
+            Log.e(TAG, "setTunnelState: exception for ${tunnel.name}", throwable)
+            Log.d(TAG, "setTunnelState: after exception, state=${tunnel.state}")
         }
         tunnel.onStateChanged(newState)
         saveState()

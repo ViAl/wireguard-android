@@ -8,6 +8,7 @@ package com.wireguard.android.widget
 import android.content.Context
 import android.os.Parcelable
 import android.util.AttributeSet
+import android.util.Log
 import com.google.android.material.materialswitch.MaterialSwitch
 
 class ToggleSwitch @JvmOverloads constructor(context: Context, attrs: AttributeSet? = null) : MaterialSwitch(context, attrs) {
@@ -20,6 +21,7 @@ class ToggleSwitch @JvmOverloads constructor(context: Context, attrs: AttributeS
     }
 
     override fun setChecked(checked: Boolean) {
+        Log.d(TAG, "ToggleSwitch.setChecked: checked=$checked isRestoringState=$isRestoringState hasListener=${listener != null}")
         if (checked == isChecked) return
         if (isRestoringState || listener == null) {
             super.setChecked(checked)
@@ -30,6 +32,7 @@ class ToggleSwitch @JvmOverloads constructor(context: Context, attrs: AttributeS
     }
 
     fun setCheckedInternal(checked: Boolean) {
+        Log.d(TAG, "ToggleSwitch.setCheckedInternal: checked=$checked")
         super.setChecked(checked)
         isEnabled = true
     }
@@ -40,5 +43,9 @@ class ToggleSwitch @JvmOverloads constructor(context: Context, attrs: AttributeS
 
     interface OnBeforeCheckedChangeListener {
         fun onBeforeCheckedChanged(toggleSwitch: ToggleSwitch?, checked: Boolean)
+    }
+
+    companion object {
+        private const val TAG = "WireGuard/ToggleSwitch"
     }
 }
