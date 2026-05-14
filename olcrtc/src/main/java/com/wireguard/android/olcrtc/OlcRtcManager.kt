@@ -1,6 +1,7 @@
 package com.wireguard.android.olcrtc
 
 import android.content.Context
+import android.net.ConnectivityManager
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -31,6 +32,7 @@ object OlcRtcManager {
     private var lastRxBytes: Long = -1
     private var stallCount: Int = 0
     private var socks5FailCount: Int = 0
+    private var appContext: Context? = null
 
     private const val WATCHDOG_INTERVAL_MS = 5_000L
     private const val BASE_RECONNECT_DELAY_MS = 2_000L
@@ -39,6 +41,7 @@ object OlcRtcManager {
 
     fun connect(appContext: Context, cfg: OlcRtcConfig) {
         disconnect()
+        this.appContext = appContext
         config = cfg
         _connectionState.value = OlcRtcConnectionState.CONNECTING
         _currentTunnelName.value = cfg.name
@@ -90,6 +93,14 @@ object OlcRtcManager {
             val name = config?.name ?: "unknown"
             OlcRtcVpnService.notifyReconnectExhausted(appContext, name)
             disconnect()
+            return
+        }
+
+        // Check if there's any active network before attempting reconnect
+        val cm = appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        val activeNetwork = cm?.activeNetwork
+        if (activeNetwork == null) {
+            android.util.Log.w("OlcRtcManager", "No active network — not reconnecting, will wait for network")
             return
         }
 
@@ -185,6 +196,18 @@ object OlcRtcManager {
 
                 // LOW-1: Refresh wake lock
                 OlcRtcVpnService.refreshWakeLock()
+            }
+        }
+    }
+
+    fun notifyNetworkAvailable() {
+        if (_connectionState.value == OlcRtcConnectionState.ERROR ||
+            _connectionState.value == OlcRtcConnectionState.DISCONNECTED) {
+            val ctx = appContext
+            val cfg = config
+            if (ctx != null && cfg != null) {
+                android.util.Log.d("OlcRtcManager", "Network became available, reconnecting")
+                connect(ctx, cfg)
             }
         }
     }

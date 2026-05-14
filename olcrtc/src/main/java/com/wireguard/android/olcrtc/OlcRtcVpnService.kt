@@ -389,6 +389,8 @@ class OlcRtcVpnService : VpnService() {
                     currentNetwork = network
                     mainHandler.removeCallbacks(networkLostRunnable)
                     setUnderlyingNetworks(arrayOf(network))
+                    // If currently in ERROR/DISCONNECTED state, trigger reconnect
+                    OlcRtcManager.notifyNetworkAvailable()
                 }
 
                 override fun onLost(network: Network) {
