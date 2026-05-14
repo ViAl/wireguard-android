@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <EditText
+            android:id="@+id/rtc_uri_input"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="@string/rtc_uri_hint"
+            android:inputType="textMultiLine"
+            android:minLines="3" />
+
+        <Button
+            android:id="@+id/parse_button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/rtc_parse" />
+
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Display name:" />
+        <TextView android:id="@+id/preview_display_name" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="—" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Carrier:" />
+        <TextView android:id="@+id/preview_carrier" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="—" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Transport:" />
+        <TextView android:id="@+id/preview_transport" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="—" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Room ID:" />
+        <TextView android:id="@+id/preview_room_id" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="—" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Client ID:" />
+        <TextView android:id="@+id/preview_client_id" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="—" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Key:" />
+        <TextView android:id="@+id/preview_key" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="—" />
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+            <Button android:id="@+id/start_button" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/rtc_start" />
+            <Button android:id="@+id/stop_button" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/rtc_stop" />
+        </LinearLayout>
+
+        <TextView android:id="@+id/status_text" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/rtc_status_stopped" />
+        <TextView android:id="@+id/error_text" android:layout_width="match_parent" android:layout_height="wrap_content" />
+    </LinearLayout>
+</ScrollView>

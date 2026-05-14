@@ -516,4 +516,16 @@
     <string name="jail_profile_jail_installed">Jail ✓</string>
     <string name="jail_profile_jail_not_installed">Jail —</string>
     <string name="jail_profile_jail_unknown">Jail ?</string>
+
+    <string name="rtc">RTC</string>
+    <string name="rtc_title">RTC</string>
+    <string name="rtc_uri_hint">Paste OlcRTC URI</string>
+    <string name="rtc_parse">Parse</string>
+    <string name="rtc_start">Start</string>
+    <string name="rtc_stop">Stop</string>
+    <string name="rtc_status_stopped">Stopped</string>
+    <string name="rtc_status_starting">Starting…</string>
+    <string name="rtc_status_running">Running</string>
+    <string name="rtc_invalid_uri">Invalid OlcRTC URI</string>
+
 </resources>

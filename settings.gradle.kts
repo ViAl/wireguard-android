@@ -20,3 +20,5 @@ rootProject.name = "wireguard-android"
 
 include(":tunnel")
 include(":ui")
+
+include(":rtc")

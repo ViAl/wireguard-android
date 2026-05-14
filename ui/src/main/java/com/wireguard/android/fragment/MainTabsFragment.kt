@@ -20,7 +20,8 @@ class MainTabsFragment : Fragment() {
     enum class MainTab(val tag: String) {
         VPN("vpn_tab"),
         APPS("apps_tab"),
-        JAIL("jail_tab");
+        JAIL("jail_tab"),
+        RTC("rtc_tab");
 
         companion object {
             fun fromPosition(position: Int): MainTab = entries.getOrElse(position) { VPN }
@@ -118,6 +119,7 @@ class MainTabsFragment : Fragment() {
         MainTab.VPN -> TunnelListFragment()
         MainTab.APPS -> TunnelAppsFragment()
         MainTab.JAIL -> JailFragment()
+        MainTab.RTC -> RtcFragment()
     }
 
     companion object {
