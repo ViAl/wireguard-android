@@ -24,6 +24,13 @@ class OlcRtcTransport(private val appContext: Context) {
     private var config: OlcRtcConfig? = null
     private var scope: CoroutineScope? = null
 
+    @Volatile
+    private var lastRtcConnectedAtMs = 0L
+    @Volatile
+    private var lastRtcFailureAtMs = 0L
+    @Volatile
+    private var rtcFailureCount = 0
+
     fun start(config: OlcRtcConfig) {
         stop()
         this.config = config
@@ -44,6 +51,8 @@ class OlcRtcTransport(private val appContext: Context) {
                         putExtra(OlcRtcVpnService.EXTRA_CONFIG_TRANSPORT, config.transport)
                         putExtra(OlcRtcVpnService.EXTRA_CONFIG_SOCKS_PORT, config.socksPort)
                         putExtra(OlcRtcVpnService.EXTRA_CONFIG_DNS, config.dnsServer)
+                        putExtra(OlcRtcVpnService.EXTRA_CONFIG_SOCKS_USER, config.socksUser ?: "")
+                        putExtra(OlcRtcVpnService.EXTRA_CONFIG_SOCKS_PASS, config.socksPass ?: "")
                     }
                     appContext.startForegroundService(intent)
                 }
@@ -85,25 +94,31 @@ class OlcRtcTransport(private val appContext: Context) {
         try {
             // Mobile.load() not needed — libgojni.so is loaded automatically by the AAR's static initializer.
             // Wire SocketProtector to make Go sockets go through the VPN interface.
+            // Use the real protect function from OlcRtcVpnService if available.
+            val vpnProtectFn = OlcRtcVpnService.protectFn
             Mobile.setProtector(object : SocketProtector {
                 override fun protect(fd: Long): Boolean {
-                    // OlcRtcTransport doesn't hold a VpnService reference directly;
-                    // the protector is accessed via VpnService.protect() on the Go fd.
-                    // This relies on bindProcessToNetwork in OlcRtcVpnService instead.
+                    val fn = vpnProtectFn
+                    if (fn != null) {
+                        return fn(fd.toInt())
+                    }
+                    android.util.Log.w("OlcRtcTransport", "protect() called but no VpnService available")
                     return true
                 }
             })
 
-            // Wire LogWriter to forward Go log output to Android logcat.
+            // setProviders BEFORE setLogWriter — order from olcbox
+            Mobile.setProviders()
+
+            // Wire LogWriter to forward Go log output to Android logcat and monitor RTC health.
+            resetRtcHealthState()
             Mobile.setLogWriter(object : LogWriter {
                 override fun writeLog(msg: String?) {
-                    android.util.Log.d("OlcRtcTransport", "Go: ${msg ?: ""}")
+                    val line = (msg ?: "").trimEnd()
+                    android.util.Log.d("OlcRtcTransport", "Go: $line")
+                    handleRtcLine(line)
                 }
             })
-
-            // Call setProviders to register default carrier/link/transport implementations.
-            // Order matters: setProtector + setLogWriter MUST be called first.
-            Mobile.setProviders()
 
             // Configure
             Mobile.setLink("direct")
@@ -112,6 +127,7 @@ class OlcRtcTransport(private val appContext: Context) {
             Mobile.setVP8Options(config.vp8Fps.toLong(), config.vp8BatchSize.toLong())
             Mobile.setDebug(false)
 
+            resetRtcHealthState()
             Mobile.startWithTransport(
                 config.carrier,
                 config.transport,
@@ -124,8 +140,6 @@ class OlcRtcTransport(private val appContext: Context) {
             )
 
             Mobile.waitReady(25_000L)
-
-            // WG tunnel stopping will be implemented in UI layer (cross-module)
 
             android.util.Log.d("OlcRtcTransport", "Go client ready: carrier=${config.carrier}")
         } catch (e: Exception) {
@@ -143,9 +157,68 @@ class OlcRtcTransport(private val appContext: Context) {
         }
     }
 
-    /**
-     * Stop all running WireGuard tunnels to avoid conflict with OlcRTC VPN.
-     */
+    private fun handleRtcLine(line: String) {
+        val lowerLine = line.lowercase()
+
+        if (lowerLine.contains("ice connection state changed: connected") ||
+            lowerLine.contains("peer connection state changed: connected") ||
+            lowerLine.contains("socks5 server listening")
+        ) {
+            markRtcConnected()
+            return
+        }
+
+        if (lowerLine.contains("ice connection state changed: failed") ||
+            lowerLine.contains("peer connection state changed: failed") ||
+            lowerLine.contains("ice connection state changed: closed") ||
+            lowerLine.contains("peer connection state changed: closed")
+        ) {
+            noteRtcFailure(lowerLine)
+            return
+        }
+
+        if (lowerLine.contains("network is unreachable") ||
+            lowerLine.contains("use of closed network connection") ||
+            lowerLine.contains("read/write on closed pipe")
+        ) {
+            noteRtcFailure(lowerLine)
+        }
+    }
+
+    private fun markRtcConnected() {
+        lastRtcConnectedAtMs = System.currentTimeMillis()
+        lastRtcFailureAtMs = 0L
+        rtcFailureCount = 0
+    }
+
+    private fun resetRtcHealthState() {
+        lastRtcConnectedAtMs = System.currentTimeMillis()
+        lastRtcFailureAtMs = 0L
+        rtcFailureCount = 0
+    }
+
+    private fun noteRtcFailure(line: String) {
+        if (_state.value != OlcRtcTransportState.READY) return
+
+        val now = System.currentTimeMillis()
+        if (now - lastRtcConnectedAtMs < 2_500L) return
+
+        rtcFailureCount = if (now - lastRtcFailureAtMs <= 6_000L) {
+            rtcFailureCount + 1
+        } else {
+            1
+        }
+        lastRtcFailureAtMs = now
+
+        android.util.Log.w("OlcRtcTransport", "RTC health issue #$rtcFailureCount: $line")
+
+        if (rtcFailureCount >= 2) {
+            android.util.Log.w("OlcRtcTransport", "RTC failures threshold reached, requesting reconnect")
+            // Signal to the manager via state that recovery is needed
+            _state.value = OlcRtcTransportState.ERROR
+        }
+    }
+
     fun getConfig(): OlcRtcConfig? = config
     fun isRunning(): Boolean = _state.value == OlcRtcTransportState.READY
 

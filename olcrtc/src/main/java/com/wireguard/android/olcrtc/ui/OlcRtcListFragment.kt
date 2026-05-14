@@ -1,6 +1,9 @@
 package com.wireguard.android.olcrtc.ui
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -11,6 +14,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
@@ -35,6 +39,14 @@ class OlcRtcListFragment : Fragment() {
             pendingConnectConfig?.let { OlcRtcManager.connect(requireContext(), it) }
         }
         pendingConnectConfig = null
+    }
+
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            android.util.Log.d("OlcRtcListFragment", "POST_NOTIFICATIONS granted")
+        }
     }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
@@ -126,6 +138,13 @@ class OlcRtcListFragment : Fragment() {
                 if (isActive && state == OlcRtcConnectionState.CONNECTED) {
                     OlcRtcManager.disconnect()
                 } else {
+                    // Request POST_NOTIFICATIONS on Android 13+
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.POST_NOTIFICATIONS)
+                            != PackageManager.PERMISSION_GRANTED) {
+                            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        }
+                    }
                     val intent = android.net.VpnService.prepare(requireContext())
                     if (intent != null) {
                         pendingConnectConfig = config
