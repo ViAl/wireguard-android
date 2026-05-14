@@ -14,6 +14,8 @@ import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.net.VpnService
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.ParcelFileDescriptor
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
@@ -38,6 +40,15 @@ class OlcRtcVpnService : VpnService() {
     private var currentNetwork: Network? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private lateinit var connectivityManager: ConnectivityManager
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val networkLostRunnable = Runnable { clearUnderlyingNetworks() }
+
+    private fun clearUnderlyingNetworks() {
+        if (currentNetwork == null) {
+            android.util.Log.d("OlcRtcVpnService", "Network handover grace expired, clearing underlying networks")
+            setUnderlyingNetworks(null)
+        }
+    }
 
     companion object {
         const val ACTION_START = "com.wireguard.android.olcrtc.START"
@@ -232,6 +243,7 @@ class OlcRtcVpnService : VpnService() {
         }
 
         stopForeground(STOP_FOREGROUND_REMOVE)
+        mainHandler.removeCallbacks(networkLostRunnable)
         unregisterNetworkCallback()
     }
 
@@ -356,14 +368,17 @@ class OlcRtcVpnService : VpnService() {
                     android.util.Log.d("OlcRtcVpnService", "New network available: $network")
                     connectivityManager.bindProcessToNetwork(network)
                     currentNetwork = network
+                    mainHandler.removeCallbacks(networkLostRunnable)
                     setUnderlyingNetworks(arrayOf(network))
                 }
 
                 override fun onLost(network: Network) {
-                    android.util.Log.d("OlcRtcVpnService", "Network lost: $network")
+                    android.util.Log.d("OlcRtcVpnService", "Network lost: $network, waiting 3s for handover...")
                     if (network == currentNetwork) {
                         currentNetwork = null
-                        setUnderlyingNetworks(null)
+                        // Give 3s grace period for handover — onAvailable may fire with new network
+                        mainHandler.removeCallbacks(networkLostRunnable)
+                        mainHandler.postDelayed(networkLostRunnable, 3000L)
                     }
                 }
 
