@@ -32,8 +32,6 @@ class OlcRtcVpnService : VpnService() {
     private var isRunning = false
     private var tun2socksThread: Thread? = null
     @Volatile
-    private var tun2socksStarted = false
-    @Volatile
     private var tun2socksStopRequested = false
 
     private var wakeLock: PowerManager.WakeLock? = null
@@ -60,6 +58,11 @@ class OlcRtcVpnService : VpnService() {
         /** Set by OlcRtcVpnService.startVpn() for OlcRtcTransport to use */
         @Volatile
         var protectFn: ((Int) -> Boolean)? = null
+
+        @Volatile
+        var tun2socksStarted = false
+
+        fun isTun2socksRunning(): Boolean = tun2socksStarted
 
         @Volatile
         private var nativeLibrariesLoaded = false

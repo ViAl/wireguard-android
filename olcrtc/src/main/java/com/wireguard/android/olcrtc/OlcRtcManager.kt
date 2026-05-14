@@ -117,6 +117,14 @@ object OlcRtcManager {
                     scheduleReconnect(appContext)
                     return@launch
                 }
+
+                // IMMEDIATE-1: Check tun2socks
+                if (!OlcRtcVpnService.isTun2socksRunning()) {
+                    android.util.Log.w("OlcRtcManager", "Watchdog: tun2socks not running, reconnecting")
+                    _connectionState.value = OlcRtcConnectionState.ERROR
+                    scheduleReconnect(appContext)
+                    return@launch
+                }
             }
         }
     }
