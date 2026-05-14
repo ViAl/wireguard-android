@@ -30,6 +30,7 @@ object OlcRtcManager {
     private var lastTxBytes: Long = -1
     private var lastRxBytes: Long = -1
     private var stallCount: Int = 0
+    private var socks5FailCount: Int = 0
 
     private const val WATCHDOG_INTERVAL_MS = 5_000L
     private const val BASE_RECONNECT_DELAY_MS = 2_000L
@@ -45,6 +46,7 @@ object OlcRtcManager {
         lastTxBytes = -1
         lastRxBytes = -1
         stallCount = 0
+        socks5FailCount = 0
 
         transport = OlcRtcTransport(appContext)
         scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -75,6 +77,7 @@ object OlcRtcManager {
         transport = null
         config = null
         reconnectAttempt = 0
+        socks5FailCount = 0
         _connectionState.value = OlcRtcConnectionState.DISCONNECTED
         _currentTunnelName.value = null
     }
@@ -134,17 +137,26 @@ object OlcRtcManager {
                     return@launch
                 }
 
-                // IMMEDIATE-2: Check SOCKS5 port
+                // IMMEDIATE-2: Check SOCKS5 port — debounced 3 consecutive failures
                 if (lastSocksPort > 0) {
-                    try {
+                    val socksOk = try {
                         java.net.Socket().use { sock ->
                             sock.connect(java.net.InetSocketAddress("127.0.0.1", lastSocksPort), 1000)
                         }
+                        true
                     } catch (e: Exception) {
-                        android.util.Log.w("OlcRtcManager", "Watchdog: SOCKS5 port $lastSocksPort unreachable, reconnecting")
-                        _connectionState.value = OlcRtcConnectionState.ERROR
-                        scheduleReconnect(appContext)
-                        return@launch
+                        false
+                    }
+                    if (socksOk) {
+                        socks5FailCount = 0
+                    } else {
+                        socks5FailCount++
+                        if (socks5FailCount >= 3) {
+                            android.util.Log.w("OlcRtcManager", "Watchdog: SOCKS5 port $lastSocksPort dead for 15s, reconnecting")
+                            _connectionState.value = OlcRtcConnectionState.ERROR
+                            scheduleReconnect(appContext)
+                            return@launch
+                        }
                     }
                 }
 
