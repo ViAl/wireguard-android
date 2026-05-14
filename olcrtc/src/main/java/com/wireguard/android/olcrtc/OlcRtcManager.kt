@@ -181,8 +181,8 @@ object OlcRtcManager {
                     val rx = stats[3]  // rx_bytes
                     if (tx == lastTxBytes && rx == lastRxBytes) {
                         stallCount++
-                        if (stallCount >= 3) {
-                            android.util.Log.w("OlcRtcManager", "Watchdog: traffic stalled for 15s, reconnecting")
+                        if (stallCount >= 12) {
+                            android.util.Log.w("OlcRtcManager", "Watchdog: traffic stalled for 60s, reconnecting")
                             _connectionState.value = OlcRtcConnectionState.ERROR
                             scheduleReconnect(appContext)
                             return@launch
