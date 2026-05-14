@@ -3,7 +3,6 @@ package com.wireguard.android.olcrtc
 import android.content.Context
 import android.content.Intent
 import mobile.Mobile
-import mobile.Mobile
 
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
