@@ -32,6 +32,7 @@ object OlcRtcManager {
     private var lastRxBytes: Long = -1
     private var stallCount: Int = 0
     private var socks5FailCount: Int = 0
+    private var keepaliveCounter = 0
     private var appContext: Context? = null
 
     private const val WATCHDOG_INTERVAL_MS = 5_000L
@@ -174,6 +175,13 @@ object OlcRtcManager {
                     }
                 }
 
+                // MEDIUM-1: Keepalive — каждые 5 циклов (~25с) шлём запрос через SOCKS5
+                keepaliveCounter++
+                if (keepaliveCounter >= 5) {
+                    keepaliveCounter = 0
+                    launchKeepalive()
+                }
+
                 // HIGH-1: Traffic stall detection
                 val stats = OlcRtcVpnService.getStats()
                 if (stats != null) {
@@ -197,6 +205,25 @@ object OlcRtcManager {
                 // LOW-1: Refresh wake lock
                 OlcRtcVpnService.refreshWakeLock()
             }
+        }
+    }
+
+    private fun CoroutineScope.launchKeepalive() = launch {
+        try {
+            val proxy = java.net.Proxy(
+                java.net.Proxy.Type.SOCKS,
+                java.net.InetSocketAddress("127.0.0.1", lastSocksPort)
+            )
+            val socket = java.net.Socket(proxy)
+            socket.connect(java.net.InetSocketAddress("1.1.1.1", 80), 5000)
+            // Minimal HTTP GET through SOCKS5
+            socket.getOutputStream().write(
+                "GET / HTTP/1.0\r\nHost: 1.1.1.1\r\n\r\n".toByteArray()
+            )
+            socket.close()
+            android.util.Log.d("OlcRtcManager", "Keepalive OK")
+        } catch (e: Exception) {
+            android.util.Log.d("OlcRtcManager", "Keepalive failed: ${e.message}")
         }
     }
 
