@@ -72,6 +72,31 @@ class RtcControllerTest {
         assertTrue(controller.state.value is RtcState.Error)
     }
 
+
+    @Test
+    fun stopIgnoredWhileStarting() {
+        val dispatcher = StandardTestDispatcher()
+        val scope = TestScope(dispatcher)
+        val engine = FakeRtcEngine()
+        val controller = RtcController(engine, scope = scope)
+        controller.start(config)
+        controller.stop()
+        assertTrue(controller.state.value is RtcState.Starting)
+        scope.runCurrent()
+        assertEquals(0, engine.stopCalls)
+    }
+
+    @Test
+    fun closeStopsEngineWhenRunning() {
+        val scope = TestScope(StandardTestDispatcher())
+        val engine = FakeRtcEngine()
+        val controller = RtcController(engine, scope = scope)
+        controller.start(config)
+        scope.runCurrent()
+        controller.close()
+        assertEquals(1, engine.stopCalls)
+    }
+
     @Test
     fun logsDoNotContainFullKey() {
         val scope = TestScope(StandardTestDispatcher())

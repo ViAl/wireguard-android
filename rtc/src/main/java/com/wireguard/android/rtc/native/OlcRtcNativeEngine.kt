@@ -85,7 +85,7 @@ class OlcRtcNativeEngine(
     }
 
     private fun configureLogWriterIfAvailable() {
-        val writerInterface = mobileClass.classLoader?.loadClass("mobile.LogWriter") ?: return
+        val writerInterface = findLogWriterInterface() ?: return
         val proxy = Proxy.newProxyInstance(mobileClass.classLoader, arrayOf(writerInterface)) { _, method, args ->
             if (method.name == "write" || method.name == "writeLog") {
                 val message = args?.firstOrNull()?.toString().orEmpty()
@@ -94,6 +94,13 @@ class OlcRtcNativeEngine(
             null
         }
         invokeOptional("setLogWriter", arrayOf(writerInterface), arrayOf(proxy))
+    }
+
+
+    private fun findLogWriterInterface(): Class<*>? {
+        val cl = mobileClass.classLoader ?: return null
+        return runCatching { cl.loadClass("mobile.LogWriter") }.getOrNull()
+            ?: runCatching { cl.loadClass("go.mobile.LogWriter") }.getOrNull()
     }
 
     private fun invokeRequired(name: String, paramTypes: Array<Class<*>>, args: Array<Any?>): Any? {

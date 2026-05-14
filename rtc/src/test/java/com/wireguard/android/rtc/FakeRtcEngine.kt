@@ -7,6 +7,7 @@ class FakeRtcEngine : RtcEngine {
     var shouldFailStop = false
     var running = false
     var startCalls = 0
+    var stopCalls = 0
 
     override fun start(config: OlcRtcTunnelConfig): RtcRunInfo {
         startCalls++
@@ -16,6 +17,7 @@ class FakeRtcEngine : RtcEngine {
     }
 
     override fun stop() {
+        stopCalls++
         if (shouldFailStop) throw IllegalStateException("stop-boom")
         running = false
     }

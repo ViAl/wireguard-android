@@ -72,7 +72,7 @@ class OlcRtcUriParserTest {
     fun rejectClientIdWithReservedSeparators() { OlcRtcUriParser.parse("olcrtc://telemost?vp8channel@room#$validKey%bad#client") }
 
     @Test(expected = OlcRtcConfigParseException::class)
-    fun rejectInvalidDisplayNameEncoding() { OlcRtcUriParser.parse("olcrtc://telemost?vp8channel@room#$validKey%client$bad%ZZname") }
+    fun rejectInvalidDisplayNameEncoding() { OlcRtcUriParser.parse("olcrtc://telemost?vp8channel@room#$validKey%client\$bad%ZZname") }
 
     @Test
     fun rejectClientIdWithSpaces() {

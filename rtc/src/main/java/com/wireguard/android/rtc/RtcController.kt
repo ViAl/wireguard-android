@@ -39,7 +39,7 @@ class RtcController(
     @Synchronized
     fun stop() {
         val current = mutableState.value
-        if (current is RtcState.Stopped || current is RtcState.Stopping) return
+        if (current is RtcState.Stopped || current is RtcState.Stopping || current is RtcState.Starting) return
         mutableState.value = RtcState.Stopping
         logBuffer.add("Stop requested")
 
@@ -54,6 +54,11 @@ class RtcController(
     }
 
     fun close() {
+        val current = mutableState.value
+        if (current is RtcState.Running || current is RtcState.Starting) {
+            runCatching { engine.stop() }
+                .onFailure { throwable -> logBuffer.add("Close stop failed: ${throwable.message ?: throwable::class.java.simpleName}") }
+        }
         scope.cancel()
     }
 }
