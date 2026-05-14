@@ -86,7 +86,10 @@ object OlcRtcManager {
 
     private fun scheduleReconnect(appContext: Context) {
         if (reconnectAttempt >= MAX_RECONNECT_ATTEMPTS) {
-            android.util.Log.w("OlcRtcManager", "Max reconnect attempts reached, giving up")
+            android.util.Log.w("OlcRtcManager", "Max reconnect attempts ($MAX_RECONNECT_ATTEMPTS) reached, giving up")
+            val name = config?.name ?: "unknown"
+            OlcRtcVpnService.notifyReconnectExhausted(appContext, name)
+            disconnect()
             return
         }
 

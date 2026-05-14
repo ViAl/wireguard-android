@@ -91,6 +91,25 @@ class OlcRtcVpnService : VpnService() {
             }
         }
 
+        fun notifyReconnectExhausted(context: Context, tunnelName: String) {
+            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val channel = NotificationChannel(
+                    NOTIFICATION_CHANNEL_ID, "OlcRTC VPN",
+                    NotificationManager.IMPORTANCE_HIGH
+                )
+                notificationManager.createNotificationChannel(channel)
+            }
+            val notification = NotificationCompat.Builder(context, NOTIFICATION_CHANNEL_ID)
+                .setContentTitle("OlcRTC: $tunnelName")
+                .setContentText("Reconnection failed — operation stopped")
+                .setSmallIcon(android.R.drawable.ic_dialog_alert)
+                .setOngoing(false)
+                .setAutoCancel(true)
+                .build()
+            notificationManager.notify(FOREGROUND_SERVICE_ID + 1, notification)
+        }
+
         @Volatile
         private var nativeLibrariesLoaded = false
         private var nativeLibrariesLoadError: Throwable? = null
