@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - master
+      - feat/olcrtc-transport
     tags:
       - "v*"
   pull_request:
