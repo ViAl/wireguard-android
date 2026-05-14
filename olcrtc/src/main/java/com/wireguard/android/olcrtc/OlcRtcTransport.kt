@@ -2,6 +2,9 @@ package com.wireguard.android.olcrtc
 
 import android.content.Context
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.net.VpnService
 import mobile.LogWriter
 import mobile.Mobile
 import mobile.SocketProtector
@@ -39,6 +42,26 @@ class OlcRtcTransport(private val appContext: Context) {
 
         scope?.launch {
             try {
+                // Step 0: Check for active VPN and take over if needed
+                // Prevents crash when WireGuard or another VPN tunnel is already active
+                withContext(Dispatchers.IO) {
+                    val cm = appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+                    val activeNetwork = cm.activeNetwork
+                    val caps = activeNetwork?.let { cm.getNetworkCapabilities(it) }
+                    val vpnActive = caps?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true
+                    if (vpnActive) {
+                        android.util.Log.w("OlcRtcTransport", "VPN tunnel detected active — taking over to prevent crash")
+                        val prepareIntent = VpnService.prepare(appContext)
+                        if (prepareIntent != null) {
+                            // Another app owns the VPN — launch system dialog to revoke it
+                            prepareIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            appContext.startActivity(prepareIntent)
+                            // Give the system time to revoke the old VPN tunnel
+                            delay(1000)
+                        }
+                    }
+                }
+
                 // Step 1: Start VpnService — must be on main thread
                 withContext(Dispatchers.Main) {
                     val intent = Intent(appContext, OlcRtcVpnService::class.java).apply {

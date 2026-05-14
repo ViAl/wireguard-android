@@ -196,6 +196,37 @@ class OlcRtcVpnService : VpnService() {
     private fun startVpn(config: OlcRtcConfig) {
         if (isRunning) return
 
+        // Defensive: verify no other VPN tunnel is active before establishing
+        // This prevents a crash if OlcRtcTransport's proactive takeover didn't work
+        try {
+            val activeNetwork = connectivityManager.activeNetwork
+            val caps = activeNetwork?.let { connectivityManager.getNetworkCapabilities(it) }
+            val vpnActive = caps?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true
+            if (vpnActive) {
+                android.util.Log.w("OlcRtcVpnService", "Another VPN is still active — attempting prepare()")
+                val prepareIntent = VpnService.prepare(this)
+                if (prepareIntent != null) {
+                    // Try one more time to revoke the existing VPN
+                    prepareIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    startActivity(prepareIntent)
+                    Thread.sleep(500)
+                    // Re-check after the attempt
+                    val reCaps = connectivityManager.activeNetwork
+                        ?.let { connectivityManager.getNetworkCapabilities(it) }
+                    if (reCaps?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true) {
+                        android.util.Log.e("OlcRtcVpnService",
+                            "Another VPN is still active — cannot start OlcRTC. Please disconnect the other VPN first.")
+                        notifyReconnectExhausted(this, config.name)
+                        stopVpn()
+                        stopSelf()
+                        return
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("OlcRtcVpnService", "Error checking VPN state", e)
+        }
+
         // Acquire wake lock
         wakeLock?.let {
             runCatching {
