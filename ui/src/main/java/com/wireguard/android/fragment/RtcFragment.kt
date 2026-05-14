@@ -11,6 +11,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.wireguard.android.R
 import com.wireguard.android.databinding.RtcFragmentBinding
 import com.wireguard.android.rtc.RtcController
+import com.wireguard.android.rtc.RtcLogBuffer
 import com.wireguard.android.rtc.RtcState
 import com.wireguard.android.rtc.config.OlcRtcTunnelConfig
 import com.wireguard.android.rtc.config.OlcRtcUriParser
@@ -24,8 +25,10 @@ class RtcFragment : Fragment() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val logBuffer = RtcLogBuffer()
         rtcController = RtcController(
-            engine = OlcRtcNativeEngine { line -> rtcController.logBuffer.add(line) },
+            engine = OlcRtcNativeEngine(logSink = { line: String -> logBuffer.add(line) }),
+            logBuffer = logBuffer,
         )
     }
 
