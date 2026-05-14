@@ -244,6 +244,7 @@
     <string name="vpn">VPN</string>
     <string name="apps">Routing</string>
     <string name="jail">Jail</string>
+    <string name="olcrtc">OlcRTC</string>
     
     
     <string name="jail_active">Jail Active</string>
