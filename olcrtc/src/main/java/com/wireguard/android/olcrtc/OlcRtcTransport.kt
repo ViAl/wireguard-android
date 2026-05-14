@@ -2,9 +2,9 @@ package com.wireguard.android.olcrtc
 
 import android.content.Context
 import android.content.Intent
-import mobile.LogWriter
 import mobile.Mobile
-import mobile.SocketProtector
+import mobile.Mobile
+
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -88,18 +88,8 @@ class OlcRtcTransport(private val appContext: Context) {
             Mobile.setProviders()
 
             // Wire SocketProtector and LogWriter callbacks (now available from AAR classes.jar)
-            Mobile.setProtector(object : SocketProtector {
-                override fun protect(fd: Long): Boolean {
-                    android.util.Log.d("OlcRtcTransport", "Protect socket fd=$fd")
-                    // Real implementation would call VpnService.protect(fd.toInt())
-                    return true
-                }
-            })
-            Mobile.setLogWriter(object : LogWriter {
-                override fun writeLog(msg: String) {
-                    android.util.Log.d("OlcRTC", msg)
-                }
-            })
+            // setProtector/setLogWriter skipped – proxy classes not compatible with AAR
+            // LogWriter skipped
 
             // Configure
             Mobile.setLink("direct")
