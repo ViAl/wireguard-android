@@ -65,6 +65,11 @@ class OlcRtcVpnService : VpnService() {
         fun isTun2socksRunning(): Boolean = tun2socksStarted
 
         @Volatile
+        var tun2socksStats: LongArray? = null
+
+        fun getStats(): LongArray? = tun2socksStats
+
+        @Volatile
         private var nativeLibrariesLoaded = false
         private var nativeLibrariesLoadError: Throwable? = null
         private val nativeLibrariesLock = Any()
@@ -239,6 +244,18 @@ class OlcRtcVpnService : VpnService() {
                     tun2socksStopRequested = false
                 }
             }
+            // Start periodic stats updater for watchdog stall detection
+            thread(name = "OlcRtcTun2Stats", isDaemon = true) {
+                while (tun2socksStarted) {
+                    try {
+                        tun2socksStats = getTun2socksStatsNative()
+                    } catch (e: Exception) {
+                        tun2socksStats = null
+                    }
+                    Thread.sleep(5_000L)
+                }
+                tun2socksStats = null
+            }
             android.util.Log.d("OlcRtcVpnService", "tun2socks started on SOCKS port $socksPort")
         } catch (e: Exception) {
             android.util.Log.e("OlcRtcVpnService", "Failed to start tun2socks", e)
@@ -250,6 +267,7 @@ class OlcRtcVpnService : VpnService() {
             tun2socksStopRequested = true
             runCatching { stopTun2socksNative() }
         }
+        tun2socksStats = null
         tun2socksThread?.interrupt()
         tun2socksThread = null
     }

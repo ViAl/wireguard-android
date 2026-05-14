@@ -27,6 +27,9 @@ object OlcRtcManager {
     private var reconnectJob: Job? = null
 
     private var lastSocksPort: Int = 0
+    private var lastTxBytes: Long = -1
+    private var lastRxBytes: Long = -1
+    private var stallCount: Int = 0
 
     private const val WATCHDOG_INTERVAL_MS = 5_000L
     private const val BASE_RECONNECT_DELAY_MS = 2_000L
@@ -40,6 +43,9 @@ object OlcRtcManager {
         _currentTunnelName.value = cfg.name
         reconnectAttempt = 0
         lastSocksPort = cfg.socksPort
+        lastTxBytes = -1
+        lastRxBytes = -1
+        stallCount = 0
 
         transport = OlcRtcTransport(appContext)
         scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -141,6 +147,26 @@ object OlcRtcManager {
                         scheduleReconnect(appContext)
                         return@launch
                     }
+                }
+
+                // HIGH-1: Traffic stall detection
+                val stats = OlcRtcVpnService.getStats()
+                if (stats != null) {
+                    val tx = stats[1]  // tx_bytes
+                    val rx = stats[3]  // rx_bytes
+                    if (tx == lastTxBytes && rx == lastRxBytes) {
+                        stallCount++
+                        if (stallCount >= 3) {
+                            android.util.Log.w("OlcRtcManager", "Watchdog: traffic stalled for 15s, reconnecting")
+                            _connectionState.value = OlcRtcConnectionState.ERROR
+                            scheduleReconnect(appContext)
+                            return@launch
+                        }
+                    } else {
+                        stallCount = 0
+                    }
+                    lastTxBytes = tx
+                    lastRxBytes = rx
                 }
             }
         }
