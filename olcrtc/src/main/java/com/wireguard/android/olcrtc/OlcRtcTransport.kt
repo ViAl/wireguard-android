@@ -94,11 +94,10 @@ class OlcRtcTransport(private val appContext: Context) {
         try {
             // Mobile.load() not needed — libgojni.so is loaded automatically by the AAR's static initializer.
             // Wire SocketProtector to make Go sockets go through the VPN interface.
-            // Use the real protect function from OlcRtcVpnService if available.
-            val vpnProtectFn = OlcRtcVpnService.protectFn
+            // Read protectFn fresh each time to avoid capturing a stale reference
             Mobile.setProtector(object : SocketProtector {
                 override fun protect(fd: Long): Boolean {
-                    val fn = vpnProtectFn
+                    val fn = OlcRtcVpnService.protectFn
                     if (fn != null) {
                         return fn(fd.toInt())
                     }

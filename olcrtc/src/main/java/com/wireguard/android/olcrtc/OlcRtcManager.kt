@@ -168,6 +168,9 @@ object OlcRtcManager {
                     lastTxBytes = tx
                     lastRxBytes = rx
                 }
+
+                // LOW-1: Refresh wake lock
+                OlcRtcVpnService.refreshWakeLock()
             }
         }
     }

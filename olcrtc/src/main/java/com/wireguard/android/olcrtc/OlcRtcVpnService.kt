@@ -70,6 +70,17 @@ class OlcRtcVpnService : VpnService() {
         fun getStats(): LongArray? = tun2socksStats
 
         @Volatile
+        var serviceWakeLock: PowerManager.WakeLock? = null
+
+        fun refreshWakeLock() {
+            serviceWakeLock?.let {
+                if (!it.isHeld) {
+                    it.acquire(24 * 60 * 60 * 1000L)
+                }
+            }
+        }
+
+        @Volatile
         private var nativeLibrariesLoaded = false
         private var nativeLibrariesLoadError: Throwable? = null
         private val nativeLibrariesLock = Any()
@@ -158,6 +169,7 @@ class OlcRtcVpnService : VpnService() {
                 if (!it.isHeld) it.acquire(24 * 60 * 60 * 1000L)
             }
         }
+        serviceWakeLock = wakeLock
 
         val builder = Builder()
         builder.setSession(config.name)
@@ -196,7 +208,7 @@ class OlcRtcVpnService : VpnService() {
         bindToUpstreamNetwork()
 
         // Start hev-socks5-tunnel if native libraries are available
-        startTun2socks(vpnInterface!!, config.socksPort, config.socksUser, config.socksPass)
+        startTun2socks(vpnInterface!!, config.socksPort, config.socksUser, config.socksPass, config.dnsServer)
 
         isRunning = true
     }
@@ -211,6 +223,7 @@ class OlcRtcVpnService : VpnService() {
         vpnInterface?.close()
         vpnInterface = null
 
+        serviceWakeLock = null
         wakeLock?.let {
             runCatching { if (it.isHeld) it.release() }
         }
@@ -220,7 +233,7 @@ class OlcRtcVpnService : VpnService() {
         stopSelf()
     }
 
-    private fun startTun2socks(pfd: ParcelFileDescriptor, socksPort: Int, socksUser: String?, socksPass: String?) {
+    private fun startTun2socks(pfd: ParcelFileDescriptor, socksPort: Int, socksUser: String?, socksPass: String?, dnsServer: String = "1.1.1.1:53") {
         if (!ensureNativeLibrariesLoaded()) {
             android.util.Log.w("OlcRtcVpnService", "Native libraries not available, skipping tun2socks")
             return
@@ -228,7 +241,7 @@ class OlcRtcVpnService : VpnService() {
 
         try {
             val nativeFd = ParcelFileDescriptor.dup(pfd.fileDescriptor).detachFd()
-            val configFile = writeTun2socksConfig(socksPort, socksUser, socksPass)
+            val configFile = writeTun2socksConfig(socksPort, socksUser, socksPass, dnsServer)
             tun2socksStarted = true
             tun2socksStopRequested = false
             tun2socksThread = thread(name = "OlcRtcTun2Socks", isDaemon = true) {
@@ -272,9 +285,12 @@ class OlcRtcVpnService : VpnService() {
         tun2socksThread = null
     }
 
-    private fun writeTun2socksConfig(socksPort: Int, socksUser: String?, socksPass: String?): File {
+    private fun writeTun2socksConfig(socksPort: Int, socksUser: String?, socksPass: String?, dnsServer: String = "1.1.1.1:53"): File {
         val user = socksUser.orEmpty()
         val pass = socksPass.orEmpty()
+        val dnsParts = dnsServer.split(":")
+        val dnsAddr = dnsParts[0]
+        val dnsPort = dnsParts.getOrElse(1) { "53" }
         val file = File(filesDir, "olcrtc_tun2socks.yml")
         file.writeText(
             """
@@ -293,8 +309,8 @@ class OlcRtcVpnService : VpnService() {
               password: '$pass'
 
             mapdns:
-              address: 1.1.1.1
-              port: 53
+              address: $dnsAddr
+              port: $dnsPort
               network: 100.64.0.0
               netmask: 255.192.0.0
               cache-size: 10000
