@@ -12,7 +12,7 @@ data class OlcRtcConfig(
     val transport: String = "vp8channel",
     val socksPort: Int = 10808,
     val vp8Fps: Int = 60,
-    val vp8BatchSize: Int = 8,
+    val vp8BatchSize: Int = 64,
     val dnsServer: String = "1.1.1.1:53",
     val excludedApplications: Set<String> = emptySet(),
     val includedApplications: Set<String> = emptySet(),
