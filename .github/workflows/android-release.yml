@@ -71,6 +71,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version: 'stable'
+          cache-dependency-path: olcrtc-src/go.sum
 
       - name: Checkout olcrtc source
         if: ${{ github.event_name != 'pull_request' || vars.FORCE_GOMOBILE == 'true' }}
@@ -84,7 +85,10 @@ jobs:
       - name: Install gomobile
         if: ${{ github.event_name != 'pull_request' || vars.FORCE_GOMOBILE == 'true' }}
         shell: bash
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/${{ env.ANDROID_NDK_VERSION }}
         run: |
+          export ANDROID_NDK_ROOT="${ANDROID_NDK_HOME}"
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
           go install golang.org/x/mobile/cmd/gomobile@latest
           gomobile init
@@ -99,7 +103,7 @@ jobs:
           export ANDROID_NDK_ROOT="${ANDROID_NDK_HOME}"
           cd "${OLCRTC_REPO}"
           gomobile bind -target=android -androidapi 21 -ldflags "-s -w -checklinkname=0" -o /tmp/olcrtc.aar ./mobile 2>&1
-          echo "AAR size: $(ls -lh /tmp/olcrtc.aar | awk '{print $5}'"
+          echo "AAR size: $(ls -lh /tmp/olcrtc.aar | awk '{print $5}')"
 
       - name: Use gomobile-built AAR
         if: ${{ github.event_name != 'pull_request' || vars.FORCE_GOMOBILE == 'true' }}
