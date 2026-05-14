@@ -80,6 +80,7 @@ dependencies {
     testImplementation(libs.robolectric)
 
     implementation(project(":tunnel"))
+    implementation(project(":olcrtc"))
     implementation(libs.androidx.activity.ktx)
     implementation(libs.androidx.annotation)
     implementation(libs.androidx.appcompat)
