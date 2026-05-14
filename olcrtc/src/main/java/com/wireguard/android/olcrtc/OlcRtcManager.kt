@@ -41,7 +41,6 @@ object OlcRtcManager {
         config = cfg
         _connectionState.value = OlcRtcConnectionState.CONNECTING
         _currentTunnelName.value = cfg.name
-        reconnectAttempt = 0
         lastSocksPort = cfg.socksPort
         lastTxBytes = -1
         lastRxBytes = -1
