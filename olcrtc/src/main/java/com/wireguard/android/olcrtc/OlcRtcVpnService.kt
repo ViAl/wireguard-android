@@ -303,6 +303,11 @@ class OlcRtcVpnService : VpnService() {
             return
         }
 
+        if (tun2socksStarted || tun2socksThread?.isAlive == true) {
+            android.util.Log.w("OlcRtcVpnService", "tun2socks already running, stopping first")
+            stopTun2socks()
+        }
+
         try {
             val nativeFd = ParcelFileDescriptor.dup(pfd.fileDescriptor).detachFd()
             val configFile = writeTun2socksConfig(socksPort, socksUser, socksPass, dnsServer)
@@ -340,13 +345,17 @@ class OlcRtcVpnService : VpnService() {
     }
 
     private fun stopTun2socks() {
-        if (tun2socksStarted && !tun2socksStopRequested) {
-            tun2socksStopRequested = true
-            runCatching { stopTun2socksNative() }
+        if (!tun2socksStarted) return
+        try {
+            stopTun2socksNative()  // sends quit signal
+            tun2socksThread?.join(2000)  // wait up to 2s for thread to die
+        } catch (e: Exception) {
+            android.util.Log.e("OlcRtcVpnService", "Error stopping tun2socks", e)
+        } finally {
+            tun2socksStarted = false
+            tun2socksStopRequested = false
+            tun2socksStats = null
         }
-        tun2socksStats = null
-        tun2socksThread?.interrupt()
-        tun2socksThread = null
     }
 
     private fun writeTun2socksConfig(socksPort: Int, socksUser: String?, socksPass: String?, dnsServer: String = "1.1.1.1:53"): File {
