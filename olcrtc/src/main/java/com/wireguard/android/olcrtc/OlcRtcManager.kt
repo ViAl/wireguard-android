@@ -26,6 +26,8 @@ object OlcRtcManager {
     private var reconnectAttempt = 0
     private var reconnectJob: Job? = null
 
+    private var lastSocksPort: Int = 0
+
     private const val WATCHDOG_INTERVAL_MS = 5_000L
     private const val BASE_RECONNECT_DELAY_MS = 2_000L
     private const val MAX_RECONNECT_DELAY_MS = 60_000L
@@ -37,6 +39,7 @@ object OlcRtcManager {
         _connectionState.value = OlcRtcConnectionState.CONNECTING
         _currentTunnelName.value = cfg.name
         reconnectAttempt = 0
+        lastSocksPort = cfg.socksPort
 
         transport = OlcRtcTransport(appContext)
         scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -124,6 +127,20 @@ object OlcRtcManager {
                     _connectionState.value = OlcRtcConnectionState.ERROR
                     scheduleReconnect(appContext)
                     return@launch
+                }
+
+                // IMMEDIATE-2: Check SOCKS5 port
+                if (lastSocksPort > 0) {
+                    try {
+                        java.net.Socket().use { sock ->
+                            sock.connect(java.net.InetSocketAddress("127.0.0.1", lastSocksPort), 1000)
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.w("OlcRtcManager", "Watchdog: SOCKS5 port $lastSocksPort unreachable, reconnecting")
+                        _connectionState.value = OlcRtcConnectionState.ERROR
+                        scheduleReconnect(appContext)
+                        return@launch
+                    }
                 }
             }
         }
