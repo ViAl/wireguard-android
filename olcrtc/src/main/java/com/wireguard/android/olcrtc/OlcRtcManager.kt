@@ -26,12 +26,10 @@ object OlcRtcManager {
     private var reconnectAttempt = 0
     private var reconnectJob: Job? = null
 
-    companion object {
-        private const val WATCHDOG_INTERVAL_MS = 5_000L
-        private const val BASE_RECONNECT_DELAY_MS = 2_000L
-        private const val MAX_RECONNECT_DELAY_MS = 60_000L
-        private const val MAX_RECONNECT_ATTEMPTS = 10
-    }
+    private const val WATCHDOG_INTERVAL_MS = 5_000L
+    private const val BASE_RECONNECT_DELAY_MS = 2_000L
+    private const val MAX_RECONNECT_DELAY_MS = 60_000L
+    private const val MAX_RECONNECT_ATTEMPTS = 10
 
     fun connect(appContext: Context, cfg: OlcRtcConfig) {
         disconnect()
