@@ -3,4 +3,11 @@
 
 # Keep gomobile-generated Mobile and interface classes
 -keep class mobile.** { *; }
-# Force clean rebuild Wed May 13 23:13:14 UTC 2026
+
+# Keep anonymous implementations of gomobile callback interfaces
+# (proxySocketProtector calls CallStaticIntMethod via JNI)
+-keep class * implements mobile.SocketProtector { *; }
+-keep class * implements mobile.LogWriter { *; }
+
+# Keep the mobile classes in the olcrtc package as well
+-keep class com.wireguard.android.olcrtc.** { *; }

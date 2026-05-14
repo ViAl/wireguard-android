@@ -38,3 +38,5 @@
 # These are called via JNI GetStaticMethodID/FindClass — ProGuard can't detect usage
 -keep class go.** { *; }
 -keep class mobile.** { *; }
+-keep class * implements mobile.SocketProtector { *; }
+-keep class * implements mobile.LogWriter { *; }
