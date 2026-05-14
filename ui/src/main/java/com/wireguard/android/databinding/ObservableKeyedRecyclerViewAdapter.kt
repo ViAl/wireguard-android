@@ -38,7 +38,6 @@ class ObservableKeyedRecyclerViewAdapter<K, E : Keyed<out K>> internal construct
         holder.binding.setVariable(BR.collection, list)
         holder.binding.setVariable(BR.key, getKey(position))
         holder.binding.setVariable(BR.item, getItem(position))
-        holder.binding.executePendingBindings()
         if (rowConfigurationHandler != null) {
             val item = getItem(position)
             if (item != null) {
@@ -50,6 +49,8 @@ class ObservableKeyedRecyclerViewAdapter<K, E : Keyed<out K>> internal construct
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) = ViewHolder(DataBindingUtil.inflate(layoutInflater, layoutId, parent, false))
 
     fun setList(newList: ObservableKeyedArrayList<K, E>?) {
+        if (list === newList)
+            return
         list?.removeOnListChangedCallback(callback)
         list = newList
         list?.addOnListChangedCallback(callback)
@@ -78,22 +79,41 @@ class ObservableKeyedRecyclerViewAdapter<K, E : Keyed<out K>> internal construct
 
         override fun onItemRangeChanged(sender: ObservableList<E>, positionStart: Int,
                                         itemCount: Int) {
-            onChanged(sender)
+            val adapter = weakAdapter.get()
+            if (adapter != null)
+                adapter.notifyItemRangeChanged(positionStart, itemCount)
+            else
+                sender.removeOnListChangedCallback(this)
         }
 
         override fun onItemRangeInserted(sender: ObservableList<E>, positionStart: Int,
                                          itemCount: Int) {
-            onChanged(sender)
+            val adapter = weakAdapter.get()
+            if (adapter != null)
+                adapter.notifyItemRangeInserted(positionStart, itemCount)
+            else
+                sender.removeOnListChangedCallback(this)
         }
 
         override fun onItemRangeMoved(sender: ObservableList<E>, fromPosition: Int,
                                       toPosition: Int, itemCount: Int) {
-            onChanged(sender)
+            val adapter = weakAdapter.get()
+            if (adapter != null) {
+                repeat(itemCount) { offset ->
+                    adapter.notifyItemMoved(fromPosition + offset, toPosition + offset)
+                }
+            } else {
+                sender.removeOnListChangedCallback(this)
+            }
         }
 
         override fun onItemRangeRemoved(sender: ObservableList<E>, positionStart: Int,
                                         itemCount: Int) {
-            onChanged(sender)
+            val adapter = weakAdapter.get()
+            if (adapter != null)
+                adapter.notifyItemRangeRemoved(positionStart, itemCount)
+            else
+                sender.removeOnListChangedCallback(this)
         }
 
     }
