@@ -88,6 +88,7 @@ abstract class BaseFragment : Fragment(), OnSelectedTunnelChangedListener {
     }
 
     private fun setTunnelStateWithPermissionsResult(tunnel: ObservableTunnel, checked: Boolean) {
+        Log.d(TAG, "setTunnelStateWithPermissionsResult: tunnel=${tunnel.name} checked=$checked currentState=${tunnel.state}")
         val activity = activity ?: return
         activity.lifecycleScope.launch {
             try {
@@ -104,6 +105,8 @@ abstract class BaseFragment : Fragment(), OnSelectedTunnelChangedListener {
                 else
                     Toast.makeText(activity, message, Toast.LENGTH_LONG).show()
                 Log.e(TAG, message, e)
+                Log.e(TAG, "setTunnelStateWithPermissionsResult: exception", e)
+                Log.d(TAG, "setTunnelStateWithPermissionsResult: state after error=${tunnel.state}")
             }
         }
     }

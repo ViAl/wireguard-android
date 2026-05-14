@@ -51,10 +51,12 @@ class ObservableTunnel internal constructor(
         private set
 
     override fun onStateChange(newState: Tunnel.State) {
+        Log.d(TAG, "onStateChange: tunnel=${name} newState=$newState")
         onStateChanged(newState)
     }
 
     fun onStateChanged(state: Tunnel.State): Tunnel.State {
+        Log.d(TAG, "onStateChanged: tunnel=${name} oldState=${this.state} newState=$state")
         if (state != Tunnel.State.UP) onStatisticsChanged(null)
         this.state = state
         notifyPropertyChanged(BR.state)
