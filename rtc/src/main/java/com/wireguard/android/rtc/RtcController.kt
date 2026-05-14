@@ -13,8 +13,8 @@ import kotlinx.coroutines.launch
 class RtcController(
     private val engine: RtcEngine,
     val logBuffer: RtcLogBuffer = RtcLogBuffer(),
+    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mutableState = MutableStateFlow<RtcState>(RtcState.Stopped)
     val state: StateFlow<RtcState> = mutableState.asStateFlow()
 
@@ -45,10 +45,11 @@ class RtcController(
 
         scope.launch {
             runCatching { engine.stop() }
+                .onSuccess { mutableState.value = RtcState.Stopped }
                 .onFailure { throwable ->
-                    logBuffer.add("Stop error: ${throwable.message ?: throwable::class.java.simpleName}")
+                    logBuffer.add("Stop failed: ${throwable.message ?: throwable::class.java.simpleName}")
+                    mutableState.value = RtcState.Error("Failed to stop RTC tunnel: ${throwable.message ?: throwable::class.java.simpleName}", throwable)
                 }
-            mutableState.value = RtcState.Stopped
         }
     }
 

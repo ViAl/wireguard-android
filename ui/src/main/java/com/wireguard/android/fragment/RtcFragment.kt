@@ -59,6 +59,9 @@ class RtcFragment : Fragment() {
         b.startButton.setOnClickListener { parsedConfig?.let { rtcController.start(it) } ?: run { b.errorText.text = getString(R.string.rtc_invalid_uri) } }
         b.stopButton.setOnClickListener { rtcController.stop() }
 
+        clearPreview()
+        renderState(rtcController.state.value)
+
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch { rtcController.state.collect { renderState(it) } }
@@ -102,26 +105,32 @@ class RtcFragment : Fragment() {
         when (state) {
             RtcState.Stopped -> {
                 b.statusText.text = getString(R.string.rtc_status_stopped)
+                b.errorText.text = ""
                 b.startButton.isEnabled = parsedConfig != null
                 b.stopButton.isEnabled = false
             }
             RtcState.Starting -> {
                 b.statusText.text = getString(R.string.rtc_status_starting)
+                b.errorText.text = ""
                 b.startButton.isEnabled = false
                 b.stopButton.isEnabled = false
             }
             is RtcState.Running -> {
                 b.statusText.text = getString(R.string.rtc_status_running_details, state.displayName, state.socksPort)
+                b.errorText.text = ""
                 b.startButton.isEnabled = false
                 b.stopButton.isEnabled = true
             }
             RtcState.Stopping -> {
                 b.statusText.text = getString(R.string.rtc_status_stopping)
+                b.errorText.text = ""
                 b.startButton.isEnabled = false
                 b.stopButton.isEnabled = false
             }
             is RtcState.Error -> {
-                b.statusText.text = getString(R.string.rtc_status_error, state.message)
+                val message = getString(R.string.rtc_status_error, state.message)
+                b.statusText.text = message
+                b.errorText.text = message
                 b.startButton.isEnabled = parsedConfig != null
                 b.stopButton.isEnabled = false
             }

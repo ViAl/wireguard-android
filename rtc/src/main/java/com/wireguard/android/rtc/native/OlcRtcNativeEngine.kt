@@ -3,6 +3,7 @@ package com.wireguard.android.rtc.native
 import com.wireguard.android.rtc.RtcEngine
 import com.wireguard.android.rtc.RtcRunInfo
 import com.wireguard.android.rtc.config.OlcRtcTunnelConfig
+import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Proxy
 
 class OlcRtcNativeEngine(
@@ -18,17 +19,15 @@ class OlcRtcNativeEngine(
     override fun start(config: OlcRtcTunnelConfig): RtcRunInfo {
         ensureNativeLoaded()
         configureLogWriterIfAvailable()
-        invokeIfExists("setTransport", arrayOf(String::class.java), arrayOf(config.transport.uriValue))
-        invokeIfExists("setDebug", arrayOf(Boolean::class.javaPrimitiveType!!), arrayOf(false))
+        invokeOptional("setTransport", arrayOf(String::class.java), arrayOf(config.transport.uriValue))
+        invokeOptional("setDebug", arrayOf(Boolean::class.javaPrimitiveType!!), arrayOf(false))
 
-        val masked = config.maskedKey()
-        logSink("Using carrier=${config.carrier.uriValue}, transport=${config.transport.uriValue}, roomId=${config.roomId}, clientId=${config.clientId}, key=$masked")
         logSink("Calling native OlcRTC start")
-
-        val started = invokeStart(config)
-        if (!started) throw IllegalStateException("OlcRTC did not report running state")
-
+        startNative(config)
         waitReadyIfAvailable()
+
+        val runningSignal = isRunning()
+        if (!runningSignal) logSink("isRunning API unavailable/false after start; relying on start/waitReady completion")
         logSink("OlcRTC ready")
         return RtcRunInfo(config.effectiveDisplayName, socksPort)
     }
@@ -40,11 +39,38 @@ class OlcRtcNativeEngine(
     }
 
     override fun isRunning(): Boolean {
-        return runCatching {
-            ensureNativeLoaded()
-            val result = invokeIfExists("isRunning", emptyArray(), emptyArray())
-            result as? Boolean ?: false
-        }.getOrDefault(false)
+        ensureNativeLoaded()
+        return when (val result = invokeOptional("isRunning", emptyArray(), emptyArray())) {
+            InvokeResult.Missing -> false
+            is InvokeResult.Called -> result.value as? Boolean ?: false
+        }
+    }
+
+    private fun startNative(config: OlcRtcTunnelConfig) {
+        when (invokeOptional(
+            "startWithTransport",
+            arrayOf(String::class.java, String::class.java, String::class.java, String::class.java, String::class.java, Long::class.javaPrimitiveType!!, String::class.java, String::class.java),
+            arrayOf(config.carrier.uriValue, config.transport.uriValue, config.roomId, config.clientId, config.keyHex, socksPort.toLong(), "", ""),
+        )) {
+            InvokeResult.Missing -> {
+                logSink("startWithTransport API not available; falling back to start")
+                invokeRequired(
+                    "start",
+                    arrayOf(String::class.java, String::class.java, String::class.java, String::class.java),
+                    arrayOf(config.carrier.uriValue, config.roomId, config.clientId, config.keyHex),
+                )
+            }
+            is InvokeResult.Called -> return
+        }
+    }
+
+    private fun waitReadyIfAvailable() {
+        when (val result = invokeOptional("waitReady", arrayOf(Long::class.javaPrimitiveType!!), arrayOf(READY_TIMEOUT_MS))) {
+            InvokeResult.Missing -> logSink("waitReady API not available; assuming start call completed")
+            is InvokeResult.Called -> if (result.value is Boolean && !result.value) {
+                throw IllegalStateException("OlcRTC start timed out while waiting for readiness")
+            }
+        }
     }
 
     private fun ensureNativeLoaded() {
@@ -58,52 +84,43 @@ class OlcRtcNativeEngine(
         }
     }
 
-    private fun invokeStart(config: OlcRtcTunnelConfig): Boolean {
-        val withTransport = invokeIfExists(
-            "startWithTransport",
-            arrayOf(String::class.java, String::class.java, String::class.java, String::class.java, String::class.java, Long::class.javaPrimitiveType!!, String::class.java, String::class.java),
-            arrayOf(config.carrier.uriValue, config.transport.uriValue, config.roomId, config.clientId, config.keyHex, socksPort.toLong(), "", ""),
-        )
-        if (withTransport != null) return isRunning()
-
-        invokeRequired(
-            "start",
-            arrayOf(String::class.java, String::class.java, String::class.java, String::class.java),
-            arrayOf(config.carrier.uriValue, config.roomId, config.clientId, config.keyHex),
-        )
-        return isRunning()
-    }
-
-    private fun waitReadyIfAvailable() {
-        invokeIfExists("waitReady", arrayOf(Long::class.javaPrimitiveType!!), arrayOf(READY_TIMEOUT_MS))
-    }
-
     private fun configureLogWriterIfAvailable() {
         val writerInterface = mobileClass.classLoader?.loadClass("mobile.LogWriter") ?: return
         val proxy = Proxy.newProxyInstance(mobileClass.classLoader, arrayOf(writerInterface)) { _, method, args ->
-            if (method.name == "write") {
+            if (method.name == "write" || method.name == "writeLog") {
                 val message = args?.firstOrNull()?.toString().orEmpty()
                 if (message.isNotBlank()) logSink("native: ${message.trim()}")
             }
             null
         }
-        invokeIfExists("setLogWriter", arrayOf(writerInterface), arrayOf(proxy))
+        invokeOptional("setLogWriter", arrayOf(writerInterface), arrayOf(proxy))
     }
 
     private fun invokeRequired(name: String, paramTypes: Array<Class<*>>, args: Array<Any?>): Any? {
-        return invokeIfExists(name, paramTypes, args)
-            ?: throw OlcRtcNativeUnavailableException("Required OlcRTC API method missing: $name")
+        return when (val result = invokeOptional(name, paramTypes, args)) {
+            InvokeResult.Missing -> throw OlcRtcNativeUnavailableException("Required OlcRTC API method missing: $name")
+            is InvokeResult.Called -> result.value
+        }
     }
 
-    private fun invokeIfExists(name: String, paramTypes: Array<Class<*>>, args: Array<Any?>): Any? {
-        val method = runCatching { mobileClass.getMethod(name, *paramTypes) }.getOrNull() ?: return null
-        return method.invoke(null, *args)
+    private fun invokeOptional(name: String, paramTypes: Array<Class<*>>, args: Array<Any?>): InvokeResult {
+        val method = runCatching { mobileClass.getMethod(name, *paramTypes) }.getOrNull() ?: return InvokeResult.Missing
+        return try {
+            InvokeResult.Called(method.invoke(null, *args))
+        } catch (e: InvocationTargetException) {
+            throw (e.targetException ?: e.cause ?: e)
+        }
     }
 
     private fun findMobileClass(): Class<*>? {
         val cl = javaClass.classLoader
         return runCatching { Class.forName("mobile.Mobile", false, cl) }.getOrNull()
             ?: runCatching { Class.forName("go.mobile.Mobile", false, cl) }.getOrNull()
+    }
+
+    private sealed class InvokeResult {
+        data object Missing : InvokeResult()
+        data class Called(val value: Any?) : InvokeResult()
     }
 
     companion object {

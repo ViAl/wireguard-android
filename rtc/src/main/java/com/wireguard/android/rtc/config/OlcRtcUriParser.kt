@@ -2,6 +2,7 @@ package com.wireguard.android.rtc.config
 
 object OlcRtcUriParser {
     private const val PREFIX = "olcrtc://"
+    private val disallowedSeparators = setOf('?', '@', '#', '%', '$')
 
     fun parse(rawInput: String): OlcRtcTunnelConfig {
         val input = rawInput.trim()
@@ -43,7 +44,11 @@ object OlcRtcUriParser {
         val roomId = roomIdRaw.trim()
         val keyHex = keyHexRaw.trim()
         val clientId = clientIdRaw.trim()
-        val displayName = OlcRtcUriCodec.decode(displayNameRaw.trim())
+        val displayName = try {
+            OlcRtcUriCodec.decode(displayNameRaw.trim())
+        } catch (_: IllegalArgumentException) {
+            throw OlcRtcConfigParseException("Display name contains invalid percent encoding")
+        }
 
         validateRoomId(roomId)
         validateKeyHex(keyHex)
@@ -62,6 +67,7 @@ object OlcRtcUriParser {
     private fun validateRoomId(roomId: String) {
         if (roomId.isBlank()) throw OlcRtcConfigParseException("Room ID is empty")
         if (roomId.any { it.isWhitespace() }) throw OlcRtcConfigParseException("Room ID must not contain spaces")
+        if (roomId.any { it in disallowedSeparators }) throw OlcRtcConfigParseException("Room ID contains reserved separator characters")
     }
 
     private fun validateKeyHex(keyHex: String) {
@@ -73,5 +79,6 @@ object OlcRtcUriParser {
     private fun validateClientId(clientId: String) {
         if (clientId.isBlank()) throw OlcRtcConfigParseException("Client ID is empty")
         if (clientId.any { it.isWhitespace() }) throw OlcRtcConfigParseException("Client ID must not contain spaces")
+        if (clientId.any { it in disallowedSeparators }) throw OlcRtcConfigParseException("Client ID contains reserved separator characters")
     }
 }
