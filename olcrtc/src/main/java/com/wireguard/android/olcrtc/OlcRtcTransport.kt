@@ -202,7 +202,7 @@ class OlcRtcTransport(private val appContext: Context) {
         val now = System.currentTimeMillis()
         if (now - lastRtcConnectedAtMs < 2_500L) return
 
-        rtcFailureCount = if (now - lastRtcFailureAtMs <= 6_000L) {
+        rtcFailureCount = if (now - lastRtcFailureAtMs <= 15_000L) {
             rtcFailureCount + 1
         } else {
             1
@@ -211,7 +211,7 @@ class OlcRtcTransport(private val appContext: Context) {
 
         android.util.Log.w("OlcRtcTransport", "RTC health issue #$rtcFailureCount: $line")
 
-        if (rtcFailureCount >= 2) {
+        if (rtcFailureCount >= 5) {
             android.util.Log.w("OlcRtcTransport", "RTC failures threshold reached, requesting reconnect")
             // Signal to the manager via state that recovery is needed
             _state.value = OlcRtcTransportState.ERROR
