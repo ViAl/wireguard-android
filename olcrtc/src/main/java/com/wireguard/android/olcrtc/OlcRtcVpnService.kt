@@ -124,7 +124,10 @@ class OlcRtcVpnService : VpnService() {
                     startVpn(config)
                 }
             }
-            ACTION_STOP -> stopVpn()
+            ACTION_STOP -> {
+                stopVpn()
+                stopSelf()
+            }
         }
         return Service.START_REDELIVER_INTENT
     }
@@ -230,7 +233,6 @@ class OlcRtcVpnService : VpnService() {
 
         stopForeground(STOP_FOREGROUND_REMOVE)
         unregisterNetworkCallback()
-        stopSelf()
     }
 
     private fun startTun2socks(pfd: ParcelFileDescriptor, socksPort: Int, socksUser: String?, socksPass: String?, dnsServer: String = "1.1.1.1:53") {
