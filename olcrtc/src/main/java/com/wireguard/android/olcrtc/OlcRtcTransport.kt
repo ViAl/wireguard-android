@@ -2,9 +2,7 @@ package com.wireguard.android.olcrtc
 
 import android.content.Context
 import android.content.Intent
-import mobile.LogWriter
 import mobile.Mobile
-import mobile.SocketProtector
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -85,21 +83,9 @@ class OlcRtcTransport(private val appContext: Context) {
             // Mobile.load() not needed — libgojni.so is loaded automatically by the AAR's static initializer.
             // Call setProviders to register default carrier/link/transport implementations.
             Mobile.setProviders()
-            Mobile.setProviders()
-
-            // Wire SocketProtector and LogWriter callbacks (now available from AAR classes.jar)
-            Mobile.setProtector(object : SocketProtector {
-                override fun protect(fd: Long): Boolean {
-                    android.util.Log.d("OlcRtcTransport", "Protect socket fd=$fd")
-                    // Real implementation would call VpnService.protect(fd.toInt())
-                    return true
-                }
-            })
-            Mobile.setLogWriter(object : LogWriter {
-                override fun writeLog(msg: String) {
-                    android.util.Log.d("OlcRTC", msg)
-                }
-            })
+            // SocketProtector and LogWriter callbacks are skipped because the AAR's proxy classes
+            // (proxySocketProtector, proxyLogWriter) aren't compatible with our hand-written interfaces.
+            // The Go client works without them.
 
             // Configure
             Mobile.setLink("direct")
