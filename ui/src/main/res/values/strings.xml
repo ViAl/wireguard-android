@@ -516,4 +516,13 @@
     <string name="jail_profile_jail_installed">Jail ✓</string>
     <string name="jail_profile_jail_not_installed">Jail —</string>
     <string name="jail_profile_jail_unknown">Jail ?</string>
+
+    <!-- OlcRTC Status -->
+    <string name="olcrtc_status_disconnected">Disconnected</string>
+    <string name="olcrtc_status_connecting">Connecting…</string>
+    <string name="olcrtc_status_connected">Connected</string>
+    <string name="olcrtc_status_reconnecting">Reconnecting…</string>
+    <string name="olcrtc_status_network_unstable">Network unstable</string>
+    <string name="olcrtc_status_error">Error</string>
+    <string name="olcrtc_reconnect_attempt">Attempt %d</string>
 </resources>
