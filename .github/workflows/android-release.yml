@@ -93,23 +93,31 @@ jobs:
           echo "ANDROID_KEY_ALIAS=${{ secrets.ANDROID_KEY_ALIAS }}" >> "$GITHUB_ENV"
           echo "ANDROID_KEY_PASSWORD=${{ secrets.ANDROID_KEY_PASSWORD }}" >> "$GITHUB_ENV"
 
-      - name: Build release APK (signed via Gradle when keystore available)
+      - name: Build APK (release when keystore available, else debug)
         shell: bash
         run: |
           set -euxo pipefail
-          ./gradlew --no-daemon :ui:assembleRelease \
-            -PwireguardVersionCode="${CI_VERSION_CODE}" \
-            -PwireguardVersionName="${CI_VERSION_NAME}"
+          if [ -n "${ANDROID_KEYSTORE_BASE64}" ]; then
+            ./gradlew --no-daemon :ui:assembleRelease \
+              -PwireguardVersionCode="${CI_VERSION_CODE}" \
+              -PwireguardVersionName="${CI_VERSION_NAME}"
+            echo "APK_VARIANT=release" >> "$GITHUB_ENV"
+          else
+            ./gradlew --no-daemon :ui:assembleDebug \
+              -PwireguardVersionCode="${CI_VERSION_CODE}" \
+              -PwireguardVersionName="${CI_VERSION_NAME}"
+            echo "APK_VARIANT=debug" >> "$GITHUB_ENV"
+          fi
 
-      - name: Locate generated APK (signed or not)
+      - name: Locate generated APK
         id: apk
         shell: bash
         run: |
           set -euxo pipefail
-          apk="$(find ui/build/outputs/apk/release -type f -name '*-release.apk' ! -name '*-release-unsigned.apk' | head -n 1)"
-          if [ -z "${apk}" ]; then
-            # fallback to unsigned if no signed found (e.g. no keystore configured)
-            apk="$(find ui/build/outputs/apk/release -type f -name '*-release-unsigned.apk' | head -n 1)"
+          if [ "${APK_VARIANT}" = "release" ]; then
+            apk="$(find ui/build/outputs/apk/release -type f -name "*-release.apk" ! -name "*-release-unsigned.apk" | head -n 1)"
+          else
+            apk="$(find ui/build/outputs/apk/debug -type f -name "*-debug.apk" | head -n 1)"
           fi
           if [ -z "${apk}" ]; then
             echo "No release APK found" >&2
