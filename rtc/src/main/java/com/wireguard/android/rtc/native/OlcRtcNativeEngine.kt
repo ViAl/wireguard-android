@@ -1,5 +1,6 @@
 package com.wireguard.android.rtc.native
 
+import android.os.Build
 import com.wireguard.android.rtc.RtcEngine
 import com.wireguard.android.rtc.RtcRunInfo
 import com.wireguard.android.rtc.config.OlcRtcTunnelConfig
@@ -77,8 +78,10 @@ class OlcRtcNativeEngine(
         try {
             System.loadLibrary("gojni")
         } catch (e: UnsatisfiedLinkError) {
+            val deviceAbis = Build.SUPPORTED_ABIS?.joinToString() ?: "unknown"
             throw OlcRtcNativeUnavailableException(
-                "OlcRTC native library is missing for this ABI. Add libgojni.so to rtc/src/main/jniLibs/<abi>/.",
+                "OlcRTC library is missing for this ABI. Device ABIs: $deviceAbis. " +
+                    "Place libgojni.so under rtc/src/main/jniLibs/<abi>/ (for example arm64-v8a and x86_64).",
                 e,
             )
         }
