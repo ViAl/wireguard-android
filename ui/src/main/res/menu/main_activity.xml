@@ -5,6 +5,12 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
     <item
+        android:id="@+id/menu_olcrtc"
+        android:icon="@drawable/ic_settings"
+        android:orderInCategory="500"
+        android:title="@string/olcrtc_status_disconnected"
+        app:showAsAction="never" />
+    <item
         android:id="@+id/menu_settings"
         android:alphabeticShortcut="s"
         android:icon="@drawable/ic_settings"

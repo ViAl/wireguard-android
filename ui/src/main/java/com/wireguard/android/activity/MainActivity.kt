@@ -19,6 +19,7 @@ import com.wireguard.android.R
 import com.wireguard.android.fragment.MainTabsFragment
 import com.wireguard.android.fragment.TunnelDetailFragment
 import com.wireguard.android.fragment.TunnelEditorFragment
+import com.wireguard.android.fragment.OlcRtcMainFragment
 import android.util.Log
 import com.wireguard.android.model.ObservableTunnel
 
@@ -127,6 +128,14 @@ class MainActivity : BaseActivity(), FragmentManager.OnBackStackChangedListener,
             }
             // This menu item is handled by the editor fragment.
             R.id.menu_action_save -> false
+            R.id.menu_olcrtc -> {
+                supportFragmentManager.commit {
+                    replace(if (isTwoPaneLayout) R.id.detail_container else R.id.list_detail_container, OlcRtcMainFragment())
+                    setTransition(FragmentTransaction.TRANSIT_FRAGMENT_FADE)
+                    addToBackStack(null)
+                }
+                true
+            }
             R.id.menu_settings -> {
                 startActivity(Intent(this, SettingsActivity::class.java))
                 true
