@@ -30,8 +30,11 @@ dependencies {
     // Pre-built olcrtc AAR
     implementation(files("src/main/libs/olcrtc.aar"))
 
+    // AndroidX Core (for NotificationCompat)
+    implementation(libs.androidx.core.ktx)
+
     // Coroutines
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    implementation(libs.kotlinx.coroutines.android)
 
     // Testing
     testImplementation("junit:junit:4.13.2")
