@@ -45,8 +45,24 @@ class OlcRtcTransport {
      *
      * Returns immediately. Use [state] flow to observe progress.
      */
+    /**
+     * Start the OlcRTC transport with the given [config].
+     *
+     * This method:
+     * 1. Initializes the olcrtc Go library
+     * 2. Starts the WebRTC connection via the carrier
+     * 3. Exposes a local SOCKS5 proxy on [OlcRtcConfig.socksPort]
+     *
+     * Returns immediately. Use [state] flow to observe progress.
+     *
+     * Thread-safe: uses state machine guard to prevent concurrent starts.
+     */
     fun start(config: OlcRtcConfig): Job {
-        stop()
+        // State machine guard: only start from IDLE state
+        if (_state.value != OlcRtcTransportState.IDLE) {
+            // Already running or transitioning — stop first to ensure clean state
+            stop()
+        }
 
         this.config = config
         scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
