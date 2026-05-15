@@ -28,8 +28,7 @@ android {
 
 dependencies {
     // Pre-built olcrtc AAR
-    // Placeholder - olcrtc.aar has 0-byte classes.jar, actual code is in this module
-    // implementation(files("src/main/libs/olcrtc.aar"))
+    //implementation(files("src/main/libs/olcrtc.aar")) // prebuilt, built separately
 
     // AndroidX Core (for NotificationCompat)
     implementation(libs.androidx.core.ktx)
