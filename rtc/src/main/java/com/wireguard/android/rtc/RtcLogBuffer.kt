@@ -12,7 +12,9 @@ class RtcLogBuffer(
 
     @Synchronized
     fun add(message: String) {
-        val next = (mutableEntries.value + message).takeLast(maxEntries)
+        val current = mutableEntries.value
+        if (current.lastOrNull() == message) return
+        val next = (current + message).takeLast(maxEntries)
         mutableEntries.value = next
     }
 

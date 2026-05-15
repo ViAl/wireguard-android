@@ -81,7 +81,7 @@ class OlcRtcNativeEngine(
             val deviceAbis = Build.SUPPORTED_ABIS?.joinToString() ?: "unknown"
             throw OlcRtcNativeUnavailableException(
                 "OlcRTC library is missing for this ABI. Device ABIs: $deviceAbis. " +
-                    "Place libgojni.so under rtc/src/main/jniLibs/<abi>/ (for example arm64-v8a and x86_64).",
+                    "Place libgojni.so under rtc/src/main/jniLibs/<abi>/ for every needed ABI (e.g. arm64-v8a and armeabi-v7a).",
                 e,
             )
         }
