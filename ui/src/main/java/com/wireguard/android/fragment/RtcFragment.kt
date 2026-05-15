@@ -48,12 +48,14 @@ class RtcFragment : Fragment() {
                     parsedConfig = it
                     renderConfig(it)
                     b.errorText.text = ""
+                    renderState(rtcController.state.value)
                     rtcController.logBuffer.add("Parsed successfully")
                 }
                 .onFailure { error ->
                     parsedConfig = null
                     clearPreview()
                     b.errorText.text = error.message ?: getString(R.string.rtc_invalid_uri)
+                    renderState(rtcController.state.value)
                 }
         }
         b.startButton.setOnClickListener { parsedConfig?.let { rtcController.start(it) } ?: run { b.errorText.text = getString(R.string.rtc_invalid_uri) } }
