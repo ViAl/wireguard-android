@@ -28,7 +28,8 @@ android {
 
 dependencies {
     // Pre-built olcrtc AAR
-    //implementation(files("src/main/libs/olcrtc.aar")) // prebuilt, built separately
+        // Stub - replaced with real SDK in full builds
+    compileOnly(files("src/main/libs/olcrtc.aar"))
 
     // AndroidX Core (for NotificationCompat)
     implementation(libs.androidx.core.ktx)
