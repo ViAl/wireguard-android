@@ -203,7 +203,7 @@ class OlcRtcVpnService : android.net.VpnService() {
             builder.setSession(config?.name ?: "OlcRTC")
 
             // Blocking: establish TUN interface
-            val tunFd = builder.establish()
+            val tunFd = builder.establish() ?: throw NullPointerException("Failed to establish TUN interface")
             vpnInterface = tunFd
             isRunning = true
 
@@ -516,7 +516,7 @@ class OlcRtcVpnService : android.net.VpnService() {
         val pendingIntent = PendingIntent.getActivity(
             this,
             0,
-            packageManager.getLaunchIntentForSelector(packageName),
+            packageManager.getLaunchIntentForPackage(packageName),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
