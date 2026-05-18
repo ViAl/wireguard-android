@@ -122,31 +122,6 @@ jobs:
             fi
           done
           echo "Updated AAR artifacts from gomobile build"
-      - name: Build olcrtc_tun2socks native bridge via NDK
-        if: ${{ github.event_name != 'pull_request' || vars.FORCE_GOMOBILE == 'true' }}
-        shell: bash
-        env:
-          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/${{ env.ANDROID_NDK_VERSION }}
-        run: |
-          export ANDROID_NDK_ROOT="${ANDROID_NDK_HOME}"
-          cd ${{ github.workspace }}/olcrtc/src/main/jni
-          for abi in arm64-v8a x86_64; do
-            echo "Building tun2socks bridge for $abi..."
-            ${ANDROID_NDK_HOME}/ndk-build \
-              NDK_PROJECT_PATH=. \
-              APP_BUILD_SCRIPT=Android.mk \
-              APP_ABI=$abi \
-              APP_PLATFORM=android-23 \
-              -j$(nproc) 2>&1
-          done
-          # Copy built .so to jniLibs
-          for abi in arm64-v8a x86_64; do
-            lib="obj/local/$abi/libolcrtc_tun2socks.so"
-            if [ -f "$lib" ]; then
-              cp "$lib" "${{ github.workspace }}/olcrtc/src/main/jniLibs/$abi/libolcrtc_tun2socks.so"
-              echo "Copied libolcrtc_tun2socks.so for $abi"
-            fi
-          done
 
       - name: Make Gradle wrapper executable
         shell: bash
