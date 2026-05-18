@@ -14,6 +14,9 @@ import android.net.NetworkRequest
 import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
+import mobile.LogWriter
+import mobile.Mobile
+import mobile.SocketProtector
 import java.io.File
 
 class OlcRtcVpnService : VpnService() {
@@ -27,6 +30,8 @@ class OlcRtcVpnService : VpnService() {
     private external fun getTun2socksStatsNative(): LongArray
 
     companion object {
+        var currentInstance: OlcRtcVpnService? = null
+
         const val ACTION_START = "com.wireguard.android.olcrtc.START"
         const val ACTION_STOP = "com.wireguard.android.olcrtc.STOP"
 
@@ -43,6 +48,11 @@ class OlcRtcVpnService : VpnService() {
     }
 
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
+
+    override fun onCreate() {
+        super.onCreate()
+        currentInstance = this
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
@@ -126,6 +136,25 @@ class OlcRtcVpnService : VpnService() {
         // Bind to the active upstream network so non-VPN sockets resolve correctly.
         bindToUpstreamNetwork()
 
+        // Wire SocketProtector — protects Go sockets from going through VPN tunnel
+        Mobile.setProtector(object : SocketProtector {
+            override fun protect(fd: Long): Boolean {
+                val instance = currentInstance
+                return instance?.protect(fd.toInt()) ?: false
+            }
+        })
+
+        // Wire LogWriter — forward Go logs to logcat
+        Mobile.setLogWriter(object : LogWriter {
+            override fun writeLog(msg: String?) {
+                android.util.Log.d("OlcRtcTransport", "Go: ${msg ?: ""}")
+            }
+        })
+
+        // Call setProviders to register default implementations
+        // Order: setProtector + setLogWriter MUST be called first
+        Mobile.setProviders()
+
         // Generate hev-socks5-tunnel config and start tun2socks in background
         try {
             val hevConfig = generateHevConfig(config)
@@ -169,6 +198,7 @@ class OlcRtcVpnService : VpnService() {
     }
 
     override fun onDestroy() {
+        currentInstance = null
         stopVpn()
         unregisterNetworkCallback()
         super.onDestroy()
