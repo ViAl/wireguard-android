@@ -21,14 +21,15 @@ class OlcRtcVpnService : VpnService() {
     private var vpnInterface: ParcelFileDescriptor? = null
     private var isRunning = false
 
+    // JNI native declarations — instance methods (not in companion object)
+    private external fun startTun2socksNative(configPath: String, fd: Int): Int
+    private external fun stopTun2socksNative()
+    private external fun getTun2socksStatsNative(): LongArray
+
     companion object {
         const val ACTION_START = "com.wireguard.android.olcrtc.START"
         const val ACTION_STOP = "com.wireguard.android.olcrtc.STOP"
 
-        // Native JNI bridge for hev-socks5-tunnel
-        private external fun startTun2socksNative(configPath: String, fd: Int): Int
-        private external fun stopTun2socksNative()
-        private external fun getTun2socksStatsNative(): LongArray
         const val EXTRA_CONFIG_NAME = "olcrtc_name"
         const val EXTRA_CONFIG_CARRIER = "olcrtc_carrier"
         const val EXTRA_CONFIG_ROOM = "olcrtc_room"
@@ -87,6 +88,12 @@ class OlcRtcVpnService : VpnService() {
             android.util.Log.d("OlcRtcVpnService", "libhev-socks5-tunnel.so loaded")
         } catch (e: UnsatisfiedLinkError) {
             android.util.Log.w("OlcRtcVpnService", "libhev-socks5-tunnel.so not available", e)
+        }
+        try {
+            System.loadLibrary("olcrtc_tun2socks")
+            android.util.Log.d("OlcRtcVpnService", "libolcrtc_tun2socks.so loaded")
+        } catch (e: UnsatisfiedLinkError) {
+            android.util.Log.w("OlcRtcVpnService", "libolcrtc_tun2socks.so not available", e)
         }
 
         val builder = Builder()
