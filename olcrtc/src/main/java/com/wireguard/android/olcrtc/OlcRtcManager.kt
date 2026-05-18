@@ -11,6 +11,12 @@ enum class OlcRtcConnectionState {
 }
 
 object OlcRtcManager {
+    /**
+     * Callback invoked before connect(). The host app (ui module) sets this
+     * to stop active WireGuard tunnels, preventing TUN fd conflicts.
+     */
+    var onBeforeConnect: (suspend () -> Unit)? = null
+
     private var transport: OlcRtcTransport? = null
     private var config: OlcRtcConfig? = null
     private var scope: CoroutineScope? = null
@@ -23,6 +29,8 @@ object OlcRtcManager {
     val currentTunnelName: StateFlow<String?> = _currentTunnelName.asStateFlow()
 
     fun connect(appContext: Context, cfg: OlcRtcConfig) {
+        // Stop any active WireGuard tunnels to prevent TUN fd conflict
+        onBeforeConnect?.let { runBlocking { it() } }
         disconnect()
         config = cfg
         _connectionState.value = OlcRtcConnectionState.CONNECTING

@@ -19,7 +19,9 @@ import androidx.datastore.preferences.preferencesDataStoreFile
 import com.google.android.material.color.DynamicColors
 import com.wireguard.android.backend.Backend
 import com.wireguard.android.backend.GoBackend
+import com.wireguard.android.backend.Tunnel
 import com.wireguard.android.backend.WgQuickBackend
+import com.wireguard.android.olcrtc.OlcRtcManager
 import com.wireguard.android.configStore.FileConfigStore
 import com.wireguard.android.jail.JailComponent
 import com.wireguard.android.jail.enterprise.PostProvisioningHandler
@@ -113,6 +115,18 @@ class Application : android.app.Application() {
         }
         tunnelManager = TunnelManager(FileConfigStore(applicationContext))
         tunnelManager.onCreate()
+
+        // Before OlcRTC connects, stop active WireGuard tunnels to avoid
+        // TUN fd conflict (hev-socks5-tunnel's netif_add aborts on a second TUN).
+        OlcRtcManager.onBeforeConnect = suspend {
+            val manager = getTunnelManager()
+            for (tunnel in manager.getTunnels()) {
+                if (tunnel.state == Tunnel.State.UP) {
+                    android.util.Log.d("OlcRtcGuard", "Stopping WG tunnel '${tunnel.name}' before OlcRTC")
+                    manager.setTunnelState(tunnel, Tunnel.State.DOWN)
+                }
+            }
+        }
         jailComponent = JailComponent(applicationContext, coroutineScope, tunnelManager)
 
         // Auto-detect ADB/NFC provisioning: if the app is already a profile owner
