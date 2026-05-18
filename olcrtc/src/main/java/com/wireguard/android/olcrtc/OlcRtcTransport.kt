@@ -99,7 +99,9 @@ class OlcRtcTransport(private val appContext: Context) {
                 config.socksPass ?: ""
             )
 
-            Mobile.waitReady(25_000L)
+            android.util.Log.d("OlcRtcTransport", "⏳ Waiting for Go client ready (60s timeout)...")
+            Mobile.waitReady(60_000L)
+            android.util.Log.d("OlcRtcTransport", "✅ Go client ready!")
 
             // WG tunnel stopping will be implemented in UI layer (cross-module)
 

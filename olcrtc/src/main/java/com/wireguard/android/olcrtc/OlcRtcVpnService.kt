@@ -140,7 +140,9 @@ class OlcRtcVpnService : VpnService() {
         Mobile.setProtector(object : SocketProtector {
             override fun protect(fd: Long): Boolean {
                 val instance = currentInstance
-                return instance?.protect(fd.toInt()) ?: false
+                val result = instance?.protect(fd.toInt()) ?: false
+                android.util.Log.d("OlcRtcVpnService", "🛡️ SocketProtector.protect(fd=$fd) = $result (instance=${instance != null})")
+                return result
             }
         })
 
@@ -213,6 +215,14 @@ class OlcRtcVpnService : VpnService() {
             if (activeNetwork != null) {
                 connectivityManager.bindProcessToNetwork(activeNetwork)
                 android.util.Log.d("OlcRtcVpnService", "Bound to upstream network: $activeNetwork")
+
+                // Validate binding took effect
+                try {
+                    val boundNetwork = connectivityManager.getBoundNetworkForProcess()
+                    android.util.Log.d("OlcRtcVpnService", "📡 bindProcessToNetwork: target=$activeNetwork, actual bound=$boundNetwork")
+                } catch (e: Exception) {
+                    android.util.Log.w("OlcRtcVpnService", "📡 getBoundNetworkForProcess failed", e)
+                }
             } else {
                 android.util.Log.w("OlcRtcVpnService", "No active upstream network to bind to")
             }
