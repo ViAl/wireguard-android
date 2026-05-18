@@ -35,7 +35,7 @@ class OlcRtcVpnService : VpnService() {
         const val ACTION_START = "com.wireguard.android.olcrtc.START"
         const val ACTION_STOP = "com.wireguard.android.olcrtc.STOP"
 
-        // Set after TUN created in startVpn(), used by startTun2socksOnExistingTun
+        // Set after TUN created in startVpn(), used by upgradeTunToProduction
         var postReadyTunFd: Int = -1
 
         const val EXTRA_CONFIG_NAME = "olcrtc_name"
@@ -123,7 +123,7 @@ class OlcRtcVpnService : VpnService() {
         builder.setSession(config.name)
         builder.setMtu(1500)
         builder.addAddress("10.0.2.1", 24)
-        builder.addRoute("0.0.0.0", 0)
+        // НЕТ addRoute("0.0.0.0", 0) — это будет во второй фазе (upgradeTunToProduction)!
         val dnsParts = config.dnsServer.split(":")
         builder.addDnsServer(dnsParts[0])
         config.excludedApplications.forEach { builder.addDisallowedApplication(it) }
@@ -132,9 +132,9 @@ class OlcRtcVpnService : VpnService() {
         vpnInterface = builder.establish()
             ?: throw IllegalStateException("Failed to establish VPN interface")
         val fd = vpnInterface!!.fd
-        android.util.Log.d("OlcRtcVpnService", "TUN fd=$fd established for ${config.name}")
+        android.util.Log.d("OlcRtcVpnService", "TUN fd=$fd established (init phase, no default route)")
 
-        // Сохраняем TUN fd для tun2socks (запуск после waitReady)
+        // Сохраняем TUN fd для второй фазы (upgradeTunToProduction)
         postReadyTunFd = fd
 
         // Bind to the active upstream network so non-VPN sockets resolve correctly.
@@ -164,17 +164,34 @@ class OlcRtcVpnService : VpnService() {
         isRunning = true
     }
 
-    fun startTun2socksOnExistingTun(config: OlcRtcConfig) {
-        val fd = postReadyTunFd
-        if (fd < 0) {
-            android.util.Log.e("OlcRtcVpnService", "TUN fd not available for tun2socks")
-            return
-        }
+    fun upgradeTunToProduction(config: OlcRtcConfig) {
+        // Close the init TUN (no default route)
+        vpnInterface?.close()
+        vpnInterface = null
+        android.util.Log.d("OlcRtcVpnService", "Closed init TUN, creating production TUN...")
+
         try {
+            // Create NEW TUN with full routing
+            val builder = Builder()
+            builder.setSession(config.name)
+            builder.setMtu(1500)
+            builder.addAddress("10.0.2.1", 24)
+            builder.addRoute("0.0.0.0", 0) // ← THE DEFAULT ROUTE
+            val dnsParts = config.dnsServer.split(":")
+            builder.addDnsServer(dnsParts[0])
+            config.excludedApplications.forEach { builder.addDisallowedApplication(it) }
+            config.includedApplications.forEach { builder.addAllowedApplication(it) }
+
+            vpnInterface = builder.establish()
+                ?: throw IllegalStateException("Failed to establish production VPN interface")
+            val fd = vpnInterface!!.fd
+            postReadyTunFd = fd
+            android.util.Log.d("OlcRtcVpnService", "Production TUN fd=$fd established with default route")
+
+            // Start tun2socks on the production TUN
             val hevConfig = generateHevConfig(config)
             val hevConfigFile = File(filesDir, "hev-socks5-tunnel.conf")
             hevConfigFile.writeText(hevConfig)
-            android.util.Log.d("OlcRtcVpnService", "Starting tun2socks on fd=$fd")
 
             Thread {
                 try {
@@ -184,8 +201,10 @@ class OlcRtcVpnService : VpnService() {
                     android.util.Log.e("OlcRtcVpnService", "tun2socks failed", e)
                 }
             }.apply { isDaemon = true }.start()
+
+            postReadyTunFd = -1
         } catch (e: Exception) {
-            android.util.Log.e("OlcRtcVpnService", "Failed to configure tun2socks", e)
+            android.util.Log.e("OlcRtcVpnService", "Failed to create production TUN", e)
         }
     }
 

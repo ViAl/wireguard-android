@@ -103,9 +103,9 @@ class OlcRtcTransport(private val appContext: Context) {
             Mobile.waitReady(60_000L)
             android.util.Log.d("OlcRtcTransport", "✅ Go client ready! Starting tun2socks...")
 
-            // Start tun2socks on the existing TUN (created in startVpn before Go init)
-            OlcRtcVpnService.currentInstance?.startTun2socksOnExistingTun(config)
-                ?: android.util.Log.w("OlcRtcTransport", "VpnService not available to start tun2socks")
+            // Upgrade init TUN (no default route) to production TUN (with 0.0.0.0/0 + tun2socks)
+            OlcRtcVpnService.currentInstance?.upgradeTunToProduction(config)
+                ?: android.util.Log.w("OlcRtcTransport", "VpnService not available to upgrade TUN")
 
             // WG tunnel stopping will be implemented in UI layer (cross-module)
 
