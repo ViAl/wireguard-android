@@ -24,6 +24,11 @@ class OlcRtcVpnService : VpnService() {
     companion object {
         const val ACTION_START = "com.wireguard.android.olcrtc.START"
         const val ACTION_STOP = "com.wireguard.android.olcrtc.STOP"
+
+        // Native JNI bridge for hev-socks5-tunnel
+        private external fun startTun2socksNative(configPath: String, fd: Int): Int
+        private external fun stopTun2socksNative()
+        private external fun getTun2socksStatsNative(): LongArray
         const val EXTRA_CONFIG_NAME = "olcrtc_name"
         const val EXTRA_CONFIG_CARRIER = "olcrtc_carrier"
         const val EXTRA_CONFIG_ROOM = "olcrtc_room"
@@ -70,6 +75,20 @@ class OlcRtcVpnService : VpnService() {
     private fun startVpn(config: OlcRtcConfig) {
         if (isRunning) return
 
+        // Force-load native libraries so R8 doesn't strip unused .so files
+        try {
+            System.loadLibrary("gojni")
+            android.util.Log.d("OlcRtcVpnService", "libgojni.so loaded")
+        } catch (e: UnsatisfiedLinkError) {
+            android.util.Log.w("OlcRtcVpnService", "libgojni.so not available", e)
+        }
+        try {
+            System.loadLibrary("hev-socks5-tunnel")
+            android.util.Log.d("OlcRtcVpnService", "libhev-socks5-tunnel.so loaded")
+        } catch (e: UnsatisfiedLinkError) {
+            android.util.Log.w("OlcRtcVpnService", "libhev-socks5-tunnel.so not available", e)
+        }
+
         val builder = Builder()
         builder.setSession(config.name)
         builder.setMtu(1500)
@@ -100,8 +119,24 @@ class OlcRtcVpnService : VpnService() {
         // Bind to the active upstream network so non-VPN sockets resolve correctly.
         bindToUpstreamNetwork()
 
-        // hev-socks5-tunnel native bridge will be wired in a follow-up.
-        // The TUN interface is created and the Go AAR will handle routing.
+        // Generate hev-socks5-tunnel config and start tun2socks in background
+        try {
+            val hevConfig = generateHevConfig(config)
+            val hevConfigFile = File(filesDir, "hev-socks5-tunnel.conf")
+            hevConfigFile.writeText(hevConfig)
+            android.util.Log.d("OlcRtcVpnService", "Saving Hev config to ${hevConfigFile.absolutePath}")
+
+            Thread {
+                try {
+                    val result = startTun2socksNative(hevConfigFile.absolutePath, fd)
+                    android.util.Log.d("OlcRtcVpnService", "tun2socks started: result=$result")
+                } catch (e: Exception) {
+                    android.util.Log.e("OlcRtcVpnService", "tun2socks failed", e)
+                }
+            }.apply { isDaemon = true }.start()
+        } catch (e: Exception) {
+            android.util.Log.e("OlcRtcVpnService", "Failed to configure tun2socks", e)
+        }
 
         isRunning = true
     }
@@ -109,6 +144,15 @@ class OlcRtcVpnService : VpnService() {
     private fun stopVpn() {
         if (!isRunning) return
         android.util.Log.d("OlcRtcVpnService", "Stopping VPN")
+
+        // Stop tun2socks
+        try {
+            stopTun2socksNative()
+            android.util.Log.d("OlcRtcVpnService", "tun2socks stopped")
+        } catch (e: Exception) {
+            android.util.Log.w("OlcRtcVpnService", "stopTun2socks failed", e)
+        }
+
         vpnInterface?.close()
         vpnInterface = null
         isRunning = false
@@ -176,6 +220,29 @@ class OlcRtcVpnService : VpnService() {
         } catch (e: Exception) {
             android.util.Log.w("OlcRtcVpnService", "Failed to unregister network callback", e)
         }
+    }
+
+    private fun generateHevConfig(config: OlcRtcConfig): String = buildString {
+        appendLine("tunnel:")
+        appendLine("  mtu: 1500")
+        appendLine("socks5:")
+        appendLine("  address: 127.0.0.1")
+        appendLine("  port: ${config.socksPort}")
+        config.socksUser?.let {
+            if (it.isNotEmpty()) {
+                appendLine("  username: $it")
+                appendLine("  password: ${config.socksPass ?: ""}")
+            }
+        }
+        appendLine("misc:")
+        appendLine("  task-stack-size: 20480")
+        appendLine("  event-loop-count: 2")
+        appendLine("  udp-timeout: 300")
+        appendLine("  tcp-timeout: 2000")
+        appendLine("  resolve-timeout: 10000")
+        appendLine("  fast-open: true")
+        appendLine("  fore-interface: false")
+        appendLine("  is-fragment: false")
     }
 
     private fun createNotificationChannel() {

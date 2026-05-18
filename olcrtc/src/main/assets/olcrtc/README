@@ -1,0 +1,7 @@
+OlcRTC Native Assets
+=====================
+
+hev-socks5-tunnel configuration is now generated dynamically at runtime
+in OlcRtcVpnService.generateHevConfig() and written to getFilesDir().
+
+Static asset config files are no longer needed.
