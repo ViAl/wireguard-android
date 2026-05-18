@@ -34,9 +34,8 @@ class OlcRtcVpnService : VpnService() {
 
         const val ACTION_START = "com.wireguard.android.olcrtc.START"
         const val ACTION_STOP = "com.wireguard.android.olcrtc.STOP"
-        const val ACTION_CREATE_TUN = "com.wireguard.android.olcrtc.CREATE_TUN"
 
-        // Set after waitReady, used by createTunAndStartTun2socks
+        // Set after TUN created in startVpn(), used by startTun2socksOnExistingTun
         var postReadyTunFd: Int = -1
 
         const val EXTRA_CONFIG_NAME = "olcrtc_name"
@@ -67,12 +66,6 @@ class OlcRtcVpnService : VpnService() {
                 }
             }
             ACTION_STOP -> stopVpn()
-            ACTION_CREATE_TUN -> {
-                val config = extractConfig(intent)
-                if (config != null) {
-                    createTunAndStartTun2socks(config, postReadyTunFd)
-                }
-            }
         }
         return Service.START_NOT_STICKY
     }
@@ -125,6 +118,25 @@ class OlcRtcVpnService : VpnService() {
             startForeground(FOREGROUND_SERVICE_ID, notification)
         }
 
+        // Создание TUN перед Go init (как в Olcbox, предотвращает SIGSEGV в Go runtime)
+        val builder = Builder()
+        builder.setSession(config.name)
+        builder.setMtu(1500)
+        builder.addAddress("10.0.2.1", 24)
+        builder.addRoute("0.0.0.0", 0)
+        val dnsParts = config.dnsServer.split(":")
+        builder.addDnsServer(dnsParts[0])
+        config.excludedApplications.forEach { builder.addDisallowedApplication(it) }
+        config.includedApplications.forEach { builder.addAllowedApplication(it) }
+
+        vpnInterface = builder.establish()
+            ?: throw IllegalStateException("Failed to establish VPN interface")
+        val fd = vpnInterface!!.fd
+        android.util.Log.d("OlcRtcVpnService", "TUN fd=$fd established for ${config.name}")
+
+        // Сохраняем TUN fd для tun2socks (запуск после waitReady)
+        postReadyTunFd = fd
+
         // Bind to the active upstream network so non-VPN sockets resolve correctly.
         bindToUpstreamNetwork()
 
@@ -152,28 +164,17 @@ class OlcRtcVpnService : VpnService() {
         isRunning = true
     }
 
-    fun createTunAndStartTun2socks(config: OlcRtcConfig, clientFd: Int) {
+    fun startTun2socksOnExistingTun(config: OlcRtcConfig) {
+        val fd = postReadyTunFd
+        if (fd < 0) {
+            android.util.Log.e("OlcRtcVpnService", "TUN fd not available for tun2socks")
+            return
+        }
         try {
-            val builder = Builder()
-            builder.setSession(config.name)
-            builder.setMtu(1500)
-            builder.addAddress("10.0.2.1", 24)
-            builder.addRoute("0.0.0.0", 0)
-
-            val dnsParts = config.dnsServer.split(":")
-            builder.addDnsServer(dnsParts[0])
-
-            config.excludedApplications.forEach { builder.addDisallowedApplication(it) }
-            config.includedApplications.forEach { builder.addAllowedApplication(it) }
-
-            vpnInterface = builder.establish()
-            val fd = vpnInterface!!.fd
-            android.util.Log.d("OlcRtcVpnService", "TUN fd=$fd established for ${config.name} (post-Go-ready)")
-
             val hevConfig = generateHevConfig(config)
             val hevConfigFile = File(filesDir, "hev-socks5-tunnel.conf")
             hevConfigFile.writeText(hevConfig)
-            android.util.Log.d("OlcRtcVpnService", "Saving Hev config to ${hevConfigFile.absolutePath}")
+            android.util.Log.d("OlcRtcVpnService", "Starting tun2socks on fd=$fd")
 
             Thread {
                 try {
@@ -184,7 +185,7 @@ class OlcRtcVpnService : VpnService() {
                 }
             }.apply { isDaemon = true }.start()
         } catch (e: Exception) {
-            android.util.Log.e("OlcRtcVpnService", "Failed to create TUN after Go ready", e)
+            android.util.Log.e("OlcRtcVpnService", "Failed to configure tun2socks", e)
         }
     }
 

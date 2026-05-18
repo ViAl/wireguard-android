@@ -101,21 +101,11 @@ class OlcRtcTransport(private val appContext: Context) {
 
             android.util.Log.d("OlcRtcTransport", "⏳ Waiting for Go client ready (60s timeout)...")
             Mobile.waitReady(60_000L)
-            android.util.Log.d("OlcRtcTransport", "✅ Go client ready!")
+            android.util.Log.d("OlcRtcTransport", "✅ Go client ready! Starting tun2socks...")
 
-            // Now that Go is ready, create TUN and start tun2socks
-            val intent = Intent(appContext, OlcRtcVpnService::class.java).apply {
-                action = OlcRtcVpnService.ACTION_CREATE_TUN
-                putExtra(OlcRtcVpnService.EXTRA_CONFIG_NAME, config.name)
-                putExtra(OlcRtcVpnService.EXTRA_CONFIG_CARRIER, config.carrier)
-                putExtra(OlcRtcVpnService.EXTRA_CONFIG_ROOM, config.roomId)
-                putExtra(OlcRtcVpnService.EXTRA_CONFIG_CLIENT, config.clientId)
-                putExtra(OlcRtcVpnService.EXTRA_CONFIG_KEY, config.keyHex)
-                putExtra(OlcRtcVpnService.EXTRA_CONFIG_TRANSPORT, config.transport)
-                putExtra(OlcRtcVpnService.EXTRA_CONFIG_SOCKS_PORT, config.socksPort)
-                putExtra(OlcRtcVpnService.EXTRA_CONFIG_DNS, config.dnsServer)
-            }
-            appContext.startService(intent)
+            // Start tun2socks on the existing TUN (created in startVpn before Go init)
+            OlcRtcVpnService.currentInstance?.startTun2socksOnExistingTun(config)
+                ?: android.util.Log.w("OlcRtcTransport", "VpnService not available to start tun2socks")
 
             // WG tunnel stopping will be implemented in UI layer (cross-module)
 
