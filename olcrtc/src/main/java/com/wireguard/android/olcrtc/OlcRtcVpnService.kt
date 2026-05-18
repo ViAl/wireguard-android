@@ -34,6 +34,10 @@ class OlcRtcVpnService : VpnService() {
 
         const val ACTION_START = "com.wireguard.android.olcrtc.START"
         const val ACTION_STOP = "com.wireguard.android.olcrtc.STOP"
+        const val ACTION_CREATE_TUN = "com.wireguard.android.olcrtc.CREATE_TUN"
+
+        // Set after waitReady, used by createTunAndStartTun2socks
+        var postReadyTunFd: Int = -1
 
         const val EXTRA_CONFIG_NAME = "olcrtc_name"
         const val EXTRA_CONFIG_CARRIER = "olcrtc_carrier"
@@ -63,6 +67,12 @@ class OlcRtcVpnService : VpnService() {
                 }
             }
             ACTION_STOP -> stopVpn()
+            ACTION_CREATE_TUN -> {
+                val config = extractConfig(intent)
+                if (config != null) {
+                    createTunAndStartTun2socks(config, postReadyTunFd)
+                }
+            }
         }
         return Service.START_NOT_STICKY
     }
@@ -106,18 +116,6 @@ class OlcRtcVpnService : VpnService() {
             android.util.Log.w("OlcRtcVpnService", "libolcrtc_tun2socks.so not available", e)
         }
 
-        val builder = Builder()
-        builder.setSession(config.name)
-        builder.setMtu(1500)
-        builder.addAddress("10.0.2.1", 24)
-        builder.addRoute("0.0.0.0", 0)
-
-        val dnsParts = config.dnsServer.split(":")
-        builder.addDnsServer(dnsParts[0])
-
-        config.excludedApplications.forEach { builder.addDisallowedApplication(it) }
-        config.includedApplications.forEach { builder.addAllowedApplication(it) }
-
         createNotificationChannel()
         val notification = buildNotification(config.name)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
@@ -126,12 +124,6 @@ class OlcRtcVpnService : VpnService() {
         } else {
             startForeground(FOREGROUND_SERVICE_ID, notification)
         }
-
-        vpnInterface = builder.establish()
-            ?: throw IllegalStateException("Failed to establish VPN interface")
-
-        val fd = vpnInterface!!.fd
-        android.util.Log.d("OlcRtcVpnService", "TUN fd=$fd established for ${config.name}")
 
         // Bind to the active upstream network so non-VPN sockets resolve correctly.
         bindToUpstreamNetwork()
@@ -157,8 +149,27 @@ class OlcRtcVpnService : VpnService() {
         // Order: setProtector + setLogWriter MUST be called first
         Mobile.setProviders()
 
-        // Generate hev-socks5-tunnel config and start tun2socks in background
+        isRunning = true
+    }
+
+    fun createTunAndStartTun2socks(config: OlcRtcConfig, clientFd: Int) {
         try {
+            val builder = Builder()
+            builder.setSession(config.name)
+            builder.setMtu(1500)
+            builder.addAddress("10.0.2.1", 24)
+            builder.addRoute("0.0.0.0", 0)
+
+            val dnsParts = config.dnsServer.split(":")
+            builder.addDnsServer(dnsParts[0])
+
+            config.excludedApplications.forEach { builder.addDisallowedApplication(it) }
+            config.includedApplications.forEach { builder.addAllowedApplication(it) }
+
+            vpnInterface = builder.establish()
+            val fd = vpnInterface!!.fd
+            android.util.Log.d("OlcRtcVpnService", "TUN fd=$fd established for ${config.name} (post-Go-ready)")
+
             val hevConfig = generateHevConfig(config)
             val hevConfigFile = File(filesDir, "hev-socks5-tunnel.conf")
             hevConfigFile.writeText(hevConfig)
@@ -173,10 +184,8 @@ class OlcRtcVpnService : VpnService() {
                 }
             }.apply { isDaemon = true }.start()
         } catch (e: Exception) {
-            android.util.Log.e("OlcRtcVpnService", "Failed to configure tun2socks", e)
+            android.util.Log.e("OlcRtcVpnService", "Failed to create TUN after Go ready", e)
         }
-
-        isRunning = true
     }
 
     private fun stopVpn() {
