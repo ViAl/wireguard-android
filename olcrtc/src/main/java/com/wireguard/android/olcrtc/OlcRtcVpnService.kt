@@ -632,7 +632,7 @@ class OlcRtcVpnService : VpnService() {
 
     /**
      * Perform a minimal SOCKS5 CONNECT probe through 127.0.0.1:socksPort
-     * to 1.1.1.1:443, then send a bare HTTP request to confirm data flow.
+     * to 1.1.1.1:80, then send a bare HTTP request to confirm data flow.
      *
      * Returns true if the full path works, false otherwise.
      */
@@ -651,9 +651,9 @@ class OlcRtcVpnService : VpnService() {
                 sock.close(); return false
             }
 
-            // ── SOCKS5 CONNECT to 1.1.1.1:443 ──
+            // ── SOCKS5 CONNECT to 1.1.1.1:80 ──
             val targetHost = "1.1.1.1"
-            val targetPort = 443
+            val targetPort = 80
             val hostBytes = targetHost.toByteArray()
             val req = ByteArray(7 + hostBytes.size)
             req[0] = 0x05  // version
@@ -694,9 +694,10 @@ class OlcRtcVpnService : VpnService() {
 
             // ── Send minimal HTTP request to confirm data flow ──
             val httpReq = "GET / HTTP/1.0\r\nHost: $targetHost\r\n\r\n"
-            sock.outputStream.write(httpReq.toByteArray()))
+            sock.outputStream.write(httpReq.toByteArray())
 
             // Read some response bytes — just need to confirm data arrives
+            sock.soTimeout = 10_000  // 10s read timeout
             val httpResp = ByteArray(64)
             val n = sock.inputStream.read(httpResp)
             sock.close()
