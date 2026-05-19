@@ -130,7 +130,7 @@ class OlcRtcTransport(private val appContext: Context) {
             withContext(Dispatchers.Main) {
                 val prepareIntent = Intent(appContext, OlcRtcVpnService::class.java).apply {
                     action = OlcRtcVpnService.ACTION_PREPARE
-                    putExtra("reply_to", replyMessenger?.binder)
+                    replyMessenger?.let { putExtra("reply_to", it) }
                 }
                 appContext.startForegroundService(prepareIntent)
                 android.util.Log.d("OlcRtcTransport", "ACTION_PREPARE sent")
@@ -165,7 +165,7 @@ class OlcRtcTransport(private val appContext: Context) {
                     putExtra(OlcRtcVpnService.EXTRA_CONFIG_ROUTE_ALL_IPV6, config.routeAllIpv6)
                     config.socksUser?.let { putExtra(OlcRtcVpnService.EXTRA_CONFIG_SOCKS_USER, it) }
                     config.socksPass?.let { putExtra(OlcRtcVpnService.EXTRA_CONFIG_SOCKS_PASS, it) }
-                    putExtra("reply_to", replyMessenger?.binder)
+                    replyMessenger?.let { putExtra("reply_to", it) }
                 }
                 appContext.startForegroundService(intent)
                 android.util.Log.d("OlcRtcTransport", "ACTION_START sent for ${config.name}")

@@ -302,9 +302,8 @@ class OlcRtcVpnService : VpnService() {
      * Used for IPC status communication back to OlcRtcTransport in the main process.
      */
     private fun extractReplyMessenger(intent: Intent?) {
-        val binder = intent?.getIBinderExtra("reply_to") ?: return
         try {
-            replyMessenger = Messenger(binder)
+            replyMessenger = intent?.getParcelableExtra("reply_to", android.os.Messenger::class.java)
         } catch (e: Exception) {
             android.util.Log.w("OlcRtcVpnService", "Failed to create reply Messenger", e)
         }
