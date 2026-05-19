@@ -41,8 +41,28 @@ object OlcRtcManager {
     /**
      * Start connecting asynchronously. Non-blocking — returns immediately.
      * The connection state is tracked via [connectionState] flow.
+     *
+     * Guards against duplicate connects:
+     * - If CONNECTING, ignores the request (prevents duplicate Go start)
+     * - If CONNECTED with the same config name, ignores (already connected to this tunnel)
+     * - If CONNECTED with different config, allows restart (serialized stop-then-start)
      */
     fun connect(appContext: Context, cfg: OlcRtcConfig) {
+        val currentState = _connectionState.value
+        val currentConfig = config
+
+        // Guard: don't restart while connecting to the same tunnel
+        if (currentState == OlcRtcConnectionState.CONNECTING) {
+            android.util.Log.d("OlcRtcManager", "connect ignored: already CONNECTING to ${cfg.name}")
+            return
+        }
+
+        // Guard: already connected to this exact tunnel, ignore
+        if (currentState == OlcRtcConnectionState.CONNECTED && currentConfig?.name == cfg.name) {
+            android.util.Log.d("OlcRtcManager", "connect ignored: already CONNECTED to ${cfg.name}")
+            return
+        }
+
         connectJob?.cancel()
         connectJob = managerScope.launch {
             mutex.withLock {
@@ -63,11 +83,12 @@ object OlcRtcManager {
     }
 
     private suspend fun connectInternal(appContext: Context, cfg: OlcRtcConfig) {
-        // If already connecting/connected, restart by cleaning up old transport first
-        if (_connectionState.value == OlcRtcConnectionState.CONNECTING ||
-            _connectionState.value == OlcRtcConnectionState.CONNECTED) {
-            android.util.Log.w("OlcRtcManager", "connectInternal: already connecting/connected, restarting")
+        // Defense-in-depth: check again inside mutex
+        if (_connectionState.value == OlcRtcConnectionState.CONNECTING) {
+            android.util.Log.w("OlcRtcManager", "connectInternal: already CONNECTING, ignoring")
+            return
         }
+        android.util.Log.d("OlcRtcManager", "connectInternal begin: ${cfg.name}")
         _connectionState.value = OlcRtcConnectionState.CONNECTING
         _currentTunnelName.value = cfg.name
         try {
@@ -93,7 +114,12 @@ object OlcRtcManager {
             _connectionState.value = OlcRtcConnectionState.CONNECTED
             startWatchdog(appContext)
         } catch (e: CancellationException) {
-            cleanupOldTransport()
+            android.util.Log.d("OlcRtcManager", "connectInternal cancelled, cleaning up")
+            // transport should already be cleaned up by startAndWait's cancellation handler
+            // But double-check in case cancellation happened before transport was set up
+            if (transport != null) {
+                cleanupOldTransport()
+            }
             _connectionState.value = OlcRtcConnectionState.DISCONNECTED
             _currentTunnelName.value = null
             throw e

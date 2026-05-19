@@ -50,7 +50,7 @@ class OlcRtcVpnService : VpnService() {
          * Monotonically increasing counter to detect stale [Handler.postDelayed]
          * callbacks from previous VpnService sessions.
          */
-        private val sessionCounter = java.util.concurrent.atomic.AtomicLong(0)
+        val sessionCounter = java.util.concurrent.atomic.AtomicLong(0)
 
         /**
          * Signaled by [onCreate] for deterministic VpnService creation wait.
@@ -58,6 +58,14 @@ class OlcRtcVpnService : VpnService() {
          */
         @Volatile
         var serviceReady: CompletableDeferred<Unit> = CompletableDeferred()
+
+        /**
+         * Set by [OlcRtcTransport] before ACTION_PREPARE, read by [onCreate]
+         * to verify that the service instance that was created matches the
+         * expected prepare session.
+         */
+        @Volatile
+        var expectedServiceReadySession: Long = -1L
 
         /**
          * Wait duration before confirming TUN2SOCKS_STARTED.
@@ -95,13 +103,22 @@ class OlcRtcVpnService : VpnService() {
     override fun onCreate() {
         super.onCreate()
         currentInstance = this
-        serviceReady.complete(Unit)
-        android.util.Log.d("OlcRtcVpnService", "VpnService created, currentInstance set, serviceReady signaled")
+        val session = sessionCounter.incrementAndGet()
+        if (session == expectedServiceReadySession || expectedServiceReadySession == -1L) {
+            serviceReady.complete(Unit)
+        } else {
+            android.util.Log.w("OlcRtcVpnService",
+                "onCreate: session=$session != expected=$expectedServiceReadySession, serviceReady NOT signaled")
+        }
+        android.util.Log.d("OlcRtcVpnService",
+            "VpnService created, session=$session, expected=$expectedServiceReadySession, " +
+            "currentInstance set")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_PREPARE -> {
+                android.util.Log.d("OlcRtcVpnService", "ACTION_PREPARE received")
                 // Phase 1: Create VpnService instance with notification so
                 // startForegroundService lifecycle is satisfied.
                 // Does NOT establish TUN or start tun2socks — just sets up
@@ -120,6 +137,7 @@ class OlcRtcVpnService : VpnService() {
                 }
             }
             ACTION_START -> {
+                android.util.Log.d("OlcRtcVpnService", "ACTION_START received for ${intent.getStringExtra(EXTRA_CONFIG_NAME)}")
                 val config = extractConfig(intent)
                 if (config != null) {
                     startVpn(config)
@@ -306,11 +324,14 @@ class OlcRtcVpnService : VpnService() {
      *              stopForeground() and stopSelf() are posted back to the main thread.
      */
     private fun stopVpn(async: Boolean = false) {
-        if (!isRunning && !initPhase) return
+        if (!isRunning && !initPhase) {
+            android.util.Log.d("OlcRtcVpnService", "stopVpn: nothing to stop (isRunning=$isRunning, initPhase=$initPhase)")
+            return
+        }
         // Prevent concurrent stop from ACTION_STOP (async, stopExecutor) and onDestroy (sync, main thread)
         if (stopInProgress) return
         stopInProgress = true
-        android.util.Log.d("OlcRtcVpnService", "Stopping VPN (async=$async)")
+        android.util.Log.d("OlcRtcVpnService", "Stopping VPN (async=$async, session=${sessionCounter.get()})")
         onVpnStatus?.invoke(VpnStatusEvent.VPN_STOPPED)
 
         val runnable = Runnable {
@@ -366,6 +387,8 @@ class OlcRtcVpnService : VpnService() {
     }
 
     override fun onDestroy() {
+        val currentSession = sessionCounter.get()
+        android.util.Log.d("OlcRtcVpnService", "onDestroy, session=$currentSession")
         currentInstance = null
         // Defer blocking cleanup (native stop, thread join) to background
         // so we never block the main thread and risk ANR.

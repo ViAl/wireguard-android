@@ -99,12 +99,13 @@ class OlcRtcListFragment : Fragment() {
             text = when {
                 isActive && state == OlcRtcConnectionState.CONNECTED -> "● Connected"
                 isActive && state == OlcRtcConnectionState.CONNECTING -> "◌ Connecting..."
+                isActive && state == OlcRtcConnectionState.DISCONNECTING -> "◌ Disconnecting..."
                 isActive && state == OlcRtcConnectionState.ERROR -> "● Error"
                 else -> "○ Disconnected"
             }
             setTextColor(when {
                 isActive && state == OlcRtcConnectionState.CONNECTED -> 0xFF4CAF50.toInt()
-                isActive && state == OlcRtcConnectionState.CONNECTING -> 0xFFFF9800.toInt()
+                isActive && (state == OlcRtcConnectionState.CONNECTING || state == OlcRtcConnectionState.DISCONNECTING) -> 0xFFFF9800.toInt()
                 isActive && state == OlcRtcConnectionState.ERROR -> 0xFFF44336.toInt()
                 else -> 0xFF9E9E9E.toInt()
             })
@@ -128,7 +129,28 @@ class OlcRtcListFragment : Fragment() {
         // Buttons
         val btnRow = LinearLayout(ctx).apply { orientation = HORIZONTAL }
         btnRow.addView(Button(ctx).apply {
-            text = if (isActive && state == OlcRtcConnectionState.CONNECTED) "Disconnect" else "Connect"
+            when {
+                isActive && state == OlcRtcConnectionState.CONNECTING -> {
+                    text = "Connecting..."
+                    isEnabled = false
+                }
+                isActive && state == OlcRtcConnectionState.DISCONNECTING -> {
+                    text = "Disconnecting..."
+                    isEnabled = false
+                }
+                isActive && state == OlcRtcConnectionState.CONNECTED -> {
+                    text = "Disconnect"
+                    isEnabled = true
+                }
+                isActive && state == OlcRtcConnectionState.ERROR -> {
+                    text = "Connect"
+                    isEnabled = true
+                }
+                else -> {
+                    text = "Connect"
+                    isEnabled = true
+                }
+            }
             setOnClickListener {
                 if (isActive && state == OlcRtcConnectionState.CONNECTED) {
                     OlcRtcManager.disconnect()
