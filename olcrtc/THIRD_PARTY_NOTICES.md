@@ -8,15 +8,15 @@ The source code for these artifacts is available under their respective licenses
 ### olcrtc-classes.jar (Go gomobile bindings)
 
 - **Upstream:** OlcRTC Go client
-- **Source:** https://github.com/ViAl/olcrtc
-- **Commit SHA:** pinned-20260519 (set by CI during binary build)
+- **Source:** https://github.com/openlibrecommunity/olcrtc
+- **Commit SHA:** `028e94d4ce4e3772f826937c61e5465c4ced5755`
 - **SHA256 (arm64-v8a + x86_64):** `77c5ecf2f1532eb2a52f733bd1d47beb830f596317dde8b6e3f0eefb98a8a23f`
 - **License:** MIT
 
 ### libgojni.so (Go runtime JNI bridge)
 
 - **Built by:** gomobile bind
-- **Commit SHA:** pinned-20260519 (same as olcrtc-classes.jar)
+- **Commit SHA:** `028e94d4ce4e3772f826937c61e5465c4ced5755` (same as olcrtc-classes.jar)
 - **SHA256 (arm64-v8a):** `561ad9beef951ebeff3373c35c9b5cfaeda8c5ec6f9f354030b1ab1931fe22d9`
 - **SHA256 (x86_64):** `561ad9beef951ebeff3373c35c9b5cfaeda8c5ec6f9f354030b1ab1931fe22d9`
 - **License:** Go's BSD-style license (https://golang.org/LICENSE)

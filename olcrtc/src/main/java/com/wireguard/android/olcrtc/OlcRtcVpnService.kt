@@ -50,7 +50,7 @@ class OlcRtcVpnService : VpnService() {
          * Monotonically increasing counter to detect stale [Handler.postDelayed]
          * callbacks from previous VpnService sessions.
          */
-        private var sessionCounter = 0L
+        private val sessionCounter = java.util.concurrent.atomic.AtomicLong(0)
 
         /**
          * Signaled by [onCreate] for deterministic VpnService creation wait.
@@ -169,7 +169,7 @@ class OlcRtcVpnService : VpnService() {
         if (isRunning) return
 
         // Capture session counter to ignore stale postDelayed from previous sessions
-        val currentSession = ++sessionCounter
+        val currentSession = sessionCounter.incrementAndGet()
 
         // Force-load native libraries so R8 doesn't strip unused .so files
         try {
@@ -270,9 +270,17 @@ class OlcRtcVpnService : VpnService() {
             // Delay TUN2SOCKS_STARTED by 500ms to verify the thread actually starts running.
             // Without this delay, the signal fires immediately after thread.start()
             // even if tun2socks fails to initialize (e.g. bad config or socket conflict).
+            //
+            // NOTE: TUN2SOCKS_STARTED only means "native thread is alive after 500ms" —
+            // a best-effort readiness signal, NOT a full traffic health check.
+            // tun2socks could be looping, spinning, or internally broken but still report
+            // as alive. A stronger native readiness callback or stat-based probe should
+            // be added in a future iteration (e.g. querying tun2socks connection stats
+            // or waiting for an explicit "ready" signal from the native layer).
+            // The 500ms delay is empirical and may need adjustment per-device.
             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                 // Ignore stale callbacks from previous sessions
-                if (currentSession != sessionCounter) return@postDelayed
+                if (currentSession != sessionCounter.get()) return@postDelayed
 
                 if (!tunThreadErrored && tunThread?.isAlive == true) {
                     onVpnStatus?.invoke(VpnStatusEvent.TUN2SOCKS_STARTED)
@@ -332,14 +340,20 @@ class OlcRtcVpnService : VpnService() {
                 vpnInterface = null
                 tunThread = null
 
-                // 4. stopForeground + stopSelf must be on the main thread
+                // 4. stopForeground + stopSelf must be on the main thread.
+                //    Reset stopInProgress INSIDE the main-thread post so no other
+                //    stopVpn call can race ahead before the fields are cleaned up.
                 android.os.Handler(android.os.Looper.getMainLooper()).post {
                     isRunning = false
                     initPhase = false
                     stopForeground(STOP_FOREGROUND_REMOVE)
                     stopSelf()
+                    stopInProgress = false
                 }
-            } finally {
+            } catch (e: Exception) {
+                // If an unexpected error happens before the main-thread post,
+                // reset stopInProgress so we don't lock the service permanently.
+                android.util.Log.e("OlcRtcVpnService", "stopVpn runnable failed", e)
                 stopInProgress = false
             }
         }
@@ -353,9 +367,13 @@ class OlcRtcVpnService : VpnService() {
 
     override fun onDestroy() {
         currentInstance = null
-        // In onDestroy we block synchronously — the service is dying anyway
-        stopVpn(async = false)
-        stopExecutor.shutdownNow()
+        // Defer blocking cleanup (native stop, thread join) to background
+        // so we never block the main thread and risk ANR.
+        // The stopExecutor runnable will post stopForeground/stopSelf back
+        // to the main thread. We schedule executor shutdown after the
+        // runnable is posted so pending work completes.
+        stopVpn(async = true)
+        stopExecutor.execute { stopExecutor.shutdownNow() }
         super.onDestroy()
     }
 

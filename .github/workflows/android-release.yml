@@ -78,7 +78,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: openlibrecommunity/olcrtc
-          ref: master
+          ref: 028e94d4ce4e3772f826937c61e5465c4ced5755
           path: olcrtc-src
           submodules: recursive
 

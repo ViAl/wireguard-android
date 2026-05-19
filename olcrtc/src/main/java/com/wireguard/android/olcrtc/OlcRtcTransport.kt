@@ -40,6 +40,9 @@ class OlcRtcTransport(private val appContext: Context) {
 
     private var config: OlcRtcConfig? = null
 
+    /** Tracked by SocketProtector — set to true if any protect(fd) returns false. */
+    private val protectFailed = java.util.concurrent.atomic.AtomicBoolean(false)
+
     /** Session-scoped startup signal completed by VpnService events. */
     private var startupSignalDeferred: CompletableDeferred<Result<Unit>>? = null
 
@@ -163,6 +166,7 @@ class OlcRtcTransport(private val appContext: Context) {
                 override fun protect(fd: Long): Boolean {
                     val instance = OlcRtcVpnService.currentInstance
                     val result = instance?.protect(fd.toInt()) ?: false
+                    if (!result) protectFailed.set(true)
                     android.util.Log.d("OlcRtcTransport", "protect(fd=$fd) returned $result (instance=${instance != null})")
                     return result
                 }
@@ -206,6 +210,12 @@ class OlcRtcTransport(private val appContext: Context) {
             )
 
             Mobile.waitReady(25_000L)
+
+            // Fail-fast: if any protect(fd) returned false during startup, abort
+            if (protectFailed.get()) {
+                stopGoClient()
+                throw StartupException("Failed to protect OlcRTC socket — VpnService.protect() returned false")
+            }
 
             android.util.Log.d("OlcRtcTransport", "Go client ready: carrier=${config.carrier}")
         } catch (e: Exception) {
