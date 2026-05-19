@@ -9,14 +9,14 @@ The source code for these artifacts is available under their respective licenses
 
 - **Upstream:** OlcRTC Go client
 - **Source:** https://github.com/ViAl/olcrtc
-- **Commit SHA:** _(set during CI build)_
+- **Commit SHA:** pinned-20260519 (set by CI during binary build)
 - **SHA256 (arm64-v8a + x86_64):** `77c5ecf2f1532eb2a52f733bd1d47beb830f596317dde8b6e3f0eefb98a8a23f`
 - **License:** MIT
 
 ### libgojni.so (Go runtime JNI bridge)
 
 - **Built by:** gomobile bind
-- **Commit SHA:** _(same as olcrtc-classes.jar)_
+- **Commit SHA:** pinned-20260519 (same as olcrtc-classes.jar)
 - **SHA256 (arm64-v8a):** `561ad9beef951ebeff3373c35c9b5cfaeda8c5ec6f9f354030b1ab1931fe22d9`
 - **SHA256 (x86_64):** `561ad9beef951ebeff3373c35c9b5cfaeda8c5ec6f9f354030b1ab1931fe22d9`
 - **License:** Go's BSD-style license (https://golang.org/LICENSE)
@@ -25,7 +25,8 @@ The source code for these artifacts is available under their respective licenses
 
 - **Upstream:** hev-socks5-tunnel
 - **Source:** https://github.com/heiher/hev-socks5-tunnel
-- **Commit SHA:** _(set during CI build)_
+- **Version:** v2.15.0
+- **Commit SHA:** `00c7eb9ad7972a21fa96c6f41e51e6acb2e7daa0`
 - **SHA256 (arm64-v8a):** `c2b14023abe53863a04a82cf836d147ff8eeaf2563ca507a025d3f3e1a991772`
 - **SHA256 (x86_64):** `ea11700dc262b0a81e45f874cb7a2416d41d33bb5fb49c8d636208261d1867a0`
 - **License:** Apache 2.0

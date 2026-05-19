@@ -51,11 +51,11 @@ tasks.register("verifyOlcrtcBinaries") {
     description = "Verify SHA256 checksums of committed binary blobs"
     doLast {
         val expected = mapOf(
-            "../jniLibs/arm64-v8a/libgojni.so" to "561ad9beef951ebeff3373c35c9b5cfaeda8c5ec6f9f354030b1ab1931fe22d9",
-            "../jniLibs/arm64-v8a/libhev-socks5-tunnel.so" to "c2b14023abe53863a04a82cf836d147ff8eeaf2563ca507a025d3f3e1a991772",
-            "../jniLibs/x86_64/libgojni.so" to "561ad9beef951ebeff3373c35c9b5cfaeda8c5ec6f9f354030b1ab1931fe22d9",
-            "../jniLibs/x86_64/libhev-socks5-tunnel.so" to "ea11700dc262b0a81e45f874cb7a2416d41d33bb5fb49c8d636208261d1867a0",
-            "../libs/olcrtc-classes.jar" to "77c5ecf2f1532eb2a52f733bd1d47beb830f596317dde8b6e3f0eefb98a8a23f"
+            "src/main/jniLibs/arm64-v8a/libgojni.so" to "561ad9beef951ebeff3373c35c9b5cfaeda8c5ec6f9f354030b1ab1931fe22d9",
+            "src/main/jniLibs/arm64-v8a/libhev-socks5-tunnel.so" to "c2b14023abe53863a04a82cf836d147ff8eeaf2563ca507a025d3f3e1a991772",
+            "src/main/jniLibs/x86_64/libgojni.so" to "561ad9beef951ebeff3373c35c9b5cfaeda8c5ec6f9f354030b1ab1931fe22d9",
+            "src/main/jniLibs/x86_64/libhev-socks5-tunnel.so" to "ea11700dc262b0a81e45f874cb7a2416d41d33bb5fb49c8d636208261d1867a0",
+            "src/main/libs/olcrtc-classes.jar" to "77c5ecf2f1532eb2a52f733bd1d47beb830f596317dde8b6e3f0eefb98a8a23f"
         )
         var allMatch = true
         val baseDir = project.projectDir
