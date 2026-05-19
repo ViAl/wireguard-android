@@ -57,6 +57,9 @@ class OlcRtcTransport(private val appContext: Context) {
         this.config = config
         _state.value = OlcRtcTransportState.STARTING
 
+        // Wire the onVpnStatus callback so VpnService events reach the Manager
+        OlcRtcVpnService.onVpnStatus = onVpnStatus
+
         try {
             // Step 1: Configure Mobile providers and socket protector — must happen BEFORE Go client starts
             configureMobileProviders()
@@ -79,6 +82,13 @@ class OlcRtcTransport(private val appContext: Context) {
                     putExtra(OlcRtcVpnService.EXTRA_CONFIG_TRANSPORT, config.transport)
                     putExtra(OlcRtcVpnService.EXTRA_CONFIG_SOCKS_PORT, config.socksPort)
                     putExtra(OlcRtcVpnService.EXTRA_CONFIG_DNS, config.dnsServer)
+                    putExtra(OlcRtcVpnService.EXTRA_CONFIG_APP_ROUTING_MODE, config.appRoutingMode.name)
+                    putExtra(OlcRtcVpnService.EXTRA_CONFIG_EXCLUDED_APPS, ArrayList(config.excludedApplications))
+                    putExtra(OlcRtcVpnService.EXTRA_CONFIG_INCLUDED_APPS, ArrayList(config.includedApplications))
+                    putExtra(OlcRtcVpnService.EXTRA_CONFIG_ROUTE_ALL_IPV4, config.routeAllIpv4)
+                    putExtra(OlcRtcVpnService.EXTRA_CONFIG_ROUTE_ALL_IPV6, config.routeAllIpv6)
+                    config.socksUser?.let { putExtra(OlcRtcVpnService.EXTRA_CONFIG_SOCKS_USER, it) }
+                    config.socksPass?.let { putExtra(OlcRtcVpnService.EXTRA_CONFIG_SOCKS_PASS, it) }
                 }
                 appContext.startForegroundService(intent)
             }
@@ -94,6 +104,7 @@ class OlcRtcTransport(private val appContext: Context) {
         } catch (e: Exception) {
             android.util.Log.e("OlcRtcTransport", "Failed to start", e)
             _state.value = OlcRtcTransportState.ERROR
+            throw e
         }
     }
 
@@ -189,6 +200,9 @@ class OlcRtcTransport(private val appContext: Context) {
         } catch (e: Exception) {
             android.util.Log.w("OlcRtcTransport", "Error during stop", e)
         }
+
+        // Clear VpnService callback on teardown
+        OlcRtcVpnService.onVpnStatus = null
 
         config = null
         _state.value = OlcRtcTransportState.IDLE

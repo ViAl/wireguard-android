@@ -25,26 +25,15 @@ tasks.register("buildOlcrtcAar") {
             return@doLast
         }
 
-        val gomobileBin = System.getenv("GOANDROID_HOME")?.let { file(it) }
-            ?: file("/usr/local/go/bin/gomobile")
-        if (!gomobileBin.exists()) {
-            // Try resolving via system PATH
-            val pathResult = try {
-                exec {
-                    isIgnoreExitValue = true
-                    commandLine("which", "gomobile")
-                }
-            } catch (e: Exception) {
-                null
-            }
-            if (pathResult == null || pathResult.exitValue != 0) {
-                logger.warn("gomobile not found at $gomobileBin or in PATH")
-                return@doLast
-            }
+        val gomobileFound = findOnPath("gomobile") ||
+            file(System.getenv("GOANDROID_HOME") ?: "/usr/local/go/bin").resolve("gomobile").exists()
+        if (!gomobileFound) {
+            logger.warn("gomobile not found in PATH, GOANDROID_HOME, or /usr/local/go/bin")
+            return@doLast
         }
 
         val outputAar = file("src/main/libs/olcrtc.aar")
-        exec {
+        project.exec {
             workingDir = repoDir
             commandLine("gomobile", "bind", "-target=android", "-androidapi", "21",
                 "-ldflags", "-s -w -checklinkname=0",
@@ -95,6 +84,11 @@ tasks.register("verifyOlcrtcBinaries") {
             throw GradleException("Binary checksum verification FAILED. Update THIRD_PARTY_NOTICES.md or rebuild.")
         }
     }
+}
+
+fun findOnPath(name: String): Boolean {
+    val pathEnv = System.getenv("PATH") ?: return false
+    return pathEnv.split(File.pathSeparator).any { dir -> File(dir, name).exists() }
 }
 
 fun java.io.File.sha256(): String {

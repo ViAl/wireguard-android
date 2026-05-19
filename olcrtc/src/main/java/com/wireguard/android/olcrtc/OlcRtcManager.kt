@@ -104,7 +104,7 @@ object OlcRtcManager {
         }
     }
 
-    private fun disconnectInternal() {
+    private suspend fun disconnectInternal() {
         watchdogJob?.cancel()
         transport?.stop()
         transport = null

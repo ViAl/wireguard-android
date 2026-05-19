@@ -48,6 +48,13 @@ class OlcRtcVpnService : VpnService() {
         const val EXTRA_CONFIG_TRANSPORT = "olcrtc_transport"
         const val EXTRA_CONFIG_SOCKS_PORT = "olcrtc_socks_port"
         const val EXTRA_CONFIG_DNS = "olcrtc_dns"
+        const val EXTRA_CONFIG_APP_ROUTING_MODE = "olcrtc_app_routing_mode"
+        const val EXTRA_CONFIG_EXCLUDED_APPS = "olcrtc_excluded_apps"
+        const val EXTRA_CONFIG_INCLUDED_APPS = "olcrtc_included_apps"
+        const val EXTRA_CONFIG_ROUTE_ALL_IPV4 = "olcrtc_route_all_ipv4"
+        const val EXTRA_CONFIG_ROUTE_ALL_IPV6 = "olcrtc_route_all_ipv6"
+        const val EXTRA_CONFIG_SOCKS_USER = "olcrtc_socks_user"
+        const val EXTRA_CONFIG_SOCKS_PASS = "olcrtc_socks_pass"
         const val NOTIFICATION_CHANNEL_ID = "olcrtc_vpn"
         const val FOREGROUND_SERVICE_ID = 1001
     }
@@ -79,10 +86,29 @@ class OlcRtcVpnService : VpnService() {
         val transport = intent.getStringExtra(EXTRA_CONFIG_TRANSPORT) ?: "datachannel"
         val socksPort = intent.getIntExtra(EXTRA_CONFIG_SOCKS_PORT, 1080)
         val dns = intent.getStringExtra(EXTRA_CONFIG_DNS) ?: "1.1.1.1:53"
+        // Restore missing fields
+        val appRoutingMode = intent.getStringExtra(EXTRA_CONFIG_APP_ROUTING_MODE)
+            ?.let { try { AppRoutingMode.valueOf(it) } catch (_: Exception) { null } }
+            ?: AppRoutingMode.ALL_APPS
+        val excludedApps = intent.getStringArrayListExtra(EXTRA_CONFIG_EXCLUDED_APPS)
+            ?.toSet() ?: emptySet()
+        val includedApps = intent.getStringArrayListExtra(EXTRA_CONFIG_INCLUDED_APPS)
+            ?.toSet() ?: emptySet()
+        val routeAllIpv4 = intent.getBooleanExtra(EXTRA_CONFIG_ROUTE_ALL_IPV4, true)
+        val routeAllIpv6 = intent.getBooleanExtra(EXTRA_CONFIG_ROUTE_ALL_IPV6, false)
+        val socksUser = intent.getStringExtra(EXTRA_CONFIG_SOCKS_USER)
+        val socksPass = intent.getStringExtra(EXTRA_CONFIG_SOCKS_PASS)
         return OlcRtcConfig(
             name = name, carrier = carrier, roomId = room,
             clientId = client, keyHex = key, transport = transport,
-            socksPort = socksPort, dnsServer = dns
+            socksPort = socksPort, dnsServer = dns,
+            appRoutingMode = appRoutingMode,
+            excludedApplications = excludedApps,
+            includedApplications = includedApps,
+            routeAllIpv4 = routeAllIpv4,
+            routeAllIpv6 = routeAllIpv6,
+            socksUser = socksUser,
+            socksPass = socksPass
         )
     }
 
