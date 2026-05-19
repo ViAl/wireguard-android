@@ -5,20 +5,17 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
-import android.content.Context
 import android.content.Intent
 import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
-import mobile.LogWriter
-import mobile.Mobile
-import mobile.SocketProtector
 import java.io.File
 
 class OlcRtcVpnService : VpnService() {
 
     private var vpnInterface: ParcelFileDescriptor? = null
     private var isRunning = false
+    private var tunThread: Thread? = null
 
     // JNI native declarations — instance methods (not in companion object)
     private external fun startTun2socksNative(configPath: String, fd: Int): Int
@@ -35,6 +32,10 @@ class OlcRtcVpnService : VpnService() {
         @Volatile
         var isTunReady: Boolean = false
             internal set
+
+        /** Callback invoked when VPN lifecycle events occur. Set by Transport. */
+        @Volatile
+        var onVpnStatus: ((VpnStatusEvent) -> Unit)? = null
 
         const val ACTION_START = "com.wireguard.android.olcrtc.START"
         const val ACTION_STOP = "com.wireguard.android.olcrtc.STOP"
@@ -75,8 +76,8 @@ class OlcRtcVpnService : VpnService() {
         val room = intent.getStringExtra(EXTRA_CONFIG_ROOM) ?: return null
         val client = intent.getStringExtra(EXTRA_CONFIG_CLIENT) ?: return null
         val key = intent.getStringExtra(EXTRA_CONFIG_KEY) ?: return null
-        val transport = intent.getStringExtra(EXTRA_CONFIG_TRANSPORT) ?: "vp8channel"
-        val socksPort = intent.getIntExtra(EXTRA_CONFIG_SOCKS_PORT, 10808)
+        val transport = intent.getStringExtra(EXTRA_CONFIG_TRANSPORT) ?: "datachannel"
+        val socksPort = intent.getIntExtra(EXTRA_CONFIG_SOCKS_PORT, 1080)
         val dns = intent.getStringExtra(EXTRA_CONFIG_DNS) ?: "1.1.1.1:53"
         return OlcRtcConfig(
             name = name, carrier = carrier, roomId = room,
@@ -111,14 +112,35 @@ class OlcRtcVpnService : VpnService() {
         val builder = Builder()
         builder.setSession(config.name)
         builder.setMtu(1500)
-        builder.addAddress("10.0.2.1", 24)
-        builder.addRoute("0.0.0.0", 0)
 
+        // Apply IPv4 routing (default: full-tunnel)
+        if (config.routeAllIpv4) {
+            builder.addAddress("10.0.2.1", 24)
+            builder.addRoute("0.0.0.0", 0)
+        }
+
+        // Apply IPv6 routing if enabled (MVP: IPv4-only by default)
+        if (config.routeAllIpv6) {
+            builder.addAddress("fd00:1:2:3::1", 64)
+            builder.addRoute("::", 0)
+        }
+
+        // DNS
         val dnsParts = config.dnsServer.split(":")
         builder.addDnsServer(dnsParts[0])
 
-        config.excludedApplications.forEach { builder.addDisallowedApplication(it) }
-        config.includedApplications.forEach { builder.addAllowedApplication(it) }
+        // App routing — use AppRoutingMode to prevent conflicting addAllowed/DisallowedApplication calls
+        when (config.appRoutingMode) {
+            AppRoutingMode.ALL_APPS -> {
+                // No per-app rules — all traffic routes through VPN
+            }
+            AppRoutingMode.ONLY_SELECTED_APPS -> {
+                config.includedApplications.forEach { builder.addAllowedApplication(it) }
+            }
+            AppRoutingMode.EXCLUDE_SELECTED_APPS -> {
+                config.excludedApplications.forEach { builder.addDisallowedApplication(it) }
+            }
+        }
 
         createNotificationChannel()
         val notification = buildNotification(config.name)
@@ -134,6 +156,7 @@ class OlcRtcVpnService : VpnService() {
 
         val fd = vpnInterface!!.fd
         android.util.Log.d("OlcRtcVpnService", "TUN fd=$fd established for ${config.name}")
+        onVpnStatus?.invoke(VpnStatusEvent.TUN_ESTABLISHED)
 
         // Socket-level protection is handled by Transport via Mobile.setProtector
         // No process-wide bindProcessToNetwork — that would conflict with WireGuard
@@ -145,16 +168,23 @@ class OlcRtcVpnService : VpnService() {
             hevConfigFile.writeText(hevConfig)
             android.util.Log.d("OlcRtcVpnService", "Saving Hev config to ${hevConfigFile.absolutePath}")
 
-            Thread {
+            // Track the thread for lifecycle management (#16: FD lifetime)
+            tunThread = Thread {
                 try {
                     val result = startTun2socksNative(hevConfigFile.absolutePath, fd)
-                    android.util.Log.d("OlcRtcVpnService", "tun2socks started: result=$result")
+                    android.util.Log.d("OlcRtcVpnService", "tun2socks exited: result=$result")
+                    // After tun2socks exits, signal the status
+                    onVpnStatus?.invoke(VpnStatusEvent.TUN2SOCKS_EXITED)
                 } catch (e: Exception) {
                     android.util.Log.e("OlcRtcVpnService", "tun2socks failed", e)
+                    onVpnStatus?.invoke(VpnStatusEvent.ERROR)
                 }
-            }.apply { isDaemon = true }.start()
+            }.apply { isDaemon = true }.also { it.start() }
+
+            onVpnStatus?.invoke(VpnStatusEvent.TUN2SOCKS_STARTED)
         } catch (e: Exception) {
             android.util.Log.e("OlcRtcVpnService", "Failed to configure tun2socks", e)
+            onVpnStatus?.invoke(VpnStatusEvent.ERROR)
         }
 
         isRunning = true
@@ -165,17 +195,33 @@ class OlcRtcVpnService : VpnService() {
         if (!isRunning) return
         isTunReady = false
         android.util.Log.d("OlcRtcVpnService", "Stopping VPN")
+        onVpnStatus?.invoke(VpnStatusEvent.VPN_STOPPED)
 
-        // Stop tun2socks
+        // Stop order (#16):
+        // 1. Signal tun2socks to quit
         try {
             stopTun2socksNative()
-            android.util.Log.d("OlcRtcVpnService", "tun2socks stopped")
+            android.util.Log.d("OlcRtcVpnService", "tun2socks stop signal sent")
         } catch (e: Exception) {
-            android.util.Log.w("OlcRtcVpnService", "stopTun2socks failed", e)
+            android.util.Log.w("OlcRtcVpnService", "stopTun2socksNative failed", e)
         }
 
+        // 2. Wait for tun2socks thread to exit
+        val thread = tunThread
+        if (thread != null && thread.isAlive) {
+            try {
+                thread.join(5_000)
+                android.util.Log.d("OlcRtcVpnService", "tun2socks thread joined")
+            } catch (e: InterruptedException) {
+                android.util.Log.w("OlcRtcVpnService", "Interrupted waiting for tun2socks exit", e)
+                Thread.currentThread().interrupt()
+            }
+        }
+
+        // 3. Close TUN fd after tun2socks has stopped
         vpnInterface?.close()
         vpnInterface = null
+        tunThread = null
         isRunning = false
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()

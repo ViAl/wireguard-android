@@ -15,13 +15,29 @@ enum class OlcRtcTransportState {
     IDLE, STARTING, READY, STOPPING, ERROR
 }
 
+/**
+ * Lifecycle events from [OlcRtcVpnService] communicated back to [OlcRtcManager].
+ */
+enum class VpnStatusEvent {
+    /** TUN interface has been established */
+    TUN_ESTABLISHED,
+    /** tun2socks has started successfully */
+    TUN2SOCKS_STARTED,
+    /** tun2socks exited (expected or unexpected) */
+    TUN2SOCKS_EXITED,
+    /** VPN service stopped */
+    VPN_STOPPED,
+    /** An error occurred */
+    ERROR
+}
+
 class OlcRtcTransport(private val appContext: Context) {
 
     private val _state = MutableStateFlow(OlcRtcTransportState.IDLE)
     val state: StateFlow<OlcRtcTransportState> = _state.asStateFlow()
 
     private var config: OlcRtcConfig? = null
-    private var scope: CoroutineScope? = null
+    private var tunThread: Thread? = null
 
     /**
      * Start the OlcRTC transport with the correct startup order:
@@ -36,7 +52,7 @@ class OlcRtcTransport(private val appContext: Context) {
      * This is a suspending function — it returns only when the transport
      * is fully ready or has failed.
      */
-    suspend fun startAndWait(config: OlcRtcConfig) {
+    suspend fun startAndWait(config: OlcRtcConfig, onVpnStatus: ((VpnStatusEvent) -> Unit)? = null) {
         stop()
         this.config = config
         _state.value = OlcRtcTransportState.STARTING
@@ -158,22 +174,22 @@ class OlcRtcTransport(private val appContext: Context) {
         }
     }
 
-    fun stop() {
+    suspend fun stop() {
         if (_state.value == OlcRtcTransportState.IDLE) return
         _state.value = OlcRtcTransportState.STOPPING
 
         try {
-            stopGoClient()
-            val intent = Intent(appContext, OlcRtcVpnService::class.java).apply {
-                action = OlcRtcVpnService.ACTION_STOP
+            withContext(Dispatchers.IO) {
+                stopGoClient()
+                val intent = Intent(appContext, OlcRtcVpnService::class.java).apply {
+                    action = OlcRtcVpnService.ACTION_STOP
+                }
+                appContext.startService(intent)
             }
-            appContext.startService(intent)
         } catch (e: Exception) {
             android.util.Log.w("OlcRtcTransport", "Error during stop", e)
         }
 
-        scope?.cancel()
-        scope = null
         config = null
         _state.value = OlcRtcTransportState.IDLE
     }

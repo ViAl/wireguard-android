@@ -4,6 +4,9 @@ plugins {
     alias(libs.plugins.android.library)
 }
 
+// Apply gomobile build and verify tasks
+apply(from = "gomobile.gradle.kts")
+
 android {
     namespace = "com.wireguard.android.olcrtc"
     compileSdk = 35

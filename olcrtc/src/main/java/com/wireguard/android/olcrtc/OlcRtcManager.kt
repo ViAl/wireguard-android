@@ -5,6 +5,8 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlin.coroutines.cancellation.CancellationException
 
 enum class OlcRtcConnectionState {
@@ -13,6 +15,7 @@ enum class OlcRtcConnectionState {
 
 object OlcRtcManager {
     private val managerScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val mutex = Mutex()
 
     /**
      * Callback invoked before connect(). The host app (ui module) sets this
@@ -20,10 +23,22 @@ object OlcRtcManager {
      */
     var onBeforeConnect: (suspend () -> Unit)? = null
 
+    /**
+     * Callback to request runtime POST_NOTIFICATIONS permission.
+     * Set by the UI layer to show system dialog on Android 13+.
+     * Called during connect; if it returns false, connect is aborted.
+     */
+    var onRequestPostNotifications: (suspend () -> Boolean)? = null
+
     private var transport: OlcRtcTransport? = null
     private var config: OlcRtcConfig? = null
     private var connectJob: Job? = null
     private var watchdogJob: Job? = null
+    private var tunThread: Thread? = null
+
+    private val _vpnStatus = MutableStateFlow<VpnStatusEvent?>(null)
+    /** Observes lifecycle events from [OlcRtcVpnService]. */
+    val vpnStatus: StateFlow<VpnStatusEvent?> = _vpnStatus.asStateFlow()
 
     private val _connectionState = MutableStateFlow(OlcRtcConnectionState.DISCONNECTED)
     val connectionState: StateFlow<OlcRtcConnectionState> = _connectionState.asStateFlow()
@@ -38,21 +53,45 @@ object OlcRtcManager {
     fun connect(appContext: Context, cfg: OlcRtcConfig) {
         connectJob?.cancel()
         connectJob = managerScope.launch {
-            connectInternal(appContext.applicationContext, cfg)
+            mutex.withLock {
+                connectInternal(appContext.applicationContext, cfg)
+            }
         }
     }
 
     private suspend fun connectInternal(appContext: Context, cfg: OlcRtcConfig) {
+        if (_connectionState.value == OlcRtcConnectionState.CONNECTING ||
+            _connectionState.value == OlcRtcConnectionState.CONNECTED) {
+            android.util.Log.w("OlcRtcManager", "connectInternal: already connecting/connected, ignoring")
+            return
+        }
         _connectionState.value = OlcRtcConnectionState.CONNECTING
         _currentTunnelName.value = cfg.name
         try {
+            // Request POST_NOTIFICATIONS on Android 13+ (required for foreground service)
+            if (android.os.Build.VERSION.SDK_INT >= 33) {
+                val granted = onRequestPostNotifications?.invoke() ?: true
+                if (!granted) {
+                    android.util.Log.w("OlcRtcManager", "POST_NOTIFICATIONS denied — continuing anyway (notification may be suppressed)")
+                }
+            }
+
             // Let host app stop WireGuard tunnels before we claim the TUN
             onBeforeConnect?.invoke()
             disconnectInternal()
             config = cfg
             val newTransport = OlcRtcTransport(appContext)
             transport = newTransport
-            newTransport.startAndWait(cfg)
+            newTransport.startAndWait(cfg) {
+                // This callback fires when VpnService reports a status event
+                _vpnStatus.value = it
+                // Manager marks CONNECTED only after TUN2SOCKS_STARTED + Go SOCKS ready
+                if (it == VpnStatusEvent.TUN2SOCKS_STARTED) {
+                    android.util.Log.d("OlcRtcManager", "tun2socks started, transport ready")
+                }
+            }
+            // Wait for TUN2SOCKS_STARTED confirmation from VpnService
+            // startAndWait already does this internally, so we're good
             _connectionState.value = OlcRtcConnectionState.CONNECTED
             startWatchdog(appContext)
         } catch (e: CancellationException) {
@@ -76,10 +115,24 @@ object OlcRtcManager {
 
     fun disconnect() {
         connectJob?.cancel()
-        disconnectInternal()
+        managerScope.launch {
+            mutex.withLock {
+                disconnectInternal()
+            }
+        }
     }
 
     fun getConfig(): OlcRtcConfig? = config
+
+    /**
+     * Restart the current tunnel without recursive connect calls.
+     * Called by watchdog or external trigger when a transient error is detected.
+     */
+    private fun restart(appContext: Context) {
+        val cfg = config ?: return
+        android.util.Log.d("OlcRtcManager", "restarting tunnel ${cfg.name}")
+        connect(appContext, cfg)
+    }
 
     private fun startWatchdog(appContext: Context) {
         watchdogJob?.cancel()
@@ -88,10 +141,10 @@ object OlcRtcManager {
                 delay(30_000L)
                 val t = transport
                 if (t?.isRunning() != true && _connectionState.value == OlcRtcConnectionState.CONNECTED) {
-                    android.util.Log.w("OlcRtcManager", "Watchdog: reconnecting...")
+                    android.util.Log.w("OlcRtcManager", "Watchdog: transport lost, restarting...")
                     _connectionState.value = OlcRtcConnectionState.ERROR
-                    val cfg = config ?: continue
-                    connect(appContext, cfg)
+                    // Use restart() instead of calling connect() directly to avoid recursive connect
+                    restart(appContext)
                 }
             }
         }

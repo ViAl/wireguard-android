@@ -1,3 +1,14 @@
+/**
+ * Gradle task to build olcrtc.aar from the OlcRTC Go source using gomobile.
+ *
+ * Usage:
+ *   ./gradlew :olcrtc:buildOlcrtcAar -Polcrtc.repo.path=/path/to/olcrtc
+ *
+ * Environment:
+ *   OLCRTC_REPO — path to the OlcRTC Go repo (fallback for -Polcrtc.repo.path)
+ *   GOANDROID_HOME — path to gomobile (e.g. $GOPATH/bin)
+ */
+
 tasks.register("buildOlcrtcAar") {
     group = "olcrtc"
     description = "Build olcrtc.aar from olcrtc Go source using gomobile"
@@ -13,10 +24,25 @@ tasks.register("buildOlcrtcAar") {
             logger.warn("olcrtc repo not found at $olcrtcRepo")
             return@doLast
         }
-        try { "gomobile version".execute() } catch (e: Exception) {
-            logger.warn("gomobile not available: ${e.message}")
-            return@doLast
+
+        val gomobileBin = System.getenv("GOANDROID_HOME")?.let { file(it) }
+            ?: file("/usr/local/go/bin/gomobile")
+        if (!gomobileBin.exists()) {
+            // Try resolving via system PATH
+            val pathResult = try {
+                exec {
+                    isIgnoreExitValue = true
+                    commandLine("which", "gomobile")
+                }
+            } catch (e: Exception) {
+                null
+            }
+            if (pathResult == null || pathResult.exitValue != 0) {
+                logger.warn("gomobile not found at $gomobileBin or in PATH")
+                return@doLast
+            }
         }
+
         val outputAar = file("src/main/libs/olcrtc.aar")
         exec {
             workingDir = repoDir
@@ -26,4 +52,59 @@ tasks.register("buildOlcrtcAar") {
         }
         logger.lifecycle("olcrtc.aar built: ${outputAar.absolutePath}")
     }
+}
+
+tasks.register("verifyOlcrtcBinaries") {
+    group = "olcrtc"
+    description = "Verify SHA256 checksums of committed binary blobs"
+    doLast {
+        val expected = mapOf(
+            "../jniLibs/arm64-v8a/libgojni.so" to "561ad9beef951ebeff3373c35c9b5cfaeda8c5ec6f9f354030b1ab1931fe22d9",
+            "../jniLibs/arm64-v8a/libhev-socks5-tunnel.so" to "c2b14023abe53863a04a82cf836d147ff8eeaf2563ca507a025d3f3e1a991772",
+            "../jniLibs/x86_64/libgojni.so" to "561ad9beef951ebeff3373c35c9b5cfaeda8c5ec6f9f354030b1ab1931fe22d9",
+            "../jniLibs/x86_64/libhev-socks5-tunnel.so" to "ea11700dc262b0a81e45f874cb7a2416d41d33bb5fb49c8d636208261d1867a0",
+            "../libs/olcrtc-classes.jar" to "77c5ecf2f1532eb2a52f733bd1d47beb830f596317dde8b6e3f0eefb98a8a23f"
+        )
+
+        var allMatch = true
+        val jniLibsDir = file("src/main/jniLibs")
+        val libsDir = file("src/main/libs")
+        val baseDirs = listOf(jniLibsDir, libsDir)
+
+        expected.forEach { (relativePath, expectedSha) ->
+            val file = file(relativePath)
+            if (!file.exists()) {
+                logger.warn("MISSING: $relativePath")
+                allMatch = false
+                return@forEach
+            }
+            val actual = file.sha256()
+            if (actual == expectedSha) {
+                logger.lifecycle("OK: $relativePath")
+            } else {
+                logger.warn("CHECKSUM MISMATCH: $relativePath")
+                logger.warn("  expected: $expectedSha")
+                logger.warn("  actual:   $actual")
+                allMatch = false
+            }
+        }
+
+        if (allMatch) {
+            logger.lifecycle("All binary checksums match.")
+        } else {
+            throw GradleException("Binary checksum verification FAILED. Update THIRD_PARTY_NOTICES.md or rebuild.")
+        }
+    }
+}
+
+fun java.io.File.sha256(): String {
+    val digest = java.security.MessageDigest.getInstance("SHA-256")
+    inputStream().use { stream ->
+        val buffer = ByteArray(8192)
+        var read: Int
+        while (stream.read(buffer).also { read = it } != -1) {
+            digest.update(buffer, 0, read)
+        }
+    }
+    return digest.digest().joinToString("") { "%02x".format(it) }
 }
