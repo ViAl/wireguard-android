@@ -28,8 +28,10 @@ class OlcRtcConfigStore(private val appContext: Context) {
                     vp8Fps = obj.optInt("vp8Fps", 60),
                     vp8BatchSize = obj.optInt("vp8BatchSize", 8),
                     dnsServer = obj.optString("dnsServer", "1.1.1.1:53"),
-                    socksUser = obj.optString("socksUser", null),
-                    socksPass = obj.optString("socksPass", null)
+                    excludedApplications = parseStringSet(obj, "excludedApplications"),
+                    includedApplications = parseStringSet(obj, "includedApplications"),
+                    socksUser = optStringOrNull(obj, "socksUser"),
+                    socksPass = optStringOrNull(obj, "socksPass")
                 ))
             }
             result
@@ -65,8 +67,10 @@ class OlcRtcConfigStore(private val appContext: Context) {
                     put("vp8Fps", c.vp8Fps)
                     put("vp8BatchSize", c.vp8BatchSize)
                     put("dnsServer", c.dnsServer)
-                    if (c.socksUser != null) put("socksUser", c.socksUser)
-                    if (c.socksPass != null) put("socksPass", c.socksPass)
+                    put("excludedApplications", JSONArray(c.excludedApplications.toList()))
+                    put("includedApplications", JSONArray(c.includedApplications.toList()))
+                    if (c.socksUser != null) put("socksUser", c.socksUser) else put("socksUser", JSONObject.NULL)
+                    if (c.socksPass != null) put("socksPass", c.socksPass) else put("socksPass", JSONObject.NULL)
                 })
             }
             configFile.parentFile?.mkdirs()
@@ -74,5 +78,25 @@ class OlcRtcConfigStore(private val appContext: Context) {
         } catch (e: Exception) {
             android.util.Log.e("OlcRtcConfigStore", "Failed to save configs", e)
         }
+    }
+
+    /**
+     * Safely parses a JSON string set, handling missing keys and nulls.
+     */
+    private fun parseStringSet(json: JSONObject, key: String): Set<String> {
+        return if (json.has(key) && !json.isNull(key)) {
+            val arr = json.getJSONArray(key)
+            (0 until arr.length()).map { arr.getString(it) }.toSet()
+        } else {
+            emptySet()
+        }
+    }
+
+    /**
+     * Returns the string value for [key] or null if the key is missing or explicitly null.
+     * Unlike optString(), this never returns an empty string when null was intended.
+     */
+    private fun optStringOrNull(json: JSONObject, key: String): String? {
+        return if (json.has(key) && !json.isNull(key)) json.getString(key) else null
     }
 }
