@@ -23,13 +23,6 @@ object OlcRtcManager {
      */
     var onBeforeConnect: (suspend () -> Unit)? = null
 
-    /**
-     * Callback to request runtime POST_NOTIFICATIONS permission.
-     * Set by the UI layer to show system dialog on Android 13+.
-     * Called during connect; if it returns false, connect is aborted.
-     */
-    var onRequestPostNotifications: (suspend () -> Boolean)? = null
-
     private var transport: OlcRtcTransport? = null
     private var config: OlcRtcConfig? = null
     private var connectJob: Job? = null
@@ -68,14 +61,6 @@ object OlcRtcManager {
         _connectionState.value = OlcRtcConnectionState.CONNECTING
         _currentTunnelName.value = cfg.name
         try {
-            // Request POST_NOTIFICATIONS on Android 13+ (required for foreground service)
-            if (android.os.Build.VERSION.SDK_INT >= 33) {
-                val granted = onRequestPostNotifications?.invoke() ?: true
-                if (!granted) {
-                    android.util.Log.w("OlcRtcManager", "POST_NOTIFICATIONS denied — continuing anyway (notification may be suppressed)")
-                }
-            }
-
             // Let host app stop WireGuard tunnels before we claim the TUN
             onBeforeConnect?.invoke()
             disconnectInternal()
