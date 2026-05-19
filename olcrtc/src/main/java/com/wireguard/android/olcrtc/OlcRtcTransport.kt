@@ -45,12 +45,13 @@ class OlcRtcTransport(private val appContext: Context) {
 
     /**
      * Start the OlcRTC transport with the correct startup order:
-     * 1. Configure Mobile providers and socket protector
-     * 2. Start Go OlcRTC client
-     * 3. Wait until local SOCKS5 is listening (port probe)
-     * 4. Start VpnService (establish TUN)
-     * 5. Start tun2socks
-     * 6. Verify tun2socks didn't exit immediately
+     * 1. Start VpnService instance (ACTION_PREPARE) so currentInstance is set
+     *    before Go client opens WebRTC sockets that need protection
+     * 2. Configure Mobile providers and socket protector
+     * 3. Start Go OlcRTC client (sockets are protected via VpnService.protect())
+     * 4. Wait until local SOCKS5 is listening (port probe)
+     * 5. Start VpnService (establish TUN + start tun2socks)
+     * 6. Wait for TUN2SOCKS_STARTED via deferred signal
      * 7. Mark READY
      *
      * This is a suspending function — it returns only when the transport
@@ -84,16 +85,30 @@ class OlcRtcTransport(private val appContext: Context) {
                 }
             }
 
-            // Step 1: Configure Mobile providers and socket protector — must happen BEFORE Go client starts
+            // Step 1: Start VpnService instance (ACTION_PREPARE) so currentInstance is set
+            // This must happen BEFORE configureMobileProviders because Go client opens
+            // WebRTC sockets during startWithTransport that need VpnService.protect().
+            withContext(Dispatchers.Main) {
+                val prepareIntent = Intent(appContext, OlcRtcVpnService::class.java).apply {
+                    action = OlcRtcVpnService.ACTION_PREPARE
+                }
+                appContext.startForegroundService(prepareIntent)
+            }
+            // Give the system time to create the service and set currentInstance
+            delay(200)
+            android.util.Log.d("OlcRtcTransport", "VpnService prepared, currentInstance=${OlcRtcVpnService.currentInstance != null}")
+
+            // Step 2: Configure Mobile providers and socket protector
+            // currentInstance is now set → protect() returns true for Go sockets
             configureMobileProviders()
 
-            // Step 2: Start Go OlcRTC client
+            // Step 3: Start Go OlcRTC client (sockets now protected)
             startGoClient(config)
 
-            // Step 3: Wait until local SOCKS5 is listening (port probe with timeout)
+            // Step 4: Wait until local SOCKS5 is listening (port probe with timeout)
             waitForLocalSocks(config.socksPort)
 
-            // Step 4: Start VpnService (establishes TUN and starts tun2socks)
+            // Step 5: Start VpnService TUN + tun2socks
             withContext(Dispatchers.Main) {
                 val intent = Intent(appContext, OlcRtcVpnService::class.java).apply {
                     action = OlcRtcVpnService.ACTION_START
@@ -141,7 +156,9 @@ class OlcRtcTransport(private val appContext: Context) {
             Mobile.setProtector(object : SocketProtector {
                 override fun protect(fd: Long): Boolean {
                     val instance = OlcRtcVpnService.currentInstance
-                    return instance?.protect(fd.toInt()) ?: false
+                    val result = instance?.protect(fd.toInt()) ?: false
+                    android.util.Log.d("OlcRtcTransport", "protect(fd=$fd) returned $result (instance=${instance != null})")
+                    return result
                 }
             })
 

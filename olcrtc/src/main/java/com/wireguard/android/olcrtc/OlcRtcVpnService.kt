@@ -15,6 +15,7 @@ class OlcRtcVpnService : VpnService() {
 
     private var vpnInterface: ParcelFileDescriptor? = null
     private var isRunning = false
+    private var initPhase = false  // true during ACTION_PREPARE phase (before TUN established)
     private var tunThread: Thread? = null
 
     /**
@@ -42,6 +43,7 @@ class OlcRtcVpnService : VpnService() {
         @Volatile
         var onVpnStatus: ((VpnStatusEvent) -> Unit)? = null
 
+        const val ACTION_PREPARE = "com.wireguard.android.olcrtc.PREPARE"
         const val ACTION_START = "com.wireguard.android.olcrtc.START"
         const val ACTION_STOP = "com.wireguard.android.olcrtc.STOP"
 
@@ -67,10 +69,29 @@ class OlcRtcVpnService : VpnService() {
     override fun onCreate() {
         super.onCreate()
         currentInstance = this
+        android.util.Log.d("OlcRtcVpnService", "VpnService created, currentInstance set")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
+            ACTION_PREPARE -> {
+                // Phase 1: Create VpnService instance with notification so
+                // startForegroundService lifecycle is satisfied.
+                // Does NOT establish TUN or start tun2socks — just sets up
+                // currentInstance for socket protection.
+                if (!isRunning && !initPhase) {
+                    initPhase = true
+                    createNotificationChannel()
+                    val notification = buildNotification("OlcRTC")
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                        startForeground(FOREGROUND_SERVICE_ID, notification,
+                            android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+                    } else {
+                        startForeground(FOREGROUND_SERVICE_ID, notification)
+                    }
+                    android.util.Log.d("OlcRtcVpnService", "VpnService initialized for socket protection")
+                }
+            }
             ACTION_START -> {
                 val config = extractConfig(intent)
                 if (config != null) {
