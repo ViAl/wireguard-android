@@ -67,7 +67,6 @@ object OlcRtcManager {
         if (_connectionState.value == OlcRtcConnectionState.CONNECTING ||
             _connectionState.value == OlcRtcConnectionState.CONNECTED) {
             android.util.Log.w("OlcRtcManager", "connectInternal: already connecting/connected, restarting")
-            cleanupOldTransport()
         }
         _connectionState.value = OlcRtcConnectionState.CONNECTING
         _currentTunnelName.value = cfg.name

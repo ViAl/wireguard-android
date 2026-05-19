@@ -10,12 +10,22 @@ import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
 import java.io.File
+import kotlinx.coroutines.CompletableDeferred
 
 class OlcRtcVpnService : VpnService() {
 
     private var vpnInterface: ParcelFileDescriptor? = null
     private var isRunning = false
     private var initPhase = false  // true during ACTION_PREPARE phase (before TUN established)
+
+    /**
+     * Flag to prevent concurrent calls to [stopVpn] from ACTION_STOP (async, stopExecutor)
+     * and onDestroy (sync, main thread).
+     */
+    @Volatile
+    private var stopInProgress = false
+
+    @Volatile
     private var tunThread: Thread? = null
 
     /** Single-thread executor for non-blocking stopVpn shutdown. */
@@ -35,6 +45,19 @@ class OlcRtcVpnService : VpnService() {
 
     companion object {
         var currentInstance: OlcRtcVpnService? = null
+
+        /**
+         * Monotonically increasing counter to detect stale [Handler.postDelayed]
+         * callbacks from previous VpnService sessions.
+         */
+        private var sessionCounter = 0L
+
+        /**
+         * Signaled by [onCreate] for deterministic VpnService creation wait.
+         * Replaced with a fresh deferred each session by [OlcRtcTransport].
+         */
+        @Volatile
+        var serviceReady: CompletableDeferred<Unit> = CompletableDeferred()
 
         /**
          * Wait duration before confirming TUN2SOCKS_STARTED.
@@ -72,7 +95,8 @@ class OlcRtcVpnService : VpnService() {
     override fun onCreate() {
         super.onCreate()
         currentInstance = this
-        android.util.Log.d("OlcRtcVpnService", "VpnService created, currentInstance set")
+        serviceReady.complete(Unit)
+        android.util.Log.d("OlcRtcVpnService", "VpnService created, currentInstance set, serviceReady signaled")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -143,6 +167,9 @@ class OlcRtcVpnService : VpnService() {
 
     private fun startVpn(config: OlcRtcConfig) {
         if (isRunning) return
+
+        // Capture session counter to ignore stale postDelayed from previous sessions
+        val currentSession = ++sessionCounter
 
         // Force-load native libraries so R8 doesn't strip unused .so files
         try {
@@ -244,6 +271,9 @@ class OlcRtcVpnService : VpnService() {
             // Without this delay, the signal fires immediately after thread.start()
             // even if tun2socks fails to initialize (e.g. bad config or socket conflict).
             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                // Ignore stale callbacks from previous sessions
+                if (currentSession != sessionCounter) return@postDelayed
+
                 if (!tunThreadErrored && tunThread?.isAlive == true) {
                     onVpnStatus?.invoke(VpnStatusEvent.TUN2SOCKS_STARTED)
                 } else if (!tunThreadErrored) {
@@ -269,41 +299,48 @@ class OlcRtcVpnService : VpnService() {
      */
     private fun stopVpn(async: Boolean = false) {
         if (!isRunning && !initPhase) return
+        // Prevent concurrent stop from ACTION_STOP (async, stopExecutor) and onDestroy (sync, main thread)
+        if (stopInProgress) return
+        stopInProgress = true
         android.util.Log.d("OlcRtcVpnService", "Stopping VPN (async=$async)")
         onVpnStatus?.invoke(VpnStatusEvent.VPN_STOPPED)
 
         val runnable = Runnable {
-            // 1. Signal tun2socks to quit
             try {
-                stopTun2socksNative()
-                android.util.Log.d("OlcRtcVpnService", "tun2socks stop signal sent")
-            } catch (e: Exception) {
-                android.util.Log.w("OlcRtcVpnService", "stopTun2socksNative failed", e)
-            }
-
-            // 2. Wait for tun2socks thread to exit
-            val thread = tunThread
-            if (thread != null && thread.isAlive) {
+                // 1. Signal tun2socks to quit
                 try {
-                    thread.join(5_000)
-                    android.util.Log.d("OlcRtcVpnService", "tun2socks thread joined")
-                } catch (e: InterruptedException) {
-                    android.util.Log.w("OlcRtcVpnService", "Interrupted waiting for tun2socks exit", e)
-                    Thread.currentThread().interrupt()
+                    stopTun2socksNative()
+                    android.util.Log.d("OlcRtcVpnService", "tun2socks stop signal sent")
+                } catch (e: Exception) {
+                    android.util.Log.w("OlcRtcVpnService", "stopTun2socksNative failed", e)
                 }
-            }
 
-            // 3. Close TUN fd after tun2socks has stopped
-            vpnInterface?.close()
-            vpnInterface = null
-            tunThread = null
+                // 2. Wait for tun2socks thread to exit
+                val thread = tunThread
+                if (thread != null && thread.isAlive) {
+                    try {
+                        thread.join(5_000)
+                        android.util.Log.d("OlcRtcVpnService", "tun2socks thread joined")
+                    } catch (e: InterruptedException) {
+                        android.util.Log.w("OlcRtcVpnService", "Interrupted waiting for tun2socks exit", e)
+                        Thread.currentThread().interrupt()
+                    }
+                }
 
-            // 4. stopForeground + stopSelf must be on the main thread
-            android.os.Handler(android.os.Looper.getMainLooper()).post {
-                isRunning = false
-                initPhase = false
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
+                // 3. Close TUN fd after tun2socks has stopped
+                vpnInterface?.close()
+                vpnInterface = null
+                tunThread = null
+
+                // 4. stopForeground + stopSelf must be on the main thread
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    isRunning = false
+                    initPhase = false
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
+                }
+            } finally {
+                stopInProgress = false
             }
         }
 

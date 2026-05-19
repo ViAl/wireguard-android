@@ -92,10 +92,16 @@ class OlcRtcTransport(private val appContext: Context) {
                 val prepareIntent = Intent(appContext, OlcRtcVpnService::class.java).apply {
                     action = OlcRtcVpnService.ACTION_PREPARE
                 }
+                // If service doesn't exist yet, prepare a fresh deferred for onCreate to complete
+                if (OlcRtcVpnService.currentInstance == null) {
+                    OlcRtcVpnService.serviceReady = CompletableDeferred()
+                }
                 appContext.startForegroundService(prepareIntent)
             }
-            // Give the system time to create the service and set currentInstance
-            delay(200)
+            // Wait deterministically for VpnService to be created (onCreate sets currentInstance)
+            if (OlcRtcVpnService.currentInstance == null) {
+                OlcRtcVpnService.serviceReady.await()
+            }
             android.util.Log.d("OlcRtcTransport", "VpnService prepared, currentInstance=${OlcRtcVpnService.currentInstance != null}")
 
             // Step 2: Configure Mobile providers and socket protector
