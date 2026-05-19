@@ -27,7 +27,6 @@ object OlcRtcManager {
     private var config: OlcRtcConfig? = null
     private var connectJob: Job? = null
     private var watchdogJob: Job? = null
-    private var tunThread: Thread? = null
 
     private val _vpnStatus = MutableStateFlow<VpnStatusEvent?>(null)
     /** Observes lifecycle events from [OlcRtcVpnService]. */
@@ -52,18 +51,33 @@ object OlcRtcManager {
         }
     }
 
+    /**
+     * Stop only the old transport without touching public state (connectionState, tunnelName).
+     * Prevents state reset in the middle of a connect sequence.
+     */
+    private suspend fun cleanupOldTransport() {
+        watchdogJob?.cancel()
+        transport?.stop()
+        transport = null
+        config = null
+    }
+
     private suspend fun connectInternal(appContext: Context, cfg: OlcRtcConfig) {
+        // If already connecting/connected, restart by cleaning up old transport first
         if (_connectionState.value == OlcRtcConnectionState.CONNECTING ||
             _connectionState.value == OlcRtcConnectionState.CONNECTED) {
-            android.util.Log.w("OlcRtcManager", "connectInternal: already connecting/connected, ignoring")
-            return
+            android.util.Log.w("OlcRtcManager", "connectInternal: already connecting/connected, restarting")
+            cleanupOldTransport()
         }
         _connectionState.value = OlcRtcConnectionState.CONNECTING
         _currentTunnelName.value = cfg.name
         try {
             // Let host app stop WireGuard tunnels before we claim the TUN
             onBeforeConnect?.invoke()
-            disconnectInternal()
+
+            // Stop any previous OlcRTC transport cleanly — doesn't reset public state
+            cleanupOldTransport()
+
             config = cfg
             val newTransport = OlcRtcTransport(appContext)
             transport = newTransport
@@ -75,25 +89,26 @@ object OlcRtcManager {
                     android.util.Log.d("OlcRtcManager", "tun2socks started, transport ready")
                 }
             }
-            // Wait for TUN2SOCKS_STARTED confirmation from VpnService
-            // startAndWait already does this internally, so we're good
+            // startAndWait succeeded -> only now mark CONNECTED
+            // startAndWait already ensures TUN2SOCKS_STARTED + Go SOCKS ready internally
             _connectionState.value = OlcRtcConnectionState.CONNECTED
             startWatchdog(appContext)
         } catch (e: CancellationException) {
-            disconnectInternal()
+            cleanupOldTransport()
+            _connectionState.value = OlcRtcConnectionState.DISCONNECTED
+            _currentTunnelName.value = null
             throw e
         } catch (e: Throwable) {
             android.util.Log.e("OlcRtcManager", "connectInternal failed", e)
+            cleanupOldTransport()
+            // Set ERROR, not DISCONNECTED — so UI shows the failure
             _connectionState.value = OlcRtcConnectionState.ERROR
-            disconnectInternal()
+            _currentTunnelName.value = cfg.name  // keep the tunnel name so user knows which one failed
         }
     }
 
     private suspend fun disconnectInternal() {
-        watchdogJob?.cancel()
-        transport?.stop()
-        transport = null
-        config = null
+        cleanupOldTransport()
         _connectionState.value = OlcRtcConnectionState.DISCONNECTED
         _currentTunnelName.value = null
     }
