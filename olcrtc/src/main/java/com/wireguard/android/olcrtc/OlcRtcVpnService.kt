@@ -17,6 +17,13 @@ class OlcRtcVpnService : VpnService() {
     private var isRunning = false
     private var tunThread: Thread? = null
 
+    /**
+     * Set to true if the tun2socks thread exits with an error before the
+     * 500ms startup delay fires. Used to suppress a false TUN2SOCKS_STARTED.
+     */
+    @Volatile
+    private var tunThreadErrored: Boolean = false
+
     // JNI native declarations — instance methods (not in companion object)
     private external fun startTun2socksNative(configPath: String, fd: Int): Int
     private external fun stopTun2socksNative()
@@ -24,6 +31,12 @@ class OlcRtcVpnService : VpnService() {
 
     companion object {
         var currentInstance: OlcRtcVpnService? = null
+
+        /**
+         * Wait duration before confirming TUN2SOCKS_STARTED.
+         * Prevents premature connected state if tun2socks fails immediately.
+         */
+        private const val TUN2SOCKS_STARTUP_DELAY_MS = 500L
 
         /** Callback invoked when VPN lifecycle events occur. Set by Transport. */
         @Volatile
@@ -187,19 +200,35 @@ class OlcRtcVpnService : VpnService() {
             android.util.Log.d("OlcRtcVpnService", "Saving Hev config to ${hevConfigFile.absolutePath}")
 
             // Track the thread for lifecycle management (#16: FD lifetime)
+            tunThreadErrored = false
             tunThread = Thread {
                 try {
                     val result = startTun2socksNative(hevConfigFile.absolutePath, fd)
                     android.util.Log.d("OlcRtcVpnService", "tun2socks exited: result=$result")
-                    // After tun2socks exits, signal the status
-                    onVpnStatus?.invoke(VpnStatusEvent.TUN2SOCKS_EXITED)
+                    // tun2socks exited cleanly — signal exit
+                    if (!tunThreadErrored) {
+                        onVpnStatus?.invoke(VpnStatusEvent.TUN2SOCKS_EXITED)
+                    }
                 } catch (e: Exception) {
                     android.util.Log.e("OlcRtcVpnService", "tun2socks failed", e)
+                    tunThreadErrored = true
                     onVpnStatus?.invoke(VpnStatusEvent.ERROR)
                 }
             }.apply { isDaemon = true }.also { it.start() }
 
-            onVpnStatus?.invoke(VpnStatusEvent.TUN2SOCKS_STARTED)
+            // Delay TUN2SOCKS_STARTED by 500ms to verify the thread actually starts running.
+            // Without this delay, the signal fires immediately after thread.start()
+            // even if tun2socks fails to initialize (e.g. bad config or socket conflict).
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                if (!tunThreadErrored && tunThread?.isAlive == true) {
+                    onVpnStatus?.invoke(VpnStatusEvent.TUN2SOCKS_STARTED)
+                } else if (!tunThreadErrored) {
+                    // Thread died within the delay window without signaling ERROR
+                    android.util.Log.e("OlcRtcVpnService", "tun2socks died before startup delay elapsed")
+                    onVpnStatus?.invoke(VpnStatusEvent.ERROR)
+                }
+                // If tunThreadErrored is already true, ERROR was already signaled
+            }, TUN2SOCKS_STARTUP_DELAY_MS)
         } catch (e: Exception) {
             android.util.Log.e("OlcRtcVpnService", "Failed to configure tun2socks", e)
             onVpnStatus?.invoke(VpnStatusEvent.ERROR)
