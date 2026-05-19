@@ -109,7 +109,8 @@ class OlcRtcUriParserTest {
             clientId = "c", keyHex = validHexKey, transport = "datachannel"
         )
         val uri = OlcRtcUriParser.toUri(config, payload = mapOf("vp8-fps" to "60"))
-        assertTrue(uri.endsWith("<vp8-fps=60>"))
+        // Upstream format: payload before @room
+        assertTrue(uri.contains("?datachannel<vp8-fps=60>@room1"), "Expected upstream payload format, got: $uri")
     }
 
     @Test
@@ -163,17 +164,74 @@ class OlcRtcUriParserTest {
     }
 
     @Test
-    fun `round trip with payload`() {
+    fun `round trip with upstream payload`() {
         val config = OlcRtcConfig(
             name = "t", carrier = "wbstream", roomId = "r",
             clientId = "c", keyHex = validHexKey, transport = "vp8channel"
         )
+        // Upstream format: payload before @room
         val uri = OlcRtcUriParser.toUri(config, payload = mapOf("vp8-fps" to "60", "vp8-batch" to "64"))
+        assertTrue(uri.contains("<vp8-fps=60&vp8-batch=64>@r"), "Expected upstream format")
         val parsed = OlcRtcUriParser.parse(uri)
         assertNotNull(parsed)
         assertEquals("60", parsed!!.payload["vp8-fps"])
         assertEquals("64", parsed.payload["vp8-batch"])
         assertEquals(60, parsed.vp8Fps)
         assertEquals(64, parsed.vp8BatchSize)
+    }
+
+    @Test
+    fun `parse upstream payload before at`() {
+        val uri = "olcrtc://wbstream?datachannel<vp8-fps=60&vp8-batch=64>@room1#${validHexKey}%client"
+        val result = OlcRtcUriParser.parse(uri)
+        assertNotNull(result)
+        assertEquals("wbstream", result!!.carrier)
+        assertEquals("datachannel", result.transport)
+        assertEquals(2, result.payload.size)
+        assertEquals("60", result.payload["vp8-fps"])
+        assertEquals("64", result.payload["vp8-batch"])
+    }
+
+    @Test
+    fun `parse legacy trailing payload backward compat`() {
+        val uri = "olcrtc://wbstream?datachannel@room1#${validHexKey}%client<vp8-fps=60>"
+        val result = OlcRtcUriParser.parse(uri)
+        assertNotNull(result)
+        assertEquals("wbstream", result!!.carrier)
+        assertEquals(1, result.payload.size)
+        assertEquals("60", result.payload["vp8-fps"])
+        assertEquals("client", result.clientId)
+    }
+
+    @Test
+    fun `parse legacy trailing payload with mimo`() {
+        val uri = "olcrtc://jazz?datachannel@room1#${validHexKey}%client\$RU/test<vp8-fps=30>"
+        val result = OlcRtcUriParser.parse(uri)
+        assertNotNull(result)
+        assertEquals("RU/test", result!!.mimo)
+        assertEquals(1, result.payload.size)
+        assertEquals("30", result.payload["vp8-fps"])
+    }
+
+    @Test
+    fun `parse upstream payload with mimo`() {
+        val uri = "olcrtc://wbstream?vp8channel<vp8-fps=60>@room1#${validHexKey}%client\$RU/test"
+        val result = OlcRtcUriParser.parse(uri)
+        assertNotNull(result)
+        assertEquals("RU/test", result!!.mimo)
+        assertEquals("60", result.payload["vp8-fps"])
+    }
+
+    @Test
+    fun `parse empty payload brackets`() {
+        var uri = "olcrtc://wbstream?datachannel<>@room1#${validHexKey}%client"
+        var result = OlcRtcUriParser.parse(uri)
+        assertNotNull(result)
+        assertTrue(result!!.payload.isEmpty())
+        // Also test with trailing empty brackets
+        uri = "olcrtc://wbstream?datachannel@room1#${validHexKey}%client<>"
+        result = OlcRtcUriParser.parse(uri)
+        assertNotNull(result)
+        assertTrue(result!!.payload.isEmpty())
     }
 }
