@@ -100,6 +100,18 @@ class OlcRtcVpnService : VpnService() {
         const val FOREGROUND_SERVICE_ID = 1001
     }
 
+    /**
+     * Check whether this service instance is usable for socket protection.
+     * Returns false if the service is stopping, stopping, or was never properly
+     * initialized (neither initPhase nor isRunning is set).
+     *
+     * Used by [OlcRtcTransport] to decide whether to reuse the existing
+     * [currentInstance] or send a fresh [ACTION_PREPARE].
+     */
+    fun isUsableForProtect(): Boolean {
+        return !stopInProgress && (initPhase || isRunning)
+    }
+
     override fun onCreate() {
         super.onCreate()
         currentInstance = this
@@ -396,7 +408,10 @@ class OlcRtcVpnService : VpnService() {
         // to the main thread. We schedule executor shutdown after the
         // runnable is posted so pending work completes.
         stopVpn(async = true)
-        stopExecutor.execute { stopExecutor.shutdownNow() }
+        // Graceful shutdown — don't interrupt the cleanup runnable mid-flight.
+        // shutdown() waits for the current task to complete; shutdownNow() would
+        // interrupt fd.close() or tunThread.join(), risking leaked resources.
+        stopExecutor.execute { stopExecutor.shutdown() }
         super.onDestroy()
     }
 

@@ -306,6 +306,125 @@ class OlcRtcManagerConnectTest {
     // Multiple configs do not interfere
     // ──────────────────────────────────────────────
 
+    // ──────────────────────────────────────────────
+    // DISCONNECTING state during disconnect
+    // ──────────────────────────────────────────────
+
+    @Test
+    fun `disconnect sets DISCONNECTING state before cleanup`() {
+        // Set state to CONNECTING (real connect would need VpnService)
+        OlcRtcManager.connect(mockContext, sampleConfig)
+        assertEquals(
+            OlcRtcConnectionState.CONNECTING,
+            OlcRtcManager.connectionState.value
+        )
+
+        // Call disconnect — should set DISCONNECTING synchronously
+        OlcRtcManager.disconnect()
+
+        // State is now DISCONNECTING (set before coroutine in disconnect())
+        assertEquals(
+            OlcRtcConnectionState.DISCONNECTING,
+            OlcRtcManager.connectionState.value
+        )
+
+        // Tunnel name should still be visible during DISCONNECTING
+        assertEquals(
+            sampleConfig.name,
+            OlcRtcManager.currentTunnelName.value
+        )
+    }
+
+    @Test
+    fun `disconnect transitions DISCONNECTING then DISCONNECTED`() = testScope.runTest {
+        OlcRtcManager.connect(mockContext, sampleConfig)
+        assertEquals(
+            OlcRtcConnectionState.CONNECTING,
+            OlcRtcManager.connectionState.value
+        )
+
+        OlcRtcManager.disconnect()
+        // Immediately after disconnect(), before coroutine runs
+        assertEquals(
+            OlcRtcConnectionState.DISCONNECTING,
+            OlcRtcManager.connectionState.value
+        )
+        // Tunnel name still visible
+        assertEquals(
+            sampleConfig.name,
+            OlcRtcManager.currentTunnelName.value
+        )
+
+        // After coroutine completes, state is DISCONNECTED
+        testDispatcher.advanceUntilIdle()
+        assertEquals(
+            OlcRtcConnectionState.DISCONNECTED,
+            OlcRtcManager.connectionState.value
+        )
+        assertNull(OlcRtcManager.currentTunnelName.value)
+    }
+
+    @Test
+    fun `multiple disconnects do not cause errors from DISCONNECTING`() = testScope.runTest {
+        OlcRtcManager.connect(mockContext, sampleConfig)
+
+        // Disconnect twice
+        OlcRtcManager.disconnect()
+        assertEquals(
+            OlcRtcConnectionState.DISCONNECTING,
+            OlcRtcManager.connectionState.value
+        )
+        // Second disconnect: disconnect() calls connectJob?.cancel() then
+        // sets DISCONNECTING and launches a new coroutine.
+        // The cancel will cancel the previous coroutine, then the new one
+        // runs cleanup again. This should be safe.
+        OlcRtcManager.disconnect()
+
+        testDispatcher.advanceUntilIdle()
+        assertEquals(
+            OlcRtcConnectionState.DISCONNECTED,
+            OlcRtcManager.connectionState.value
+        )
+    }
+
+    // ──────────────────────────────────────────────
+    // DISCONNECTING state is NOT set during normal connect
+    // ──────────────────────────────────────────────
+
+    @Test
+    fun `connect does not set DISCONNECTING`() {
+        OlcRtcManager.connect(mockContext, sampleConfig)
+        // State should be CONNECTING, not DISCONNECTING
+        assertEquals(
+            OlcRtcConnectionState.CONNECTING,
+            OlcRtcManager.connectionState.value
+        )
+    }
+
+    @Test
+    fun `connect from DISCONNECTING resets state`() = testScope.runTest {
+        // Set DISCONNECTING first
+        OlcRtcManager.connect(mockContext, sampleConfig)
+        OlcRtcManager.disconnect()
+        assertEquals(
+            OlcRtcConnectionState.DISCONNECTING,
+            OlcRtcManager.connectionState.value
+        )
+
+        // Now try to connect (state is DISCONNECTING, not DISCONNECTED or ERROR)
+        // The guard in connect() doesn't check DISCONNECTING, so it will proceed
+        OlcRtcManager.connect(mockContext, sampleConfig)
+
+        // connect() calls connectJob?.cancel() and launches new job
+        // The coroutine will wait for mutex before running connectInternal
+        // which checks CONNECTING guard again inside mutex
+        testDispatcher.advanceUntilIdle()
+        assertEquals(
+            OlcRtcConnectionState.CONNECTING,
+            OlcRtcManager.connectionState.value
+        )
+    }
+
     @Test
     fun `connect with configA then configB sets name to configB`() {
         OlcRtcManager.connect(mockContext, sampleConfig)

@@ -55,6 +55,13 @@ class OlcRtcTransport(private val appContext: Context) {
     private var goClientStarted = false
 
     /**
+     * Set before [Mobile.startWithTransport] to indicate the native Go runtime
+     * may have begun even if [goClientStarted] is not yet true (waitReady phase).
+     * Used by [stopGoClient] to decide whether [Mobile.stop] is needed.
+     */
+    private var goClientStarting = false
+
+    /**
      * Start the OlcRTC transport with the correct startup order:
      * 1. Start VpnService instance (ACTION_PREPARE) so currentInstance is set
      *    before Go client opens WebRTC sockets that need protection
@@ -126,6 +133,44 @@ class OlcRtcTransport(private val appContext: Context) {
                 "VpnService prepared, currentInstance=${OlcRtcVpnService.currentInstance != null}, " +
                 "session=$prepareSessionId, actual=$actualSession")
 
+            // --- VpnService validation (Task 6) ---
+            // Before configureMobileProviders, confirm the VpnService instance is usable
+            // for socket protection. If stale/destroyed, send fresh ACTION_PREPARE.
+            val vpnInstance = OlcRtcVpnService.currentInstance
+            if (vpnInstance == null || !vpnInstance.isUsableForProtect()) {
+                android.util.Log.w("OlcRtcTransport",
+                    "VpnService instance not usable (instance=${vpnInstance != null}, " +
+                    "isUsable=${vpnInstance?.isUsableForProtect()}), sending fresh ACTION_PREPARE")
+
+                val freshSessionId = OlcRtcVpnService.sessionCounter.incrementAndGet()
+                OlcRtcVpnService.expectedServiceReadySession = freshSessionId
+                OlcRtcVpnService.serviceReady = CompletableDeferred()
+
+                withContext(Dispatchers.Main) {
+                    val prepareIntent = Intent(appContext, OlcRtcVpnService::class.java).apply {
+                        action = OlcRtcVpnService.ACTION_PREPARE
+                    }
+                    appContext.startForegroundService(prepareIntent)
+                }
+
+                // Wait for fresh service instance with timeout
+                withTimeout(5_000L) {
+                    OlcRtcVpnService.serviceReady.await()
+                }
+
+                val freshInstance = OlcRtcVpnService.currentInstance
+                if (freshInstance == null || !freshInstance.isUsableForProtect()) {
+                    throw StartupException(
+                        "VpnService instance not usable after fresh ACTION_PREPARE: " +
+                        "instance=${freshInstance != null}, isUsable=${freshInstance?.isUsableForProtect()}"
+                    )
+                }
+                android.util.Log.d("OlcRtcTransport",
+                    "Fresh ACTION_PREPARE succeeded, instance=${freshInstance != null}")
+            } else {
+                android.util.Log.d("OlcRtcTransport", "VpnService instance is usable, reusing")
+            }
+
             // Step 2: Configure Mobile providers and socket protector
             // currentInstance is now set → protect() returns true for Go sockets
             configureMobileProviders()
@@ -173,23 +218,14 @@ class OlcRtcTransport(private val appContext: Context) {
             _state.value = OlcRtcTransportState.READY
         } catch (e: CancellationException) {
             android.util.Log.d("OlcRtcTransport", "startAndWait cancelled during startup")
-            // Force cleanup: stop Go client + VpnService
-            try {
-                stopGoClient()
-            } catch (_: Exception) { }
-            try {
-                withContext(Dispatchers.Main) {
-                    val stopIntent = Intent(appContext, OlcRtcVpnService::class.java).apply {
-                        action = OlcRtcVpnService.ACTION_STOP
-                    }
-                    appContext.startService(stopIntent)
-                }
-            } catch (_: Exception) { }
-            startupSignalDeferred = null
+            cleanupStartupFailure()
             _state.value = OlcRtcTransportState.IDLE
             throw e
         } catch (e: Exception) {
             android.util.Log.e("OlcRtcTransport", "Failed to start", e)
+            // Cleanup VpnService + Go client on any startup failure, not just cancellation.
+            // Prevents stale notification, foreground service, or running Go client.
+            cleanupStartupFailure()
             _state.value = OlcRtcTransportState.ERROR
             throw e
         }
@@ -236,7 +272,11 @@ class OlcRtcTransport(private val appContext: Context) {
             throw StartupException("OlcRTC Go client is already running")
         }
 
-        var started = false
+        // Set goClientStarting BEFORE Mobile.startWithTransport so that
+        // stopGoClient() will call Mobile.stop() even if we're in the
+        // middle of waitReady or startWithTransport has already begun.
+        goClientStarting = true
+        var nativeStarted = false
         try {
             withContext(Dispatchers.IO) {
                 android.util.Log.d("OlcRtcTransport", "Go client start: configuring...")
@@ -257,7 +297,11 @@ class OlcRtcTransport(private val appContext: Context) {
                     config.socksPass ?: ""
                 )
                 android.util.Log.d("OlcRtcTransport", "Go startWithTransport completed")
-                started = true
+
+                // Set goClientStarted BEFORE waitReady so stopGoClient can
+                // detect that the Go runtime is alive (even during blocking waitReady).
+                nativeStarted = true
+                goClientStarted = true
 
                 android.util.Log.d("OlcRtcTransport", "Go waitReady begin (25s timeout)")
                 Mobile.waitReady(25_000L)
@@ -269,15 +313,16 @@ class OlcRtcTransport(private val appContext: Context) {
                     throw StartupException("Failed to protect OlcRTC socket — VpnService.protect() returned false")
                 }
             }
-            goClientStarted = true
             android.util.Log.d("OlcRtcTransport", "Go client ready: carrier=${config.carrier}")
         } catch (e: Throwable) {
             // If startWithTransport succeeded but something later failed, clean up
-            if (started) {
+            if (nativeStarted) {
                 runCatching { withContext(Dispatchers.IO) { Mobile.stop() } }
             }
             goClientStarted = false
             throw e
+        } finally {
+            goClientStarting = false
         }
     }
 
@@ -319,15 +364,37 @@ class OlcRtcTransport(private val appContext: Context) {
     }
 
     /**
+     * Shared cleanup for startup failures (both cancellation and generic exceptions).
+     * Stops the Go client, sends ACTION_STOP to tear down the VpnService,
+     * clears the VpnStatus callback and startup signal.
+     * Safe to call multiple times — all operations are guarded/idempotent.
+     */
+    private suspend fun cleanupStartupFailure() {
+        try {
+            stopGoClient()
+        } catch (_: Exception) { }
+        try {
+            withContext(Dispatchers.Main) {
+                val stopIntent = Intent(appContext, OlcRtcVpnService::class.java).apply {
+                    action = OlcRtcVpnService.ACTION_STOP
+                }
+                appContext.startService(stopIntent)
+            }
+        } catch (_: Exception) { }
+        OlcRtcVpnService.onVpnStatus = null
+        startupSignalDeferred = null
+    }
+
+    /**
      * Stop the Go OlcRTC client if it's running.
      * Safe to call multiple times — no-op if already stopped.
      */
     private suspend fun stopGoClient() = goMutex.withLock {
-        if (!goClientStarted) {
+        if (!goClientStarting && !goClientStarted) {
             android.util.Log.d("OlcRtcTransport", "stopGoClient: not running, skipping")
             return@withLock
         }
-        android.util.Log.d("OlcRtcTransport", "stopGoClient begin")
+        android.util.Log.d("OlcRtcTransport", "stopGoClient begin (starting=$goClientStarting, started=$goClientStarted)")
         try {
             withContext(Dispatchers.IO) {
                 Mobile.stop()
@@ -337,6 +404,7 @@ class OlcRtcTransport(private val appContext: Context) {
             android.util.Log.w("OlcRtcTransport", "stopGoClient failed", e)
         } finally {
             goClientStarted = false
+            goClientStarting = false
         }
     }
 

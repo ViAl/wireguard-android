@@ -63,7 +63,20 @@ object OlcRtcManager {
             return
         }
 
-        connectJob?.cancel()
+        // For a CONNECTED→different-config restart, do NOT cancel the running
+        // connectJob.  The previous job may be mid-native-startup (Mobile.waitReady)
+        // and cancelling it would leave the Go runtime in an inconsistent state.
+        // Instead, the mutex serialization ensures clean stop-then-start:
+        //   - the new job waits for the mutex
+        //   - connectInternal calls cleanupOldTransport() which stops the transport
+        // For DISCONNECTED/ERROR, normal cancel is safe and desired.
+        if (currentState != OlcRtcConnectionState.CONNECTED) {
+            connectJob?.cancel()
+        } else {
+            android.util.Log.d("OlcRtcManager",
+                "restarting from CONNECTED (${currentConfig?.name} → ${cfg.name}), skipping cancel")
+        }
+
         connectJob = managerScope.launch {
             mutex.withLock {
                 connectInternal(appContext.applicationContext, cfg)
@@ -133,13 +146,20 @@ object OlcRtcManager {
     }
 
     private suspend fun disconnectInternal() {
-        cleanupOldTransport()
+        try {
+            cleanupOldTransport()
+        } catch (e: Exception) {
+            android.util.Log.e("OlcRtcManager", "cleanupOldTransport failed during disconnect", e)
+        }
         _connectionState.value = OlcRtcConnectionState.DISCONNECTED
         _currentTunnelName.value = null
     }
 
     fun disconnect() {
         connectJob?.cancel()
+        // Set DISCONNECTING immediately so UI shows "Disconnecting…" during cleanup.
+        // currentTunnelName stays visible until cleanup completes.
+        _connectionState.value = OlcRtcConnectionState.DISCONNECTING
         managerScope.launch {
             mutex.withLock {
                 disconnectInternal()
