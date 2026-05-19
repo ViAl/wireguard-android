@@ -31,7 +31,12 @@ class OlcRtcConfigStore(private val appContext: Context) {
                     excludedApplications = parseStringSet(obj, "excludedApplications"),
                     includedApplications = parseStringSet(obj, "includedApplications"),
                     socksUser = optStringOrNull(obj, "socksUser"),
-                    socksPass = optStringOrNull(obj, "socksPass")
+                    socksPass = optStringOrNull(obj, "socksPass"),
+                    appRoutingMode = try {
+                        AppRoutingMode.valueOf(obj.optString("appRoutingMode", "ALL_APPS"))
+                    } catch (_: Exception) { AppRoutingMode.ALL_APPS },
+                    routeAllIpv4 = obj.optBoolean("routeAllIpv4", true),
+                    routeAllIpv6 = obj.optBoolean("routeAllIpv6", false)
                 ))
             }
             result
@@ -71,6 +76,9 @@ class OlcRtcConfigStore(private val appContext: Context) {
                     put("includedApplications", JSONArray(c.includedApplications.toList()))
                     if (c.socksUser != null) put("socksUser", c.socksUser) else put("socksUser", JSONObject.NULL)
                     if (c.socksPass != null) put("socksPass", c.socksPass) else put("socksPass", JSONObject.NULL)
+                    put("appRoutingMode", c.appRoutingMode.name)
+                    put("routeAllIpv4", c.routeAllIpv4)
+                    put("routeAllIpv6", c.routeAllIpv6)
                 })
             }
             configFile.parentFile?.mkdirs()
