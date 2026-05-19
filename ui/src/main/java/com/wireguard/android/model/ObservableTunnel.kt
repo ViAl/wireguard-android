@@ -6,6 +6,7 @@ package com.wireguard.android.model
 
 import android.util.Log
 import androidx.databinding.BaseObservable
+import com.wireguard.android.BuildConfig
 import androidx.databinding.Bindable
 import com.wireguard.android.BR
 import com.wireguard.android.backend.Statistics
@@ -51,10 +52,12 @@ class ObservableTunnel internal constructor(
         private set
 
     override fun onStateChange(newState: Tunnel.State) {
+        if (BuildConfig.DEBUG) Log.d(TAG, "onStateChange: tunnel=${name} newState=$newState")
         onStateChanged(newState)
     }
 
     fun onStateChanged(state: Tunnel.State): Tunnel.State {
+        if (BuildConfig.DEBUG) Log.d(TAG, "onStateChanged: tunnel=${name} oldState=${this.state} newState=$state")
         if (state != Tunnel.State.UP) onStatisticsChanged(null)
         this.state = state
         notifyPropertyChanged(BR.state)

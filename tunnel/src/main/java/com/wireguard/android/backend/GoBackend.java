@@ -13,6 +13,7 @@ import android.os.ParcelFileDescriptor;
 import android.system.OsConstants;
 import android.util.Log;
 
+import com.wireguard.android.tunnel.BuildConfig;
 import com.wireguard.android.backend.BackendException.Reason;
 import com.wireguard.android.backend.Tunnel.State;
 import com.wireguard.android.util.SharedLibraryLoader;
@@ -250,6 +251,7 @@ public final class GoBackend implements Backend {
      */
     @Override
     public State setState(final Tunnel tunnel, State state, @Nullable final Config config) throws Exception {
+        if (BuildConfig.DEBUG) Log.d(TAG, "setState: tunnel=" + tunnel.getName() + " state=" + state + " config=" + (config != null ? "present" : "null"));
         final State originalState = getState(tunnel);
 
         if (state == State.TOGGLE)
@@ -264,6 +266,7 @@ public final class GoBackend implements Backend {
             try {
                 setStateInternal(tunnel, config, state);
             } catch (final Exception e) {
+                Log.e(TAG, "setStateInternal failed for " + tunnel.getName(), e);
                 if (originalTunnel != null)
                     setStateInternal(originalTunnel, originalConfig, State.UP);
                 throw e;
@@ -276,6 +279,7 @@ public final class GoBackend implements Backend {
 
     private void setStateInternal(final Tunnel tunnel, @Nullable final Config config, final State state)
             throws Exception {
+        if (BuildConfig.DEBUG) Log.d(TAG, "setStateInternal: tunnel=" + tunnel.getName() + " state=" + state + " config=" + (config != null ? "present" : "null"));
         Log.i(TAG, "Bringing tunnel " + tunnel.getName() + ' ' + state);
 
         if (state == State.UP) {
@@ -287,7 +291,7 @@ public final class GoBackend implements Backend {
 
             final VpnService service;
             if (!vpnService.isDone()) {
-                Log.d(TAG, "Requesting to start VpnService");
+                if (BuildConfig.DEBUG) Log.d(TAG, "Requesting to start VpnService");
                 context.startService(new Intent(context, VpnService.class));
             }
 
@@ -305,7 +309,7 @@ public final class GoBackend implements Backend {
                 return;
             }
 
-
+            if (BuildConfig.DEBUG) Log.d(TAG, "Starting DNS resolution for " + config.getPeers().size() + " peers");
             dnsRetry: for (int i = 0; i < DNS_RESOLUTION_RETRIES; ++i) {
                 // Pre-resolve IPs so they're cached when building the userspace string
                 for (final Peer peer : config.getPeers()) {
@@ -314,6 +318,7 @@ public final class GoBackend implements Backend {
                         continue;
                     if (ep.getResolved().orElse(null) == null) {
                         if (i < DNS_RESOLUTION_RETRIES - 1) {
+                            if (BuildConfig.DEBUG) Log.d(TAG, "DNS retry " + (i+1) + "/" + DNS_RESOLUTION_RETRIES + " for peer endpoint " + ep.getHost());
                             Log.w(TAG, "DNS host \"" + ep.getHost() + "\" failed to resolve; trying again");
                             Thread.sleep(1000);
                             continue dnsRetry;
@@ -323,6 +328,7 @@ public final class GoBackend implements Backend {
                 }
                 break;
             }
+            if (BuildConfig.DEBUG) Log.d(TAG, "DNS resolution completed for all peers");
 
             // Build config
             final String goConfig = config.toWgUserspaceString();
@@ -367,20 +373,27 @@ public final class GoBackend implements Backend {
             service.setUnderlyingNetworks(null);
 
             builder.setBlocking(true);
+            if (BuildConfig.DEBUG) Log.d(TAG, "Building VPN interface and establishing TUN");
             try (final ParcelFileDescriptor tun = builder.establish()) {
                 if (tun == null)
                     throw new BackendException(Reason.TUN_CREATION_ERROR);
-                Log.d(TAG, "Go backend " + wgVersion());
+                if (BuildConfig.DEBUG) Log.d(TAG, "TUN device established, fd=" + tun.getFd());
+                if (BuildConfig.DEBUG) Log.d(TAG, "Go backend " + wgVersion());
+                if (BuildConfig.DEBUG) Log.d(TAG, "Calling wgTurnOn(ifName=" + tunnel.getName() + ", goConfig.length=" + goConfig.length() + ")");
                 currentTunnelHandle = wgTurnOn(tunnel.getName(), tun.detachFd(), goConfig);
             }
-            if (currentTunnelHandle < 0)
+            if (BuildConfig.DEBUG) Log.d(TAG, "wgTurnOn returned handle=" + currentTunnelHandle);
+            if (currentTunnelHandle < 0) {
+                Log.e(TAG, "wgTurnOn FAILED: handle=" + currentTunnelHandle);
                 throw new BackendException(Reason.GO_ACTIVATION_ERROR_CODE, currentTunnelHandle);
+            }
 
             currentTunnel = tunnel;
             currentConfig = config;
 
             service.protect(wgGetSocketV4(currentTunnelHandle));
             service.protect(wgGetSocketV6(currentTunnelHandle));
+            if (BuildConfig.DEBUG) Log.d(TAG, "Tunnel UP successful, calling onStateChange(UP)");
         } else {
             if (currentTunnelHandle == -1) {
                 Log.w(TAG, "Tunnel already down");
@@ -391,6 +404,7 @@ public final class GoBackend implements Backend {
             currentTunnelHandle = -1;
             currentConfig = null;
             wgTurnOff(handleToClose);
+            if (BuildConfig.DEBUG) Log.d(TAG, "setStateInternal: tunnel DOWN complete, handle closed");
             try {
                 vpnService.get(0, TimeUnit.NANOSECONDS).stopSelf();
             } catch (final TimeoutException ignored) { }
@@ -447,7 +461,7 @@ public final class GoBackend implements Backend {
         public int onStartCommand(@Nullable final Intent intent, final int flags, final int startId) {
             vpnService.complete(this);
             if (intent == null || intent.getComponent() == null || !intent.getComponent().getPackageName().equals(getPackageName())) {
-                Log.d(TAG, "Service started by Always-on VPN feature");
+                if (BuildConfig.DEBUG) Log.d(TAG, "Service started by Always-on VPN feature");
                 if (alwaysOnCallback != null)
                     alwaysOnCallback.alwaysOnTriggered();
             }

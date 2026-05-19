@@ -13,11 +13,15 @@ plugins {
 
 android {
     compileSdk = 36
+    ndkVersion = "27.2.12479018"
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
     namespace = "${pkg}.tunnel"
+    buildFeatures {
+        buildConfig = true
+    }
     defaultConfig {
         minSdk = 24
     }

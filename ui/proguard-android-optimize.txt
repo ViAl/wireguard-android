@@ -33,3 +33,8 @@
 -keepclasseswithmembers class * {
     @androidx.annotation.Keep <init>(...);
 }
+
+# Keep gomobile-generated runtime classes (go.Seq, mobile.Mobile, etc.)
+# These are called via JNI GetStaticMethodID/FindClass — ProGuard can't detect usage
+-keep class go.** { *; }
+-keep class mobile.** { *; }
