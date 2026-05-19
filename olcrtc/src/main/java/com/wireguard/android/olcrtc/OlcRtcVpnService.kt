@@ -7,10 +7,6 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.net.ConnectivityManager
-import android.net.Network
-import android.net.NetworkCapabilities
-import android.net.NetworkRequest
 import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
@@ -32,6 +28,14 @@ class OlcRtcVpnService : VpnService() {
     companion object {
         var currentInstance: OlcRtcVpnService? = null
 
+        /**
+         * Signal for Transport.startAndWait() to know when the TUN interface
+         * and tun2socks are fully established.
+         */
+        @Volatile
+        var isTunReady: Boolean = false
+            internal set
+
         const val ACTION_START = "com.wireguard.android.olcrtc.START"
         const val ACTION_STOP = "com.wireguard.android.olcrtc.STOP"
 
@@ -46,8 +50,6 @@ class OlcRtcVpnService : VpnService() {
         const val NOTIFICATION_CHANNEL_ID = "olcrtc_vpn"
         const val FOREGROUND_SERVICE_ID = 1001
     }
-
-    private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -133,27 +135,8 @@ class OlcRtcVpnService : VpnService() {
         val fd = vpnInterface!!.fd
         android.util.Log.d("OlcRtcVpnService", "TUN fd=$fd established for ${config.name}")
 
-        // Bind to the active upstream network so non-VPN sockets resolve correctly.
-        bindToUpstreamNetwork()
-
-        // Wire SocketProtector — protects Go sockets from going through VPN tunnel
-        Mobile.setProtector(object : SocketProtector {
-            override fun protect(fd: Long): Boolean {
-                val instance = currentInstance
-                return instance?.protect(fd.toInt()) ?: false
-            }
-        })
-
-        // Wire LogWriter — forward Go logs to logcat
-        Mobile.setLogWriter(object : LogWriter {
-            override fun writeLog(msg: String?) {
-                android.util.Log.d("OlcRtcTransport", "Go: ${msg ?: ""}")
-            }
-        })
-
-        // Call setProviders to register default implementations
-        // Order: setProtector + setLogWriter MUST be called first
-        Mobile.setProviders()
+        // Socket-level protection is handled by Transport via Mobile.setProtector
+        // No process-wide bindProcessToNetwork — that would conflict with WireGuard
 
         // Generate hev-socks5-tunnel config and start tun2socks in background
         try {
@@ -175,10 +158,12 @@ class OlcRtcVpnService : VpnService() {
         }
 
         isRunning = true
+        isTunReady = true
     }
 
     private fun stopVpn() {
         if (!isRunning) return
+        isTunReady = false
         android.util.Log.d("OlcRtcVpnService", "Stopping VPN")
 
         // Stop tun2socks
@@ -193,70 +178,13 @@ class OlcRtcVpnService : VpnService() {
         vpnInterface = null
         isRunning = false
         stopForeground(STOP_FOREGROUND_REMOVE)
-        unregisterNetworkCallback()
         stopSelf()
     }
 
     override fun onDestroy() {
         currentInstance = null
         stopVpn()
-        unregisterNetworkCallback()
         super.onDestroy()
-    }
-
-    private fun bindToUpstreamNetwork() {
-        try {
-            val connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-
-            // Bind current process to active network immediately
-            val activeNetwork = connectivityManager.activeNetwork
-            if (activeNetwork != null) {
-                connectivityManager.bindProcessToNetwork(activeNetwork)
-                android.util.Log.d("OlcRtcVpnService", "Bound to upstream network: $activeNetwork")
-            } else {
-                android.util.Log.w("OlcRtcVpnService", "No active upstream network to bind to")
-            }
-
-            // Register callback to track network changes (WiFi <-> Mobile)
-            val callback = object : ConnectivityManager.NetworkCallback() {
-                override fun onAvailable(network: Network) {
-                    android.util.Log.d("OlcRtcVpnService", "New network available: $network")
-                    connectivityManager.bindProcessToNetwork(network)
-                }
-
-                override fun onLost(network: Network) {
-                    android.util.Log.d("OlcRtcVpnService", "Network lost: $network")
-                }
-
-                override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
-                    android.util.Log.d("OlcRtcVpnService", "Network capabilities changed: $network")
-                }
-            }
-
-            networkCallback = callback
-
-            val request = NetworkRequest.Builder()
-                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-                .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
-                .build()
-            connectivityManager.registerNetworkCallback(request, callback)
-            android.util.Log.d("OlcRtcVpnService", "Network callback registered")
-        } catch (e: Exception) {
-            android.util.Log.e("OlcRtcVpnService", "Failed to bind to upstream network", e)
-        }
-    }
-
-    private fun unregisterNetworkCallback() {
-        try {
-            networkCallback?.let {
-                val connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-                connectivityManager.unregisterNetworkCallback(it)
-                networkCallback = null
-                android.util.Log.d("OlcRtcVpnService", "Network callback unregistered")
-            }
-        } catch (e: Exception) {
-            android.util.Log.w("OlcRtcVpnService", "Failed to unregister network callback", e)
-        }
     }
 
     private fun generateHevConfig(config: OlcRtcConfig): String = buildString {

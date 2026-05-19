@@ -2,12 +2,13 @@ package com.wireguard.android.olcrtc
 
 import android.content.Context
 import android.content.Intent
-import mobile.Mobile
-
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import mobile.LogWriter
+import mobile.Mobile
+import mobile.SocketProtector
 import kotlin.coroutines.cancellation.CancellationException
 
 enum class OlcRtcTransportState {
@@ -22,61 +23,89 @@ class OlcRtcTransport(private val appContext: Context) {
     private var config: OlcRtcConfig? = null
     private var scope: CoroutineScope? = null
 
-    fun start(config: OlcRtcConfig) {
+    /**
+     * Start the OlcRTC transport with the correct startup order:
+     * 1. Configure Mobile providers and socket protector
+     * 2. Start Go OlcRTC client
+     * 3. Wait until local SOCKS5 is listening (port probe)
+     * 4. Start VpnService (establish TUN)
+     * 5. Start tun2socks
+     * 6. Verify tun2socks didn't exit immediately
+     * 7. Mark READY
+     *
+     * This is a suspending function — it returns only when the transport
+     * is fully ready or has failed.
+     */
+    suspend fun startAndWait(config: OlcRtcConfig) {
         stop()
         this.config = config
-        scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         _state.value = OlcRtcTransportState.STARTING
 
-        scope?.launch {
-            try {
-                // Step 1: Start VpnService — must be on main thread
-                withContext(Dispatchers.Main) {
-                    val intent = Intent(appContext, OlcRtcVpnService::class.java).apply {
-                        action = OlcRtcVpnService.ACTION_START
-                        putExtra(OlcRtcVpnService.EXTRA_CONFIG_NAME, config.name)
-                        putExtra(OlcRtcVpnService.EXTRA_CONFIG_CARRIER, config.carrier)
-                        putExtra(OlcRtcVpnService.EXTRA_CONFIG_ROOM, config.roomId)
-                        putExtra(OlcRtcVpnService.EXTRA_CONFIG_CLIENT, config.clientId)
-                        putExtra(OlcRtcVpnService.EXTRA_CONFIG_KEY, config.keyHex)
-                        putExtra(OlcRtcVpnService.EXTRA_CONFIG_TRANSPORT, config.transport)
-                        putExtra(OlcRtcVpnService.EXTRA_CONFIG_SOCKS_PORT, config.socksPort)
-                        putExtra(OlcRtcVpnService.EXTRA_CONFIG_DNS, config.dnsServer)
-                    }
-                    appContext.startForegroundService(intent)
+        try {
+            // Step 1: Configure Mobile providers and socket protector — must happen BEFORE Go client starts
+            configureMobileProviders()
+
+            // Step 2: Start Go OlcRTC client
+            startGoClient(config)
+
+            // Step 3: Wait until local SOCKS5 is listening (port probe with timeout)
+            waitForLocalSocks(config.socksPort)
+
+            // Step 4: Start VpnService (establishes TUN and starts tun2socks)
+            withContext(Dispatchers.Main) {
+                val intent = Intent(appContext, OlcRtcVpnService::class.java).apply {
+                    action = OlcRtcVpnService.ACTION_START
+                    putExtra(OlcRtcVpnService.EXTRA_CONFIG_NAME, config.name)
+                    putExtra(OlcRtcVpnService.EXTRA_CONFIG_CARRIER, config.carrier)
+                    putExtra(OlcRtcVpnService.EXTRA_CONFIG_ROOM, config.roomId)
+                    putExtra(OlcRtcVpnService.EXTRA_CONFIG_CLIENT, config.clientId)
+                    putExtra(OlcRtcVpnService.EXTRA_CONFIG_KEY, config.keyHex)
+                    putExtra(OlcRtcVpnService.EXTRA_CONFIG_TRANSPORT, config.transport)
+                    putExtra(OlcRtcVpnService.EXTRA_CONFIG_SOCKS_PORT, config.socksPort)
+                    putExtra(OlcRtcVpnService.EXTRA_CONFIG_DNS, config.dnsServer)
                 }
-                delay(500)
-                // Step 2: Start Go client (heavy work, IO is fine)
-                startGoClient(config)
-                _state.value = OlcRtcTransportState.READY
-            } catch (e: CancellationException) {
-                _state.value = OlcRtcTransportState.IDLE
-                throw e
-            } catch (e: Exception) {
-                android.util.Log.e("OlcRtcTransport", "Failed to start", e)
-                _state.value = OlcRtcTransportState.ERROR
+                appContext.startForegroundService(intent)
             }
+
+            // Step 5-6: Wait for VpnService to establish TUN and start tun2socks
+            waitForTunReady()
+
+            // Step 7: Mark READY
+            _state.value = OlcRtcTransportState.READY
+        } catch (e: CancellationException) {
+            _state.value = OlcRtcTransportState.IDLE
+            throw e
+        } catch (e: Exception) {
+            android.util.Log.e("OlcRtcTransport", "Failed to start", e)
+            _state.value = OlcRtcTransportState.ERROR
         }
     }
 
-    fun stop() {
-        if (_state.value == OlcRtcTransportState.IDLE) return
-        _state.value = OlcRtcTransportState.STOPPING
-
+    private fun configureMobileProviders() {
         try {
-            stopGoClient()
-            val intent = Intent(appContext, OlcRtcVpnService::class.java).apply {
-                action = OlcRtcVpnService.ACTION_STOP
-            }
-            appContext.startService(intent)
-        } catch (e: Exception) {
-            android.util.Log.w("OlcRtcTransport", "Error during stop", e)
-        }
+            // Set socket protector for Go sockets — routes them through VpnService.protect()
+            Mobile.setProtector(object : SocketProtector {
+                override fun protect(fd: Long): Boolean {
+                    val instance = OlcRtcVpnService.currentInstance
+                    return instance?.protect(fd.toInt()) ?: false
+                }
+            })
 
-        scope?.cancel()
-        scope = null
-        config = null
-        _state.value = OlcRtcTransportState.IDLE
+            Mobile.setLogWriter(object : LogWriter {
+                override fun writeLog(msg: String?) {
+                    android.util.Log.d("OlcRtcTransport", "Go: ${msg ?: ""}")
+                }
+            })
+
+            // Call setProviders to register default implementations
+            // Order: setProtector + setLogWriter MUST be called first
+            Mobile.setProviders()
+
+            android.util.Log.d("OlcRtcTransport", "Mobile providers configured")
+        } catch (e: Exception) {
+            android.util.Log.e("OlcRtcTransport", "configureMobileProviders failed", e)
+            throw e
+        }
     }
 
     private fun startGoClient(config: OlcRtcConfig) {
@@ -101,13 +130,52 @@ class OlcRtcTransport(private val appContext: Context) {
 
             Mobile.waitReady(25_000L)
 
-            // WG tunnel stopping will be implemented in UI layer (cross-module)
-
             android.util.Log.d("OlcRtcTransport", "Go client ready: carrier=${config.carrier}")
         } catch (e: Exception) {
             android.util.Log.e("OlcRtcTransport", "startGoClient failed", e)
             throw e
         }
+    }
+
+    private suspend fun waitForLocalSocks(port: Int, timeoutMs: Long = 10_000) {
+        withTimeout(timeoutMs) {
+            while (true) {
+                try {
+                    java.net.Socket("127.0.0.1", port).use { return@withTimeout }
+                } catch (_: Exception) {
+                    delay(100)
+                }
+            }
+        }
+    }
+
+    private suspend fun waitForTunReady(timeoutMs: Long = 15_000) {
+        withTimeout(timeoutMs) {
+            while (true) {
+                if (OlcRtcVpnService.isTunReady) return@withTimeout
+                delay(100)
+            }
+        }
+    }
+
+    fun stop() {
+        if (_state.value == OlcRtcTransportState.IDLE) return
+        _state.value = OlcRtcTransportState.STOPPING
+
+        try {
+            stopGoClient()
+            val intent = Intent(appContext, OlcRtcVpnService::class.java).apply {
+                action = OlcRtcVpnService.ACTION_STOP
+            }
+            appContext.startService(intent)
+        } catch (e: Exception) {
+            android.util.Log.w("OlcRtcTransport", "Error during stop", e)
+        }
+
+        scope?.cancel()
+        scope = null
+        config = null
+        _state.value = OlcRtcTransportState.IDLE
     }
 
     private fun stopGoClient() {
@@ -119,9 +187,6 @@ class OlcRtcTransport(private val appContext: Context) {
         }
     }
 
-    /**
-     * Stop all running WireGuard tunnels to avoid conflict with OlcRTC VPN.
-     */
     fun getConfig(): OlcRtcConfig? = config
     fun isRunning(): Boolean = _state.value == OlcRtcTransportState.READY
 
