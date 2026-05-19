@@ -1,5 +1,5 @@
 /**
- * Gradle task to build olcrtc.aar from the OlcRTC Go source using gomobile.
+ * Gradle script to build olcrtc.aar from the OlcRTC Go source using gomobile.
  *
  * Usage:
  *   ./gradlew :olcrtc:buildOlcrtcAar -Polcrtc.repo.path=/path/to/olcrtc
@@ -8,6 +8,8 @@
  *   OLCRTC_REPO — path to the OlcRTC Go repo (fallback for -Polcrtc.repo.path)
  *   GOANDROID_HOME — path to gomobile (e.g. $GOPATH/bin)
  */
+
+import java.io.File
 
 tasks.register("buildOlcrtcAar") {
     group = "olcrtc"
@@ -19,27 +21,35 @@ tasks.register("buildOlcrtcAar") {
             logger.warn("OLCRTC_REPO not set. Skipping AAR build.")
             return@doLast
         }
-        val repoDir = file(olcrtcRepo)
+        val repoDir = File(olcrtcRepo)
         if (!repoDir.exists()) {
             logger.warn("olcrtc repo not found at $olcrtcRepo")
             return@doLast
         }
 
-        val gomobileFound = findOnPath("gomobile") ||
-            file(System.getenv("GOANDROID_HOME") ?: "/usr/local/go/bin").resolve("gomobile").exists()
-        if (!gomobileFound) {
+        // Check gomobile availability via PATH or GOANDROID_HOME
+        val gomobileOnPath = findOnPath("gomobile")
+        val gomobileInGoAndroid = File(System.getenv("GOANDROID_HOME") ?: "/usr/local/go/bin", "gomobile").exists()
+        if (!gomobileOnPath && !gomobileInGoAndroid) {
             logger.warn("gomobile not found in PATH, GOANDROID_HOME, or /usr/local/go/bin")
             return@doLast
         }
 
-        val outputAar = file("src/main/libs/olcrtc.aar")
-        project.exec {
-            workingDir = repoDir
-            commandLine("gomobile", "bind", "-target=android", "-androidapi", "21",
-                "-ldflags", "-s -w -checklinkname=0",
-                "-o", outputAar.absolutePath, "./mobile")
+        val outputAar = File(project.projectDir, "src/main/libs/olcrtc.aar").absolutePath
+
+        val pb = ProcessBuilder(
+            "gomobile", "bind", "-target=android", "-androidapi", "21",
+            "-ldflags", "-s -w -checklinkname=0",
+            "-o", outputAar, "./mobile"
+        )
+        pb.directory(repoDir)
+        pb.inheritIO()
+        val process = pb.start()
+        val exitCode = process.waitFor()
+        if (exitCode != 0) {
+            throw GradleException("gomobile bind failed with exit code $exitCode")
         }
-        logger.lifecycle("olcrtc.aar built: ${outputAar.absolutePath}")
+        logger.lifecycle("olcrtc.aar built: $outputAar")
     }
 }
 
@@ -56,12 +66,10 @@ tasks.register("verifyOlcrtcBinaries") {
         )
 
         var allMatch = true
-        val jniLibsDir = file("src/main/jniLibs")
-        val libsDir = file("src/main/libs")
-        val baseDirs = listOf(jniLibsDir, libsDir)
+        val baseDir = project.projectDir
 
         expected.forEach { (relativePath, expectedSha) ->
-            val file = file(relativePath)
+            val file = File(baseDir, relativePath)
             if (!file.exists()) {
                 logger.warn("MISSING: $relativePath")
                 allMatch = false
@@ -91,7 +99,7 @@ fun findOnPath(name: String): Boolean {
     return pathEnv.split(File.pathSeparator).any { dir -> File(dir, name).exists() }
 }
 
-fun java.io.File.sha256(): String {
+fun File.sha256(): String {
     val digest = java.security.MessageDigest.getInstance("SHA-256")
     inputStream().use { stream ->
         val buffer = ByteArray(8192)
