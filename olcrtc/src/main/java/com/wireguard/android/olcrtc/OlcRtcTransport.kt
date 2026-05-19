@@ -24,6 +24,12 @@ enum class VpnStatusEvent {
     TUN_ESTABLISHED,
     /** tun2socks has started successfully */
     TUN2SOCKS_STARTED,
+    /** e2e data-path probe started */
+    PROBE_STARTED,
+    /** e2e data-path probe succeeded */
+    PROBE_SUCCESS,
+    /** e2e data-path probe failed */
+    PROBE_FAILURE,
     /** tun2socks exited (expected or unexpected) */
     TUN2SOCKS_EXITED,
     /** VPN service stopped */
@@ -179,7 +185,8 @@ class OlcRtcTransport(private val appContext: Context) {
             }
             android.util.Log.d("OlcRtcTransport", "VpnService startup confirmed (TUN2SOCKS_STARTED)")
 
-            // Step 4: Mark READY
+            // Step 4: e2e probe completed successfully (MSG_PROBE_SUCCESS received)
+            // Mark READY — full data path confirmed
             _state.value = OlcRtcTransportState.READY
         } catch (e: CancellationException) {
             android.util.Log.d("OlcRtcTransport", "startAndWait cancelled during startup")
@@ -204,6 +211,9 @@ class OlcRtcTransport(private val appContext: Context) {
             OlcRtcVpnService.MSG_STARTUP_STARTED -> null   // internal signal
             OlcRtcVpnService.MSG_TUN_ESTABLISHED -> VpnStatusEvent.TUN_ESTABLISHED
             OlcRtcVpnService.MSG_TUN2SOCKS_STARTED -> VpnStatusEvent.TUN2SOCKS_STARTED
+            OlcRtcVpnService.MSG_PROBE_START -> VpnStatusEvent.PROBE_STARTED
+            OlcRtcVpnService.MSG_PROBE_SUCCESS -> VpnStatusEvent.PROBE_SUCCESS
+            OlcRtcVpnService.MSG_PROBE_FAILURE -> VpnStatusEvent.PROBE_FAILURE
             OlcRtcVpnService.MSG_TUN2SOCKS_EXITED -> VpnStatusEvent.TUN2SOCKS_EXITED
             OlcRtcVpnService.MSG_ERROR -> VpnStatusEvent.ERROR
             OlcRtcVpnService.MSG_VPN_STOPPED -> VpnStatusEvent.VPN_STOPPED
@@ -232,8 +242,21 @@ class OlcRtcTransport(private val appContext: Context) {
                 android.util.Log.d("OlcRtcTransport", "TUN established (MSG_TUN_ESTABLISHED from :olcrtc)")
             }
             OlcRtcVpnService.MSG_TUN2SOCKS_STARTED -> {
-                android.util.Log.d("OlcRtcTransport", "TUN2SOCKS_STARTED received from :olcrtc")
+                // LOCAL_READY: TUN + tun2socks up. Do NOT complete signal yet —
+                // we wait for e2e probe (MSG_PROBE_SUCCESS) to confirm full data path.
+                android.util.Log.d("OlcRtcTransport", "TUN2SOCKS_STARTED received from :olcrtc (waiting for e2e probe)")
+            }
+            OlcRtcVpnService.MSG_PROBE_START -> {
+                android.util.Log.d("OlcRtcTransport", "MSG_PROBE_START received from :olcrtc")
+            }
+            OlcRtcVpnService.MSG_PROBE_SUCCESS -> {
+                android.util.Log.d("OlcRtcTransport", "MSG_PROBE_SUCCESS received — e2e data path confirmed")
                 signal.complete(Result.success(Unit))
+            }
+            OlcRtcVpnService.MSG_PROBE_FAILURE -> {
+                val errorMsg = msg.data.getString("error") ?: "e2e probe failed"
+                android.util.Log.e("OlcRtcTransport", "MSG_PROBE_FAILURE from :olcrtc: $errorMsg")
+                signal.complete(Result.failure(StartupException(errorMsg)))
             }
             OlcRtcVpnService.MSG_TUN2SOCKS_EXITED -> {
                 android.util.Log.d("OlcRtcTransport", "MSG_TUN2SOCKS_EXITED received from :olcrtc")

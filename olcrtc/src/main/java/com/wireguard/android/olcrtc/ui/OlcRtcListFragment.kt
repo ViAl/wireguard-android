@@ -98,13 +98,19 @@ class OlcRtcListFragment : Fragment() {
             textSize = 12f
             text = when {
                 isActive && state == OlcRtcConnectionState.CONNECTED -> "● Connected"
+                isActive && state == OlcRtcConnectionState.LOCAL_READY -> "◌ Connected locally, verifying remote..."
+                isActive && state == OlcRtcConnectionState.VERIFYING_REMOTE -> "◌ Verifying remote connection..."
                 isActive && state == OlcRtcConnectionState.CONNECTING -> "◌ Connecting..."
                 isActive && state == OlcRtcConnectionState.DISCONNECTING -> "◌ Disconnecting..."
-                isActive && state == OlcRtcConnectionState.ERROR -> "● Error"
+                isActive && state == OlcRtcConnectionState.ERROR -> {
+                    val reason = OlcRtcManager.errorReason.value
+                    if (reason != null) "● Error: $reason" else "● Error"
+                }
                 else -> "○ Disconnected"
             }
             setTextColor(when {
                 isActive && state == OlcRtcConnectionState.CONNECTED -> 0xFF4CAF50.toInt()
+                isActive && (state == OlcRtcConnectionState.LOCAL_READY || state == OlcRtcConnectionState.VERIFYING_REMOTE) -> 0xFF2196F3.toInt()
                 isActive && (state == OlcRtcConnectionState.CONNECTING || state == OlcRtcConnectionState.DISCONNECTING) -> 0xFFFF9800.toInt()
                 isActive && state == OlcRtcConnectionState.ERROR -> 0xFFF44336.toInt()
                 else -> 0xFF9E9E9E.toInt()
@@ -132,6 +138,14 @@ class OlcRtcListFragment : Fragment() {
             when {
                 isActive && state == OlcRtcConnectionState.CONNECTING -> {
                     text = "Connecting..."
+                    isEnabled = false
+                }
+                isActive && state == OlcRtcConnectionState.LOCAL_READY -> {
+                    text = "Connecting..."
+                    isEnabled = false
+                }
+                isActive && state == OlcRtcConnectionState.VERIFYING_REMOTE -> {
+                    text = "Verifying..."
                     isEnabled = false
                 }
                 isActive && state == OlcRtcConnectionState.DISCONNECTING -> {

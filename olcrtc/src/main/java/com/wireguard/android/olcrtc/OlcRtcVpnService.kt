@@ -160,6 +160,9 @@ class OlcRtcVpnService : VpnService() {
         const val MSG_TUN2SOCKS_EXITED = 5
         const val MSG_ERROR = 7
         const val MSG_VPN_STOPPED = 8
+        const val MSG_PROBE_START = 9
+        const val MSG_PROBE_SUCCESS = 10
+        const val MSG_PROBE_FAILURE = 11
 
         // ── Task 7: Debug kill-switch ──
         private const val OLCRTC_SKIP_MOBILE_STOP_ON_STARTUP_FAILURE = false // DEBUG ONLY
@@ -326,6 +329,23 @@ class OlcRtcVpnService : VpnService() {
                 currentConfig = config
                 sendStatus(MSG_STARTUP_STARTED)
 
+                // ── Task 2+6: Log full safe config summary ──
+                android.util.Log.d("OlcRtcVpnService", """
+                    Config summary:
+                      carrier: ${config.carrier}
+                      transport: ${config.transport}
+                      roomId: ${config.roomId}
+                      clientId: ${config.clientId}
+                      key_fingerprint: ${config.keyHex.take(8)}...
+                      socksPort: ${config.socksPort}
+                      vp8_fps: ${config.vp8Fps}
+                      vp8_batch: ${config.vp8BatchSize}
+                      dnsServer: ${config.dnsServer}
+                      routeAllIpv4: ${config.routeAllIpv4}
+                      routeAllIpv6: ${config.routeAllIpv6}
+                      appRoutingMode: ${config.appRoutingMode}
+                """.trimIndent())
+
                 android.util.Log.d("OlcRtcVpnService", "Go client start begin: carrier=${config.carrier}")
 
                 // Step 1: Configure Mobile providers
@@ -354,34 +374,6 @@ class OlcRtcVpnService : VpnService() {
                 cleanupOnStartupFailure()
             }
         }
-
-        // Start a non-blocking SOCKS probe as diagnostic (Task 1: not a gate)
-        val probePort = config.socksPort
-        Thread {
-            try {
-                android.util.Log.d("OlcRtcVpnService", "SOCKS probe begin (diagnostic, port=$probePort)")
-                val start = System.currentTimeMillis()
-                var connected = false
-                for (i in 1..100) { // 10s total
-                    try {
-                        java.net.Socket("127.0.0.1", probePort).use {
-                            android.util.Log.d("OlcRtcVpnService",
-                                "SOCKS probe success (port=$probePort, attempt=${i}, elapsed=${System.currentTimeMillis() - start}ms)")
-                            connected = true
-                        }
-                        break
-                    } catch (_: Exception) {
-                        Thread.sleep(100)
-                    }
-                }
-                if (!connected) {
-                    android.util.Log.w("OlcRtcVpnService",
-                        "SOCKS probe failed: timeout after 10s (port=$probePort)")
-                }
-            } catch (e: Exception) {
-                android.util.Log.w("OlcRtcVpnService", "SOCKS probe error: ${e.message}")
-            }
-        }.apply { isDaemon = true; name = "OlcRTC-SocksProbe" }.start()
     }
 
     /**
@@ -504,6 +496,17 @@ class OlcRtcVpnService : VpnService() {
             }
         }
 
+        // ── Task 4+5+6: Log routing config at ACTION_START ──
+        android.util.Log.d("OlcRtcVpnService", """
+            Routing config:
+              appRoutingMode: ${config.appRoutingMode}
+              includedApps (${config.includedApplications.size}): ${config.includedApplications}
+              excludedApps (${config.excludedApplications.size}): ${config.excludedApplications}
+              routeAllIpv4: ${config.routeAllIpv4}
+              routeAllIpv6: ${config.routeAllIpv6}
+              dnsServer: ${config.dnsServer}
+        """.trimIndent())
+
         createNotificationChannel()
         val notification = buildNotification(config.name)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
@@ -550,6 +553,13 @@ class OlcRtcVpnService : VpnService() {
                 if (!tunThreadErrored && tunThread?.isAlive == true) {
                     android.util.Log.d("OlcRtcVpnService", "TUN2SOCKS_STARTED confirmed")
                     sendStatus(MSG_TUN2SOCKS_STARTED)
+
+                    // ── Task 1+9: Start e2e data-path probe ──
+                    sendStatus(MSG_PROBE_START)
+                    startE2eProbe(config)
+
+                    // ── Task 7: Start tun2socks stats polling ──
+                    startTun2socksStatsPolling()
                 } else if (!tunThreadErrored) {
                     android.util.Log.e("OlcRtcVpnService", "tun2socks died before startup delay elapsed")
                     sendStatus(MSG_ERROR, "tun2socks died before startup delay")
@@ -561,6 +571,218 @@ class OlcRtcVpnService : VpnService() {
         }
 
         isRunning = true
+
+        // ── Task 5: Log ConnectivityManager + VPN network state ──
+        logNetworkState()
+    }
+
+    /**
+     * Log ConnectivityManager active network, VPN transport, routes, DNS (Task 5).
+     */
+    private fun logNetworkState() {
+        try {
+            val cm = getSystemService(CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+            cm.activeNetwork?.let { network ->
+                val caps = cm.getNetworkCapabilities(network)
+                val lp = cm.getLinkProperties(network)
+                android.util.Log.d("OlcRtcVpnService", """
+                    Active network: $network
+                    VPN transport active: ${caps?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_VPN)}
+                    Routes: ${lp?.routes?.joinToString()}
+                    DNS: ${lp?.dnsServers?.joinToString()}
+                """.trimIndent())
+            } ?: android.util.Log.w("OlcRtcVpnService", "No active network from ConnectivityManager")
+        } catch (e: Exception) {
+            android.util.Log.w("OlcRtcVpnService", "Failed to log network state", e)
+        }
+    }
+
+    // ── Task 7: tun2socks stats polling control ──
+    @Volatile
+    private var statsPollingActive = false
+    private var statsPollThread: Thread? = null
+
+    /**
+     * e2e data-path probe: perform SOCKS5 CONNECT through 127.0.0.1:socksPort
+     * to 1.1.1.1:443. This exercises the full path:
+     * SOCKS → Go client → OpenStream → carrier → server peer → internet.
+     *
+     * Successful TCP + HTTP handshake → MSG_PROBE_SUCCESS.
+     * Any failure → MSG_PROBE_FAILURE.
+     */
+    private fun startE2eProbe(config: OlcRtcConfig) {
+        val socksPort = config.socksPort
+        Thread {
+            try {
+                android.util.Log.d("OlcRtcVpnService", "e2e SOCKS5 probe begin (port=$socksPort)")
+                val success = performSocks5Probe(socksPort)
+                if (success) {
+                    android.util.Log.d("OlcRtcVpnService", "e2e SOCKS5 probe SUCCESS")
+                    sendStatus(MSG_PROBE_SUCCESS)
+                } else {
+                    android.util.Log.e("OlcRtcVpnService", "e2e SOCKS5 probe FAILED")
+                    sendStatus(MSG_PROBE_FAILURE, "OlcRTC remote stream timeout")
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("OlcRtcVpnService", "e2e SOCKS5 probe error", e)
+                sendStatus(MSG_PROBE_FAILURE, "e2e probe error: ${e.message}")
+            }
+        }.apply { isDaemon = true; name = "OlcRTC-E2eProbe" }.start()
+    }
+
+    /**
+     * Perform a minimal SOCKS5 CONNECT probe through 127.0.0.1:socksPort
+     * to 1.1.1.1:443, then send a bare HTTP request to confirm data flow.
+     *
+     * Returns true if the full path works, false otherwise.
+     */
+    private fun performSocks5Probe(socksPort: Int): Boolean {
+        try {
+            val sock = java.net.Socket()
+            sock.connect(java.net.InetSocketAddress("127.0.0.1", socksPort), 15_000)
+
+            // ── SOCKS5 greeting: version 5, 1 auth method (no auth) ──
+            sock.outputStream.write(byteArrayOf(0x05, 0x01, 0x00))
+            val greetingResp = ByteArray(2)
+            if (!readFully(sock, greetingResp, 0, 2)) { sock.close(); return false }
+            if (greetingResp[0] != 0x05.toByte() || greetingResp[1] != 0x00.toByte()) {
+                android.util.Log.w("OlcRtcVpnService",
+                    "SOCKS5 greeting rejected: ${greetingResp[0]},${greetingResp[1]}")
+                sock.close(); return false
+            }
+
+            // ── SOCKS5 CONNECT to 1.1.1.1:443 ──
+            val targetHost = "1.1.1.1"
+            val targetPort = 443
+            val hostBytes = targetHost.toByteArray()
+            val req = ByteArray(7 + hostBytes.size)
+            req[0] = 0x05  // version
+            req[1] = 0x01  // CONNECT
+            req[2] = 0x00  // reserved
+            req[3] = 0x03  // domain name
+            req[4] = hostBytes.size.toByte()
+            System.arraycopy(hostBytes, 0, req, 5, hostBytes.size)
+            req[5 + hostBytes.size] = ((targetPort shr 8) and 0xFF).toByte()
+            req[6 + hostBytes.size] = (targetPort and 0xFF).toByte()
+            sock.outputStream.write(req)
+
+            // Read CONNECT response header (4 bytes: VER, REP, RSV, ATYP)
+            val respHdr = ByteArray(4)
+            if (!readFully(sock, respHdr, 0, 4)) { sock.close(); return false }
+            if (respHdr[1] != 0x00.toByte()) {
+                val repCode = respHdr[1].toInt() and 0xFF
+                android.util.Log.w("OlcRtcVpnService", "SOCKS5 CONNECT rejected: REP=$repCode")
+                sock.close(); return false
+            }
+
+            // Read BND.ADDR + BND.PORT based on address type
+            val addrType = respHdr[3].toInt() and 0xFF
+            val addrLen: Int = when (addrType) {
+                0x01 -> 4 + 2   // IPv4 + port
+                0x03 -> {
+                    val lenByte = sock.inputStream.read()
+                    if (lenByte < 0) { sock.close(); return false }
+                    lenByte + 2   // domain name + port
+                }
+                0x04 -> 16 + 2  // IPv6 + port
+                else -> 0
+            }
+            val bindAddr = ByteArray(addrLen)
+            if (!readFully(sock, bindAddr, 0, addrLen)) { sock.close(); return false }
+
+            android.util.Log.d("OlcRtcVpnService", "SOCKS5 CONNECT to $targetHost:$targetPort succeeded")
+
+            // ── Send minimal HTTP request to confirm data flow ──
+            val httpReq = "GET / HTTP/1.0\r\nHost: $targetHost\r\n\r\n"
+            sock.outputStream.write(httpReq.toByteArray()))
+
+            // Read some response bytes — just need to confirm data arrives
+            val httpResp = ByteArray(64)
+            val n = sock.inputStream.read(httpResp)
+            sock.close()
+
+            if (n > 0) {
+                val preview = String(httpResp, 0, n.coerceAtMost(64))
+                android.util.Log.d("OlcRtcVpnService", "HTTP response preview: ${preview.take(64)}")
+                return true
+            }
+            android.util.Log.w("OlcRtcVpnService", "No HTTP response from $targetHost")
+            return false
+        } catch (e: Exception) {
+            android.util.Log.w("OlcRtcVpnService", "SOCKS5 probe failed: ${e.message}")
+            return false
+        }
+    }
+
+    /**
+     * Read exactly [len] bytes from the socket into [buf] starting at [offset].
+     * Returns false if EOF/error before reading all bytes.
+     */
+    private fun readFully(sock: java.net.Socket, buf: ByteArray, offset: Int, len: Int): Boolean {
+        var remaining = len
+        var off = offset
+        while (remaining > 0) {
+            val n = try {
+                sock.inputStream.read(buf, off, remaining)
+            } catch (e: Exception) {
+                return false
+            }
+            if (n < 0) return false
+            remaining -= n
+            off += n
+        }
+        return true
+    }
+
+    /**
+     * Start periodic tun2socks stats polling (Task 7).
+     * Logs tx_packets, tx_bytes, rx_packets, rx_bytes every 10 seconds.
+     */
+    private fun startTun2socksStatsPolling() {
+        if (statsPollingActive) return
+        statsPollingActive = true
+        statsPollThread = Thread {
+            android.util.Log.d("OlcRtcVpnService", "tun2socks stats polling started")
+            while (statsPollingActive) {
+                try {
+                    Thread.sleep(10_000L)
+                    if (!statsPollingActive) break
+                    logTun2socksStats()
+                } catch (e: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    break
+                } catch (e: Exception) {
+                    android.util.Log.w("OlcRtcVpnService", "Stats polling error", e)
+                }
+            }
+            android.util.Log.d("OlcRtcVpnService", "tun2socks stats polling stopped")
+        }.apply { isDaemon = true; name = "OlcRTC-StatsPoll" }.also { it.start() }
+    }
+
+    private fun stopStatsPolling() {
+        statsPollingActive = false
+        statsPollThread?.interrupt()
+        statsPollThread = null
+    }
+
+    /**
+     * Log current tun2socks traffic counters (Task 7).
+     */
+    private fun logTun2socksStats() {
+        try {
+            val stats = getTun2socksStatsNative()
+            if (stats != null && stats.size >= 4) {
+                android.util.Log.d("OlcRtcVpnService", """
+                    tun2socks stats:
+                      tx_packets: ${stats[0]}
+                      tx_bytes: ${stats[1]}
+                      rx_packets: ${stats[2]}
+                      rx_bytes: ${stats[3]}
+                """.trimIndent())
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("OlcRtcVpnService", "Failed to read tun2socks stats", e)
+        }
     }
 
     /**
@@ -660,7 +882,10 @@ class OlcRtcVpnService : VpnService() {
 
         val runnable = Runnable {
             try {
-                // 1. Stop Go client on dedicated thread (Task 4)
+                // 1. Stop stats polling (Task 7)
+                stopStatsPolling()
+
+                // 2. Stop Go client on dedicated thread (Task 4)
                 stopGoClient()
 
                 // 2. Signal tun2socks to quit (only if actually started and bridge loaded)

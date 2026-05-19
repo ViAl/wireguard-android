@@ -10,7 +10,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlin.coroutines.cancellation.CancellationException
 
 enum class OlcRtcConnectionState {
-    DISCONNECTED, CONNECTING, CONNECTED, DISCONNECTING, ERROR
+    DISCONNECTED, CONNECTING, LOCAL_READY, VERIFYING_REMOTE, CONNECTED, DISCONNECTING, ERROR
 }
 
 object OlcRtcManager {
@@ -37,6 +37,9 @@ object OlcRtcManager {
 
     private val _currentTunnelName = MutableStateFlow<String?>(null)
     val currentTunnelName: StateFlow<String?> = _currentTunnelName.asStateFlow()
+
+    private val _errorReason = MutableStateFlow<String?>(null)
+    val errorReason: StateFlow<String?> = _errorReason.asStateFlow()
 
     /**
      * Start connecting asynchronously. Non-blocking — returns immediately.
@@ -117,13 +120,20 @@ object OlcRtcManager {
             newTransport.startAndWait(cfg) {
                 // This callback fires when VpnService reports a status event
                 _vpnStatus.value = it
-                // Manager marks CONNECTED only after TUN2SOCKS_STARTED + Go SOCKS ready
-                if (it == VpnStatusEvent.TUN2SOCKS_STARTED) {
-                    android.util.Log.d("OlcRtcManager", "tun2socks started, transport ready")
+                when (it) {
+                    VpnStatusEvent.TUN2SOCKS_STARTED -> {
+                        _connectionState.value = OlcRtcConnectionState.LOCAL_READY
+                        android.util.Log.d("OlcRtcManager", "LOCAL_READY: TUN + tun2socks up, verifying remote...")
+                    }
+                    VpnStatusEvent.PROBE_STARTED -> {
+                        _connectionState.value = OlcRtcConnectionState.VERIFYING_REMOTE
+                        android.util.Log.d("OlcRtcManager", "VERIFYING_REMOTE: e2e probe in progress")
+                    }
+                    else -> { /* no state change for other events */ }
                 }
             }
-            // startAndWait succeeded -> only now mark CONNECTED
-            // startAndWait already ensures TUN2SOCKS_STARTED + Go SOCKS ready internally
+            // startAndWait succeeded → e2e probe passed, full data path confirmed
+            _errorReason.value = null
             _connectionState.value = OlcRtcConnectionState.CONNECTED
             startWatchdog(appContext)
         } catch (e: CancellationException) {
@@ -139,7 +149,8 @@ object OlcRtcManager {
         } catch (e: Throwable) {
             android.util.Log.e("OlcRtcManager", "connectInternal failed", e)
             cleanupOldTransport()
-            // Set ERROR, not DISCONNECTED — so UI shows the failure
+            // Set ERROR with reason — so UI shows the failure
+            _errorReason.value = e.message ?: "Connection failed"
             _connectionState.value = OlcRtcConnectionState.ERROR
             _currentTunnelName.value = cfg.name  // keep the tunnel name so user knows which one failed
         }
@@ -151,6 +162,7 @@ object OlcRtcManager {
         } catch (e: Exception) {
             android.util.Log.e("OlcRtcManager", "cleanupOldTransport failed during disconnect", e)
         }
+        _errorReason.value = null
         _connectionState.value = OlcRtcConnectionState.DISCONNECTED
         _currentTunnelName.value = null
     }
@@ -185,8 +197,10 @@ object OlcRtcManager {
             while (isActive) {
                 delay(30_000L)
                 val t = transport
-                if (t?.isRunning() != true && _connectionState.value == OlcRtcConnectionState.CONNECTED) {
+                val currentState = _connectionState.value
+                if (t?.isRunning() != true && (currentState == OlcRtcConnectionState.CONNECTED || currentState == OlcRtcConnectionState.LOCAL_READY)) {
                     android.util.Log.w("OlcRtcManager", "Watchdog: transport lost, restarting...")
+                    _errorReason.value = "Transport lost unexpectedly"
                     _connectionState.value = OlcRtcConnectionState.ERROR
                     // Use restart() instead of calling connect() directly to avoid recursive connect
                     restart(appContext)
