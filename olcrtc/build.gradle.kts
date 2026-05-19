@@ -1,5 +1,7 @@
 @file:Suppress("UnstableApiUsage")
 
+import java.security.MessageDigest
+
 plugins {
     alias(libs.plugins.android.library)
 }
@@ -87,7 +89,7 @@ fun findOnPath(name: String): Boolean {
 }
 
 fun File.sha256(): String {
-    val digest = java.security.MessageDigest.getInstance("SHA-256")
+    val digest = MessageDigest.getInstance("SHA-256")
     inputStream().use { stream ->
         val buffer = ByteArray(8192)
         var read: Int
@@ -95,7 +97,7 @@ fun File.sha256(): String {
             digest.update(buffer, 0, read)
         }
     }
-    return digest.digest().joinToString("") { "%02x".format(it) }
+    return digest.digest().joinToString("") { byte -> "%02x".format(byte.toInt() and 0xFF) }
 }
 
 android {
@@ -130,7 +132,7 @@ android {
 
     sourceSets {
         getByName("main") {
-            jniLibs.srcDirs("src/main/jniLibs")
+            jniLibs.srcDirs = setOf("src/main/jniLibs")
         }
     }
 
