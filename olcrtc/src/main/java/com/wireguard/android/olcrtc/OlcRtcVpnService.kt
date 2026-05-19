@@ -38,6 +38,18 @@ class OlcRtcVpnService : VpnService() {
     @Volatile
     private var tunThreadErrored: Boolean = false
 
+    /** Whether the native tun2socks bridge has been loaded via System.loadLibrary. */
+    @Volatile
+    private var nativeBridgeLoaded = false
+
+    /**
+     * Whether tun2socks has actually started (thread created and running).
+     * Used to guard stopTun2socksNative from crashing when cleanup happens
+     * before tun2socks was ever launched.
+     */
+    @Volatile
+    private var tun2socksStarted = false
+
     // JNI native declarations — instance methods (not in companion object)
     private external fun startTun2socksNative(configPath: String, fd: Int): Int
     private external fun stopTun2socksNative()
@@ -109,7 +121,7 @@ class OlcRtcVpnService : VpnService() {
      * [currentInstance] or send a fresh [ACTION_PREPARE].
      */
     fun isUsableForProtect(): Boolean {
-        return !stopInProgress && (initPhase || isRunning)
+        return currentInstance === this && !stopInProgress && (initPhase || isRunning || nativeBridgeLoaded)
     }
 
     override fun onCreate() {
@@ -122,6 +134,8 @@ class OlcRtcVpnService : VpnService() {
             android.util.Log.w("OlcRtcVpnService",
                 "onCreate: session=$session != expected=$expectedServiceReadySession, serviceReady NOT signaled")
         }
+        // Load native bridge early so native methods are safe even before ACTION_START
+        ensureNativeBridgeLoaded()
         android.util.Log.d("OlcRtcVpnService",
             "VpnService created, session=$session, expected=$expectedServiceReadySession, " +
             "currentInstance set")
@@ -130,22 +144,56 @@ class OlcRtcVpnService : VpnService() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_PREPARE -> {
-                android.util.Log.d("OlcRtcVpnService", "ACTION_PREPARE received")
-                // Phase 1: Create VpnService instance with notification so
-                // startForegroundService lifecycle is satisfied.
-                // Does NOT establish TUN or start tun2socks — just sets up
-                // currentInstance for socket protection.
+                val currentSession = sessionCounter.get()
+                android.util.Log.d("OlcRtcVpnService",
+                    "ACTION_PREPARE received, session=$currentSession, " +
+                    "expected=$expectedServiceReadySession")
+
+                // Load native bridge early so cleanup (ACTION_STOP) before ACTION_START
+                // can safely bypass native methods. Also ensures isUsableForProtect
+                // returns true when bridge is loaded.
+                val bridgeLoaded = ensureNativeBridgeLoaded()
+                android.util.Log.d("OlcRtcVpnService",
+                    "ACTION_PREPARE: native bridge loaded=$bridgeLoaded")
+
                 if (!isRunning && !initPhase) {
                     initPhase = true
-                    createNotificationChannel()
-                    val notification = buildNotification("OlcRTC")
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                        startForeground(FOREGROUND_SERVICE_ID, notification,
-                            android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+                }
+
+                // Always ensure notification + foreground is active, even on
+                // re-delivery to an already-initialized service.
+                createNotificationChannel()
+                val notification = buildNotification("OlcRTC")
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    startForeground(FOREGROUND_SERVICE_ID, notification,
+                        android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+                } else {
+                    startForeground(FOREGROUND_SERVICE_ID, notification)
+                }
+                android.util.Log.d("OlcRtcVpnService", "VpnService initialized for socket protection")
+
+                // Complete serviceReady so Transport doesn't timeout waiting.
+                // This handles both:
+                //   - fresh service (onCreate already completed it; tryComplete is safe)
+                //   - existing service reuse (onCreate was NOT called; we complete here)
+                if (currentInstance === this) {
+                    val session = sessionCounter.get()
+                    if (expectedServiceReadySession == -1L || session == expectedServiceReadySession) {
+                        if (serviceReady.tryComplete(Unit)) {
+                            android.util.Log.d("OlcRtcVpnService",
+                                "ACTION_PREPARE: serviceReady completed (session=$session)")
+                        } else {
+                            android.util.Log.d("OlcRtcVpnService",
+                                "ACTION_PREPARE: serviceReady already completed (session=$session)")
+                        }
                     } else {
-                        startForeground(FOREGROUND_SERVICE_ID, notification)
+                        android.util.Log.w("OlcRtcVpnService",
+                            "ACTION_PREPARE: session=$session != expected=$expectedServiceReadySession, " +
+                            "not completing serviceReady")
                     }
-                    android.util.Log.d("OlcRtcVpnService", "VpnService initialized for socket protection")
+                } else {
+                    android.util.Log.w("OlcRtcVpnService",
+                        "ACTION_PREPARE: currentInstance mismatch, not completing serviceReady")
                 }
             }
             ACTION_START -> {
@@ -195,30 +243,47 @@ class OlcRtcVpnService : VpnService() {
         )
     }
 
+    /**
+     * Load the native tun2socks bridge libraries (hev-socks5-tunnel + olcrtc_tun2socks)
+     * early in the lifecycle so they are available before any native method is called.
+     * Safe to call multiple times — once the bridge is loaded, it returns immediately.
+     *
+     * Must be called from:
+     * - [onCreate] — earliest lifecycle point
+     * - [onStartCommand] for ACTION_PREPARE — covers existing service reuse
+     * - [startVpn] — defensive fallback
+     */
+    private fun ensureNativeBridgeLoaded(): Boolean {
+        if (nativeBridgeLoaded) return true
+        return try {
+            System.loadLibrary("hev-socks5-tunnel")
+            android.util.Log.d("OlcRtcVpnService", "libhev-socks5-tunnel.so loaded")
+            System.loadLibrary("olcrtc_tun2socks")
+            android.util.Log.d("OlcRtcVpnService", "libolcrtc_tun2socks.so loaded")
+            nativeBridgeLoaded = true
+            android.util.Log.d("OlcRtcVpnService", "Native tun2socks bridge loaded")
+            true
+        } catch (e: UnsatisfiedLinkError) {
+            android.util.Log.e("OlcRtcVpnService", "Failed to load native tun2socks bridge", e)
+            false
+        }
+    }
+
     private fun startVpn(config: OlcRtcConfig) {
         if (isRunning) return
+
+        // Load native bridge before doing anything else
+        ensureNativeBridgeLoaded()
 
         // Capture session counter to ignore stale postDelayed from previous sessions
         val currentSession = sessionCounter.incrementAndGet()
 
-        // Force-load native libraries so R8 doesn't strip unused .so files
+        // Force-load libgojni (only loaded here, not in ensureNativeBridgeLoaded)
         try {
             System.loadLibrary("gojni")
             android.util.Log.d("OlcRtcVpnService", "libgojni.so loaded")
         } catch (e: UnsatisfiedLinkError) {
             android.util.Log.w("OlcRtcVpnService", "libgojni.so not available", e)
-        }
-        try {
-            System.loadLibrary("hev-socks5-tunnel")
-            android.util.Log.d("OlcRtcVpnService", "libhev-socks5-tunnel.so loaded")
-        } catch (e: UnsatisfiedLinkError) {
-            android.util.Log.w("OlcRtcVpnService", "libhev-socks5-tunnel.so not available", e)
-        }
-        try {
-            System.loadLibrary("olcrtc_tun2socks")
-            android.util.Log.d("OlcRtcVpnService", "libolcrtc_tun2socks.so loaded")
-        } catch (e: UnsatisfiedLinkError) {
-            android.util.Log.w("OlcRtcVpnService", "libolcrtc_tun2socks.so not available", e)
         }
 
         val builder = Builder()
@@ -297,6 +362,9 @@ class OlcRtcVpnService : VpnService() {
                 }
             }.apply { isDaemon = true }.also { it.start() }
 
+            tun2socksStarted = true
+            android.util.Log.d("OlcRtcVpnService", "tun2socks thread started, tun2socksStarted=true")
+
             // Delay TUN2SOCKS_STARTED by 500ms to verify the thread actually starts running.
             // Without this delay, the signal fires immediately after thread.start()
             // even if tun2socks fails to initialize (e.g. bad config or socket conflict).
@@ -348,12 +416,21 @@ class OlcRtcVpnService : VpnService() {
 
         val runnable = Runnable {
             try {
-                // 1. Signal tun2socks to quit
-                try {
-                    stopTun2socksNative()
-                    android.util.Log.d("OlcRtcVpnService", "tun2socks stop signal sent")
-                } catch (e: Exception) {
-                    android.util.Log.w("OlcRtcVpnService", "stopTun2socksNative failed", e)
+                // 1. Signal tun2socks to quit (only if actually started and bridge loaded)
+                val shouldStopTun2socks = nativeBridgeLoaded && tun2socksStarted && tunThread != null
+                if (shouldStopTun2socks) {
+                    try {
+                        stopTun2socksNative()
+                        android.util.Log.d("OlcRtcVpnService", "tun2socks stop signal sent")
+                    } catch (e: UnsatisfiedLinkError) {
+                        android.util.Log.e("OlcRtcVpnService", "Native stopTun2socksNative unavailable", e)
+                    } catch (t: Throwable) {
+                        android.util.Log.w("OlcRtcVpnService", "stopTun2socksNative failed", t)
+                    }
+                } else {
+                    android.util.Log.d("OlcRtcVpnService",
+                        "Skipping stopTun2socksNative: nativeLoaded=$nativeBridgeLoaded, " +
+                        "tun2socksStarted=$tun2socksStarted, tunThread=${tunThread != null}")
                 }
 
                 // 2. Wait for tun2socks thread to exit
@@ -383,10 +460,11 @@ class OlcRtcVpnService : VpnService() {
                     stopSelf()
                     stopInProgress = false
                 }
-            } catch (e: Exception) {
+            } catch (t: Throwable) {
                 // If an unexpected error happens before the main-thread post,
                 // reset stopInProgress so we don't lock the service permanently.
-                android.util.Log.e("OlcRtcVpnService", "stopVpn runnable failed", e)
+                // Use catch(Throwable) here because the content is entirely cleanup code.
+                android.util.Log.e("OlcRtcVpnService", "stopVpn runnable failed", t)
                 stopInProgress = false
             }
         }
