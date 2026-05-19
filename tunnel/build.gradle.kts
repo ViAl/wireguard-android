@@ -19,6 +19,9 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     namespace = "${pkg}.tunnel"
+    buildFeatures {
+        buildConfig = true
+    }
     defaultConfig {
         minSdk = 24
     }
