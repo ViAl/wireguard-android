@@ -25,14 +25,6 @@ class OlcRtcVpnService : VpnService() {
     companion object {
         var currentInstance: OlcRtcVpnService? = null
 
-        /**
-         * Signal for Transport.startAndWait() to know when the TUN interface
-         * and tun2socks are fully established.
-         */
-        @Volatile
-        var isTunReady: Boolean = false
-            internal set
-
         /** Callback invoked when VPN lifecycle events occur. Set by Transport. */
         @Volatile
         var onVpnStatus: ((VpnStatusEvent) -> Unit)? = null
@@ -214,12 +206,10 @@ class OlcRtcVpnService : VpnService() {
         }
 
         isRunning = true
-        isTunReady = true
     }
 
     private fun stopVpn() {
         if (!isRunning) return
-        isTunReady = false
         android.util.Log.d("OlcRtcVpnService", "Stopping VPN")
         onVpnStatus?.invoke(VpnStatusEvent.VPN_STOPPED)
 

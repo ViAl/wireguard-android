@@ -31,13 +31,17 @@ enum class VpnStatusEvent {
     ERROR
 }
 
+class StartupException(message: String, cause: Throwable? = null) : Exception(message, cause)
+
 class OlcRtcTransport(private val appContext: Context) {
 
     private val _state = MutableStateFlow(OlcRtcTransportState.IDLE)
     val state: StateFlow<OlcRtcTransportState> = _state.asStateFlow()
 
     private var config: OlcRtcConfig? = null
-    private var tunThread: Thread? = null
+
+    /** Session-scoped startup signal completed by VpnService events. */
+    private var startupSignalDeferred: CompletableDeferred<Result<Unit>>? = null
 
     /**
      * Start the OlcRTC transport with the correct startup order:
@@ -57,10 +61,29 @@ class OlcRtcTransport(private val appContext: Context) {
         this.config = config
         _state.value = OlcRtcTransportState.STARTING
 
-        // Wire the onVpnStatus callback so VpnService events reach the Manager
-        OlcRtcVpnService.onVpnStatus = onVpnStatus
-
         try {
+            // Create a fresh startup signal for this session
+            // Completed by VpnService events (TUN2SOCKS_STARTED = success, ERROR/EXITED = failure)
+            startupSignalDeferred = CompletableDeferred()
+            val signal = startupSignalDeferred!!
+
+            // Wire the onVpnStatus callback so VpnService events reach both the Manager
+            // and our internal startup signal
+            OlcRtcVpnService.onVpnStatus = { event ->
+                onVpnStatus?.invoke(event)
+                when (event) {
+                    VpnStatusEvent.TUN2SOCKS_STARTED -> {
+                        signal.complete(Result.success(Unit))
+                    }
+                    VpnStatusEvent.ERROR, VpnStatusEvent.TUN2SOCKS_EXITED -> {
+                        signal.complete(Result.failure(
+                            StartupException("VpnService reported ${event.name}")
+                        ))
+                    }
+                    else -> { /* ignore other events for startup signal */ }
+                }
+            }
+
             // Step 1: Configure Mobile providers and socket protector — must happen BEFORE Go client starts
             configureMobileProviders()
 
@@ -93,8 +116,12 @@ class OlcRtcTransport(private val appContext: Context) {
                 appContext.startForegroundService(intent)
             }
 
-            // Step 5-6: Wait for VpnService to establish TUN and start tun2socks
-            waitForTunReady()
+            // Step 5-6: Wait for VpnService to signal TUN2SOCKS_STARTED (or fail)
+            withTimeout(15_000L) {
+                val result = signal.await()
+                result.getOrThrow()
+            }
+            android.util.Log.d("OlcRtcTransport", "VpnService startup confirmed")
 
             // Step 7: Mark READY
             _state.value = OlcRtcTransportState.READY
@@ -172,15 +199,6 @@ class OlcRtcTransport(private val appContext: Context) {
                 } catch (_: Exception) {
                     delay(100)
                 }
-            }
-        }
-    }
-
-    private suspend fun waitForTunReady(timeoutMs: Long = 15_000) {
-        withTimeout(timeoutMs) {
-            while (true) {
-                if (OlcRtcVpnService.isTunReady) return@withTimeout
-                delay(100)
             }
         }
     }
