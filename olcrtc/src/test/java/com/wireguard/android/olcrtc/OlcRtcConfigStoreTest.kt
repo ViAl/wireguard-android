@@ -47,7 +47,6 @@ class OlcRtcConfigStoreTest {
     @Test
     fun `config with default transport`() {
         val config = makeConfig("defaults")
-        // Upstream default is "datachannel"
         assertEquals("datachannel", config.transport)
     }
 
@@ -127,4 +126,13 @@ class OlcRtcConfigStoreTest {
         val config = makeConfig("dns")
         assertEquals("1.1.1.1:53", config.dnsServer)
     }
+
+    // NOTE: Real persistence round-trip tests (save/load/delete) require Android
+    // Context at runtime and cannot run as pure JVM unit tests.
+    // The save/load logic in OlcRtcConfigStore is a thin JSON wrapper;
+    // its correctness depends on the JSON library (org.json) which is well-tested.
+    //
+    // For integration testing, build and run on device:
+    //   ./gradlew :olcrtc:connectedCheck
+    // or use the manual test checklist (Task 12 in analyst spec).
 }
