@@ -174,12 +174,12 @@ class OlcRtcVpnService : VpnService() {
 
                 // Complete serviceReady so Transport doesn't timeout waiting.
                 // This handles both:
-                //   - fresh service (onCreate already completed it; tryComplete is safe)
+                //   - fresh service (onCreate already completed it; complete is safe)
                 //   - existing service reuse (onCreate was NOT called; we complete here)
                 if (currentInstance === this) {
                     val session = sessionCounter.get()
                     if (expectedServiceReadySession == -1L || session == expectedServiceReadySession) {
-                        if (serviceReady.tryComplete(Unit)) {
+                        if (serviceReady.complete(Unit)) {
                             android.util.Log.d("OlcRtcVpnService",
                                 "ACTION_PREPARE: serviceReady completed (session=$session)")
                         } else {
