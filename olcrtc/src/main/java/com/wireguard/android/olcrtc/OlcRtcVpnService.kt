@@ -103,7 +103,7 @@ class OlcRtcVpnService : VpnService() {
     override fun onCreate() {
         super.onCreate()
         currentInstance = this
-        val session = sessionCounter.incrementAndGet()
+        val session = sessionCounter.get()
         if (session == expectedServiceReadySession || expectedServiceReadySession == -1L) {
             serviceReady.complete(Unit)
         } else {
