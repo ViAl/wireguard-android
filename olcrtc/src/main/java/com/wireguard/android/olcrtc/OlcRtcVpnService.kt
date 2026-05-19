@@ -18,6 +18,9 @@ class OlcRtcVpnService : VpnService() {
     private var initPhase = false  // true during ACTION_PREPARE phase (before TUN established)
     private var tunThread: Thread? = null
 
+    /** Single-thread executor for non-blocking stopVpn shutdown. */
+    private val stopExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
+
     /**
      * Set to true if the tun2socks thread exits with an error before the
      * 500ms startup delay fires. Used to suppress a false TUN2SOCKS_STARTED.
@@ -98,7 +101,7 @@ class OlcRtcVpnService : VpnService() {
                     startVpn(config)
                 }
             }
-            ACTION_STOP -> stopVpn()
+            ACTION_STOP -> stopVpn(async = true)
         }
         return Service.START_NOT_STICKY
     }
@@ -258,44 +261,64 @@ class OlcRtcVpnService : VpnService() {
         isRunning = true
     }
 
-    private fun stopVpn() {
-        if (!isRunning) return
-        android.util.Log.d("OlcRtcVpnService", "Stopping VPN")
+    /**
+     * Stop VPN and clean up resources.
+     * @param async if true, blocking operations (native stop, thread join) run
+     *              on a background executor to avoid ANR on the main thread.
+     *              stopForeground() and stopSelf() are posted back to the main thread.
+     */
+    private fun stopVpn(async: Boolean = false) {
+        if (!isRunning && !initPhase) return
+        android.util.Log.d("OlcRtcVpnService", "Stopping VPN (async=$async)")
         onVpnStatus?.invoke(VpnStatusEvent.VPN_STOPPED)
 
-        // Stop order (#16):
-        // 1. Signal tun2socks to quit
-        try {
-            stopTun2socksNative()
-            android.util.Log.d("OlcRtcVpnService", "tun2socks stop signal sent")
-        } catch (e: Exception) {
-            android.util.Log.w("OlcRtcVpnService", "stopTun2socksNative failed", e)
-        }
-
-        // 2. Wait for tun2socks thread to exit
-        val thread = tunThread
-        if (thread != null && thread.isAlive) {
+        val runnable = Runnable {
+            // 1. Signal tun2socks to quit
             try {
-                thread.join(5_000)
-                android.util.Log.d("OlcRtcVpnService", "tun2socks thread joined")
-            } catch (e: InterruptedException) {
-                android.util.Log.w("OlcRtcVpnService", "Interrupted waiting for tun2socks exit", e)
-                Thread.currentThread().interrupt()
+                stopTun2socksNative()
+                android.util.Log.d("OlcRtcVpnService", "tun2socks stop signal sent")
+            } catch (e: Exception) {
+                android.util.Log.w("OlcRtcVpnService", "stopTun2socksNative failed", e)
+            }
+
+            // 2. Wait for tun2socks thread to exit
+            val thread = tunThread
+            if (thread != null && thread.isAlive) {
+                try {
+                    thread.join(5_000)
+                    android.util.Log.d("OlcRtcVpnService", "tun2socks thread joined")
+                } catch (e: InterruptedException) {
+                    android.util.Log.w("OlcRtcVpnService", "Interrupted waiting for tun2socks exit", e)
+                    Thread.currentThread().interrupt()
+                }
+            }
+
+            // 3. Close TUN fd after tun2socks has stopped
+            vpnInterface?.close()
+            vpnInterface = null
+            tunThread = null
+
+            // 4. stopForeground + stopSelf must be on the main thread
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                isRunning = false
+                initPhase = false
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
             }
         }
 
-        // 3. Close TUN fd after tun2socks has stopped
-        vpnInterface?.close()
-        vpnInterface = null
-        tunThread = null
-        isRunning = false
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
+        if (async) {
+            stopExecutor.execute(runnable)
+        } else {
+            runnable.run()
+        }
     }
 
     override fun onDestroy() {
         currentInstance = null
-        stopVpn()
+        // In onDestroy we block synchronously — the service is dying anyway
+        stopVpn(async = false)
+        stopExecutor.shutdownNow()
         super.onDestroy()
     }
 
